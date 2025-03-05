@@ -2,5 +2,8 @@
 <resources>
 	<style name="Day.Theme.Splash" parent="Base.Day.Theme.Splash" />
 	<style name="Night.Theme.Splash" parent="Base.Night.Theme.Splash" />
-	<style name="Theme.Gramophone" parent="Base.Theme.Gramophone" />
+	<style name="Theme.Gramophone" parent="Base.Theme.Gramophone">
+		<item name="system_app_widget_background_radius">@android:dimen/system_app_widget_background_radius</item>
+		<item name="system_app_widget_inner_radius">@android:dimen/system_app_widget_inner_radius</item>
+	</style>
 </resources>

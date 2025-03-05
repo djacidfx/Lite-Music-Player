@@ -6,7 +6,7 @@
     android:layout_height="74dp"
     android:clickable="true"
     android:focusable="true"
-    android:foreground="?attr/selectableItemBackground"
+    android:background="?attr/colorSurfaceContainerLow"
     android:paddingStart="24dp"
     android:paddingEnd="10dp">
 
@@ -31,7 +31,7 @@
                 android:background="?attr/colorSurfaceContainer"
                 android:importantForAccessibility="no"
                 android:scaleType="centerCrop"
-                android:src="@drawable/ic_default_cover" />
+                app:srcCompat="@drawable/ic_default_cover" />
 
         </com.google.android.material.card.MaterialCardView>
 
@@ -50,7 +50,7 @@
                 android:layout_height="wrap_content"
                 android:singleLine="true"
                 android:textColor="?attr/colorOnSurface"
-                android:textFontWeight="400"
+                app:textFontWeight="400"
                 android:fontFamily="sans-serif"
                 android:textSize="17sp"
                 tools:text="Example Title" />
@@ -61,7 +61,7 @@
                 android:layout_height="wrap_content"
                 android:singleLine="true"
                 android:textColor="?attr/colorOnSurfaceVariant"
-                android:textFontWeight="400"
+                app:textFontWeight="400"
                 android:fontFamily="sans-serif"
                 android:textSize="15sp"
                 tools:text="Example Artist" />
@@ -74,7 +74,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
             android:textColor="?attr/colorOnSurfaceVariant"
-            android:textFontWeight="500"
+            app:textFontWeight="500"
             android:fontFamily="sans-serif"
             tools:text="3 | Disc 1" />
 
@@ -90,6 +90,8 @@
         android:insetTop="0dp"
         android:insetRight="0dp"
         android:insetBottom="0dp"
+        app:tooltipText="@string/remove"
+        android:contentDescription="@string/remove"
         app:icon="@drawable/ic_close"
         app:iconGravity="textStart"
         app:iconPadding="0dp"

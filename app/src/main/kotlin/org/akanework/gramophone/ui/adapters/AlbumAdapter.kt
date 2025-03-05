@@ -18,25 +18,25 @@
 package org.akanework.gramophone.ui.adapters
 
 import android.net.Uri
-import androidx.activity.viewModels
 import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.MutableLiveData
+import java.util.GregorianCalendar
+import kotlinx.coroutines.flow.Flow
 import org.akanework.gramophone.R
-import org.akanework.gramophone.logic.utils.MediaStoreUtils
-import org.akanework.gramophone.ui.LibraryViewModel
+import org.akanework.gramophone.ui.MainActivity
 import org.akanework.gramophone.ui.fragments.GeneralSubFragment
+import uk.akane.libphonograph.items.Album
 
 class AlbumAdapter(
     fragment: Fragment,
-    albumList: MutableLiveData<List<MediaStoreUtils.Album>>?,
+    liveData: Flow<List<Album>?> = (fragment.requireActivity() as MainActivity).reader.albumListFlow,
     ownsView: Boolean = true,
     isSubFragment: Boolean = false,
     fallbackSpans: Int = 1
-) : BaseAdapter<MediaStoreUtils.Album>
+) : BaseAdapter<Album>
     (
     fragment,
-    liveData = albumList,
+    liveData = liveData,
     sortHelper = StoreAlbumHelper(),
     naturalOrderHelper = null,
     initialSortType = Sorter.Type.ByTitleAscending,
@@ -47,30 +47,14 @@ class AlbumAdapter(
     fallbackSpans = fallbackSpans
 ) {
 
-    private val libraryViewModel: LibraryViewModel by mainActivity.viewModels()
-
-    constructor(
-        fragment: Fragment,
-        albumList: List<MediaStoreUtils.Album>,
-        isSubFragment: Boolean = false,
-        fallbackSpans: Int = 1
-    ) : this(
-        fragment,
-        null,
-        false,
-        isSubFragment = isSubFragment,
-        fallbackSpans = fallbackSpans) {
-        updateList(albumList, now = true, false)
-    }
-
-    override fun virtualTitleOf(item: MediaStoreUtils.Album): String {
+    override fun virtualTitleOf(item: Album): String {
         return context.getString(R.string.unknown_album)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
         super.onBindViewHolder(holder, position, payloads)
         if (layoutType == LayoutType.GRID) {
-            val item = list[position]
+            val item = list.second[position]
             holder.itemView.setOnLongClickListener {
                 val popupMenu = PopupMenu(it.context, it)
                 onMenu(item, popupMenu)
@@ -80,18 +64,14 @@ class AlbumAdapter(
         }
     }
 
-    override fun onClick(item: MediaStoreUtils.Album) {
+    override fun onClick(item: Album) {
         mainActivity.startFragment(GeneralSubFragment()) {
-            putInt("Position", item.let {
-                if (ownsView) toRawPos(it) else {
-                    libraryViewModel.albumItemList.value!!.indexOf(it)
-                }
-            })
+            putString("Id", item.id?.toString())
             putInt("Item", R.id.album)
         }
     }
 
-    override fun onMenu(item: MediaStoreUtils.Album, popupMenu: PopupMenu) {
+    override fun onMenu(item: Album, popupMenu: PopupMenu) {
         popupMenu.inflate(R.menu.more_menu_less)
 
         popupMenu.setOnMenuItemClickListener { it1 ->
@@ -118,19 +98,24 @@ class AlbumAdapter(
         }
     }
 
-    class StoreAlbumHelper : StoreItemHelper<MediaStoreUtils.Album>(
+    class StoreAlbumHelper : StoreItemHelper<Album>(
         setOf(
             Sorter.Type.ByTitleDescending, Sorter.Type.ByTitleAscending,
             Sorter.Type.ByArtistDescending, Sorter.Type.ByArtistAscending,
-            Sorter.Type.BySizeDescending, Sorter.Type.BySizeAscending
+            Sorter.Type.BySizeDescending, Sorter.Type.BySizeAscending,
+            Sorter.Type.ByReleaseDateAscending, Sorter.Type.ByReleaseDateDescending
         )
     ) {
-        override fun getArtist(item: MediaStoreUtils.Album): String? {
-            return item.artist
+        override fun getArtist(item: Album): String? {
+            return item.albumArtist
         }
 
-        override fun getCover(item: MediaStoreUtils.Album): Uri? {
+        override fun getCover(item: Album): Uri? {
             return item.cover ?: super.getCover(item)
+        }
+
+        override fun getReleaseDate(item: Album): Long {
+            return GregorianCalendar(item.albumYear ?: 0, 0, 0, 0, 0, 0).timeInMillis
         }
     }
 }

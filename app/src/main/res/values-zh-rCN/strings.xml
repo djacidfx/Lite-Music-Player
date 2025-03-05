@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="home_menu_search">搜索</string>
-    <string name="home_menu_shuffle">随机</string>
     <string name="home_menu_settings">设置</string>
     <string name="home_menu_refresh">刷新</string>
     <string name="category_songs">歌曲</string>
@@ -18,18 +17,16 @@
     <string name="sort_by_name">名称</string>
     <string name="sort_by_artist">艺术家</string>
     <string name="sort_by_album">专辑</string>
-    <string name="categories">分类</string>
-    <string name="operations">操作</string>
     <string name="dismiss">关闭</string>
     <string name="unknown_genre">未知主题</string>
     <string name="unknown_year">未知年份</string>
-    <string name="refreshed_songs">刷新了 %1$s 首歌曲。</string>
+    <string name="refreshed_songs">刷新了 %1$s 首歌曲</string>
     <string name="search">搜索</string>
     <string name="settings_app_name">应用名称</string>
     <string name="settings_contributors">贡献者</string>
     <string name="play_next">添加至下一曲</string>
-    <string name="go_to_album">专辑..</string>
-    <string name="go_to_artist">艺术家..</string>
+    <string name="go_to_album">专辑</string>
+    <string name="go_to_artist">艺术家</string>
     <string name="details">详细</string>
     <string name="shuffle">随机</string>
     <string name="repeat_mode">循环模式</string>
@@ -74,9 +71,8 @@
     <string name="compact_list">列表（紧凑）</string>
     <string name="check_for_updates">查看我们的频道来获取更新！</string>
     <string name="opensource_info">基于 GPL-3.0 协议开源
-\n版权所有 © 2024 Akane Foundation</string>
+\n版权所有 %s</string>
     <string name="settings_default_progress_bar">启用默认进度条</string>
-    <string name="home_menu_about">关于</string>
     <string name="settings_default_progress_bar_summary">使用 Material Design 默认样式的进度条</string>
     <string name="playlist_favourite">收藏</string>
     <string name="now_playing">正在播放</string>
@@ -85,7 +81,6 @@
     <string name="settings_package_type">软件包类型</string>
     <string name="no_lyric_found">未找到歌词</string>
     <string name="dialog_disc_number">音碟号</string>
-    <string name="disc">音碟</string>
     <string name="unknown_title">未知歌曲</string>
     <string name="filesystem">文件系统</string>
     <string name="dialog_duration">时长</string>
@@ -146,16 +141,10 @@
     <string name="dialog_edit_metadata">编辑</string>
     <string name="album_cover">专辑封面</string>
     <string name="delete_failed">删除歌曲失败</string>
-    <string name="yes">是</string>
-    <string name="delete">删除</string>
-    <string name="no">否</string>
-    <string name="delete_in_progress">已删除另一首歌曲</string>
     <string name="grant_images">请授予“图片和视频”权限</string>
     <string name="deny_images">请拒绝“图片和视频”权限</string>
     <string name="crash_clipboard">已将崩溃日志复制到剪贴板</string>
     <string name="settings_trim_lyrics">删除歌词中的空行</string>
-    <string name="settings_lyrics_contrast">高对比度模式</string>
-    <string name="settings_lyrics_contrast_summary">这在您希望能够看到非当前播放的歌词行时很有用</string>
     <string name="settings_lyrics_multiline">获取多行歌词</string>
     <string name="settings_lyrics_multiline_summary">将歌词中时间点之间的所有行都视作同一行歌词</string>
     <string name="timer">睡眠定时器</string>
@@ -166,4 +155,40 @@
     <string name="album_covers_enhance_desc">支持高品质歌曲封面，并允许专辑和歌曲封面有所不同（需要照片访问权限）</string>
     <string name="album_covers_enhance">增强的专辑封面加载</string>
     <string name="share">分享</string>
+    <string name="sort_by_release_date">发布日期</string>
+    <string name="timer_expiry">睡眠定时器将在 %s 时暂停音乐</string>
+    <string name="app_name">留声机</string>
+    <string name="remove">移除</string>
+    <string name="more">更多</string>
+    <string name="play">播放</string>
+    <string name="sort">排序</string>
+    <string name="play_all">播放所有</string>
+    <string name="separator_dot">•</string>
+    <string name="settings_preference_category_home">主屏幕</string>
+    <string name="tab_order">配置标签顺序</string>
+    <string name="tab_order_summary">应用将在启动时显示第一个标签。分隔符后的标签将被隐藏。</string>
+    <string name="settings_status_bar_lyrics_title">状态栏歌词</string>
+    <string name="settings_status_bar_lyrics_summary">启用魅族状态栏歌词（仅适用于部分设备）</string>
+    <string name="settings_lyrics_ui">启用新歌词界面</string>
+    <string name="settings_lyrics_parser">新歌词解析器</string>
+    <string name="lyric_widget_description">显示当前播放媒体歌词的小部件</string>
+    <string name="scroll_to_albums">前往相册</string>
+    <string name="scroll_to_songs">前往歌曲</string>
+    <string name="expand_less">关闭</string>
+    <string name="skip_previous">跳至上一个</string>
+    <string name="position_slider">位置滑块</string>
+    <string name="settings_lyrics_ui_summary">实验性用户界面，可显示具有高级功能的逐字歌词</string>
+    <string name="back">返回</string>
+    <string name="divider">分隔线</string>
+    <string name="shuffle_all">随机播放全部</string>
+    <string name="skip_next">跳至下一个</string>
+    <string name="settings_lyrics_parser_summary">启用新的歌词解析器，支持逐字同步、扬声器指示器、偏移等</string>
+    <string name="seekbar">搜索栏</string>
+    <string name="home_menu_shuffle">随机播放全部</string>
+    <string name="grant_audio"><![CDATA[请授予\“音乐和音频”\权限]]></string>
+    <string name="delete">删除</string>
+    <string name="yes">是</string>
+    <string name="no">不是</string>
+    <string name="sort_by_file_path">文件路径</string>
+    <string name="sort_by_album_artist">专辑艺术家</string>
 </resources>

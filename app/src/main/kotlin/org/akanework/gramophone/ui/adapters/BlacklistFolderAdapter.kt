@@ -17,15 +17,16 @@ class BlacklistFolderAdapter(
     private val folderArray: MutableList<String>,
     private val prefs: SharedPreferences
 ) : MyRecyclerView.Adapter<BlacklistFolderAdapter.ViewHolder>() {
-    private val folderFilter = prefs.getStringSetStrict("folderFilter", null)?.
-            toMutableSet() ?: mutableSetOf()
+    private val folderFilter =
+        prefs.getStringSetStrict("folderFilter", null)?.toMutableSet() ?: mutableSetOf()
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         ViewHolder(
             fragment.layoutInflater.inflate(
-                    R.layout.adapter_blacklist_folder_card,
-                    parent,
-                    false
-                )
+                R.layout.adapter_blacklist_folder_card,
+                parent,
+                false
+            )
         )
 
     inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {

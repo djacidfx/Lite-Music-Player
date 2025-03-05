@@ -17,7 +17,6 @@
 
 package org.akanework.gramophone.ui.components
 
-import android.content.ComponentName
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -42,9 +41,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
 import androidx.preference.PreferenceManager
-import coil3.annotation.ExperimentalCoilApi
+import coil3.asDrawable
 import coil3.imageLoader
 import coil3.request.Disposable
 import coil3.request.ImageRequest
@@ -53,11 +51,8 @@ import coil3.size.Scale
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetBehavior.BottomSheetCallback
 import com.google.android.material.button.MaterialButton
-import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.MoreExecutors
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
-import org.akanework.gramophone.logic.GramophonePlaybackService
 import org.akanework.gramophone.logic.clone
 import org.akanework.gramophone.logic.fadInAnimation
 import org.akanework.gramophone.logic.fadOutAnimation
@@ -79,9 +74,7 @@ class PlayerBottomSheet private constructor(
         private const val TAG = "PlayerBottomSheet"
     }
 
-    private var sessionToken: SessionToken? = null
     private var lastDisposable: Disposable? = null
-    private var controllerFuture: ListenableFuture<MediaController>? = null
     private var standardBottomSheetBehavior: MyBottomSheetBehavior<FrameLayout>? = null
     private var bottomSheetBackCallback: OnBackPressedCallback? = null
     val fullPlayer: FullBottomSheet
@@ -99,8 +92,7 @@ class PlayerBottomSheet private constructor(
         get() = activity
     private val handler = Handler(Looper.getMainLooper())
     private val instance: MediaController?
-        get() = if (controllerFuture?.isDone == false || controllerFuture?.isCancelled == true)
-            null else controllerFuture?.get()
+        get() = activity.getPlayer()
     private var lastActuallyVisible: Boolean? = null
     private var lastMeasuredHeight: Int? = null
     var visible = false
@@ -145,7 +137,23 @@ class PlayerBottomSheet private constructor(
 
         bottomSheetPreviewNextButton.setOnClickListener {
             ViewCompat.performHapticFeedback(it, HapticFeedbackConstantsCompat.CONTEXT_CLICK)
-            instance?.seekToNextMediaItem()
+            instance?.seekToNext()
+        }
+
+        activity.controllerViewModel.addControllerCallback(activity.lifecycle) { _, _ ->
+            instance?.addListener(this@PlayerBottomSheet)
+            onPlaybackStateChanged(instance?.playbackState ?: Player.STATE_IDLE)
+            onMediaItemTransition(
+                instance?.currentMediaItem,
+                Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED
+            )
+            if ((activity.consumeAutoPlay() || prefs.getBooleanStrict(
+                    "autoplay",
+                    false
+                )) && instance?.isPlaying != true
+            ) {
+                instance?.play()
+            }
         }
     }
 
@@ -156,29 +164,29 @@ class PlayerBottomSheet private constructor(
         ) {
             when (newState) {
                 BottomSheetBehavior.STATE_COLLAPSED -> {
-                    fullPlayer.visibility = View.GONE
-                    previewPlayer.visibility = View.VISIBLE
+                    fullPlayer.visibility = GONE
+                    previewPlayer.visibility = VISIBLE
                     previewPlayer.alpha = 1f
                     fullPlayer.alpha = 0f
                     bottomSheetBackCallback!!.isEnabled = false
                 }
 
                 BottomSheetBehavior.STATE_DRAGGING, BottomSheetBehavior.STATE_SETTLING -> {
-                    fullPlayer.visibility = View.VISIBLE
-                    previewPlayer.visibility = View.VISIBLE
+                    fullPlayer.visibility = VISIBLE
+                    previewPlayer.visibility = VISIBLE
                 }
 
                 BottomSheetBehavior.STATE_EXPANDED, BottomSheetBehavior.STATE_HALF_EXPANDED -> {
-                    previewPlayer.visibility = View.GONE
-                    fullPlayer.visibility = View.VISIBLE
+                    previewPlayer.visibility = GONE
+                    fullPlayer.visibility = VISIBLE
                     previewPlayer.alpha = 0f
                     fullPlayer.alpha = 1f
                     bottomSheetBackCallback!!.isEnabled = true
                 }
 
                 BottomSheetBehavior.STATE_HIDDEN -> {
-                    previewPlayer.visibility = View.GONE
-                    fullPlayer.visibility = View.GONE
+                    previewPlayer.visibility = GONE
+                    fullPlayer.visibility = GONE
                     previewPlayer.alpha = 0f
                     fullPlayer.alpha = 0f
                     bottomSheetBackCallback!!.isEnabled = false
@@ -207,13 +215,14 @@ class PlayerBottomSheet private constructor(
         doOnLayout { // wait for CoordinatorLayout to finish to allow getting behaviour
             standardBottomSheetBehavior = MyBottomSheetBehavior.from(this)
             fullPlayer.minimize = {
-                standardBottomSheetBehavior!!.state = BottomSheetBehavior.STATE_COLLAPSED }
+                standardBottomSheetBehavior!!.state = BottomSheetBehavior.STATE_COLLAPSED
+            }
             bottomSheetBackCallback = object : OnBackPressedCallback(enabled = false) {
                 override fun handleOnBackStarted(backEvent: BackEventCompat) {
-                    if (fullPlayer.bottomSheetFullLyricRecyclerView.visibility ==
-                        View.VISIBLE
+                    if (fullPlayer.bottomSheetFullLyricView.visibility ==
+                        VISIBLE
                     ) {
-                        fullPlayer.bottomSheetFullLyricRecyclerView.fadOutAnimation(FullBottomSheet.LYRIC_FADE_TRANSITION_SEC)
+                        fullPlayer.bottomSheetFullLyricView.fadOutAnimation(FullBottomSheet.LYRIC_FADE_TRANSITION_SEC)
                         fullPlayer.bottomSheetLyricButton.isChecked = false
                     } else {
                         standardBottomSheetBehavior!!.startBackProgress(backEvent)
@@ -221,8 +230,8 @@ class PlayerBottomSheet private constructor(
                 }
 
                 override fun handleOnBackProgressed(backEvent: BackEventCompat) {
-                    if (fullPlayer.bottomSheetFullLyricRecyclerView.visibility ==
-                        View.VISIBLE
+                    if (fullPlayer.bottomSheetFullLyricView.visibility ==
+                        VISIBLE
                     ) {
                         // TODO
                     } else {
@@ -231,10 +240,10 @@ class PlayerBottomSheet private constructor(
                 }
 
                 override fun handleOnBackPressed() {
-                    if (fullPlayer.bottomSheetFullLyricRecyclerView.visibility ==
-                        View.VISIBLE
+                    if (fullPlayer.bottomSheetFullLyricView.visibility ==
+                        VISIBLE
                     ) {
-                        fullPlayer.bottomSheetFullLyricRecyclerView.fadOutAnimation(FullBottomSheet.LYRIC_FADE_TRANSITION_SEC)
+                        fullPlayer.bottomSheetFullLyricView.fadOutAnimation(FullBottomSheet.LYRIC_FADE_TRANSITION_SEC)
                         fullPlayer.bottomSheetLyricButton.isChecked = false
                     } else {
                         standardBottomSheetBehavior!!.handleBackInvoked()
@@ -242,10 +251,10 @@ class PlayerBottomSheet private constructor(
                 }
 
                 override fun handleOnBackCancelled() {
-                    if (fullPlayer.bottomSheetFullLyricRecyclerView.visibility ==
-                        View.VISIBLE
+                    if (fullPlayer.bottomSheetFullLyricView.visibility ==
+                        VISIBLE
                     ) {
-                        fullPlayer.bottomSheetFullLyricRecyclerView.fadInAnimation(FullBottomSheet.LYRIC_FADE_TRANSITION_SEC)
+                        fullPlayer.bottomSheetFullLyricView.fadInAnimation(FullBottomSheet.LYRIC_FADE_TRANSITION_SEC)
                         fullPlayer.bottomSheetLyricButton.isChecked = false
                     } else {
                         standardBottomSheetBehavior!!.cancelBackProgress()
@@ -295,22 +304,12 @@ class PlayerBottomSheet private constructor(
         standardBottomSheetBehavior?.setPeekHeight(previewPlayer.measuredHeight, false)
     }
 
-    fun generateBottomSheetInsets(insets: WindowInsetsCompat): WindowInsetsCompat {
-        val resolvedMeasuredHeight = if (lastActuallyVisible == true) lastMeasuredHeight ?: 0 else 0
-        var navBar1 = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-        var navBar2 = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars())
-        val bottomSheetInsets = Insets.of(0, 0, 0, resolvedMeasuredHeight)
-        navBar1 = Insets.max(navBar1, bottomSheetInsets)
-        navBar2 = Insets.max(navBar2, bottomSheetInsets)
-        return WindowInsetsCompat.Builder(insets)
-            .setInsets(WindowInsetsCompat.Type.navigationBars(), navBar1)
-            .setInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars(), navBar2)
-            .build()
-    }
+    fun getBottomPadding() = if (lastActuallyVisible == true) lastMeasuredHeight ?: 0 else 0
 
     private fun dispatchBottomSheetInsets() {
         if (lastMeasuredHeight == previewPlayer.measuredHeight &&
-            lastActuallyVisible == actuallyVisible) return
+            lastActuallyVisible == actuallyVisible
+        ) return
         if (BuildConfig.DEBUG) Log.i(TAG, "dispatching bottom sheet insets")
         lastMeasuredHeight = previewPlayer.measuredHeight
         lastActuallyVisible = actuallyVisible
@@ -324,8 +323,10 @@ class PlayerBottomSheet private constructor(
 
     override fun dispatchApplyWindowInsets(platformInsets: WindowInsets): WindowInsets {
         val insets = WindowInsetsCompat.toWindowInsetsCompat(platformInsets)
-        val myInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars()
-                or WindowInsetsCompat.Type.displayCutout())
+        val myInsets = insets.getInsets(
+            WindowInsetsCompat.Type.systemBars()
+                    or WindowInsetsCompat.Type.displayCutout()
+        )
         // We here have to set up inset padding manually as the bottom sheet won't know what
         // View is behind the status bar, paddingTopSystemWindowInsets just allows it to go
         // behind it, which differs from the other padding*SystemWindowInsets. We can't use the
@@ -345,20 +346,23 @@ class PlayerBottomSheet private constructor(
                 dispatchBottomSheetInsets()
             }
         }
-        val i = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars()
-                or WindowInsetsCompat.Type.displayCutout())
+        val i = insets.getInsetsIgnoringVisibility(
+            WindowInsetsCompat.Type.systemBars()
+                    or WindowInsetsCompat.Type.displayCutout()
+        )
         return WindowInsetsCompat.Builder(insets)
-            .setInsets(WindowInsetsCompat.Type.systemBars()
-                    or WindowInsetsCompat.Type.displayCutout(), Insets.of(0, myInsets.top, 0, 0))
-            .setInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars()
-                    or WindowInsetsCompat.Type.displayCutout(), Insets.of(0, i.top, 0, 0))
+            .setInsets(
+                WindowInsetsCompat.Type.systemBars()
+                        or WindowInsetsCompat.Type.displayCutout(), Insets.of(0, myInsets.top, 0, 0)
+            )
+            .setInsetsIgnoringVisibility(
+                WindowInsetsCompat.Type.systemBars()
+                        or WindowInsetsCompat.Type.displayCutout(), Insets.of(0, i.top, 0, 0)
+            )
             .build()
             .toWindowInsets()!!
     }
 
-    fun getPlayer(): MediaController? = instance
-
-    @OptIn(ExperimentalCoilApi::class)
     override fun onMediaItemTransition(
         mediaItem: MediaItem?,
         reason: Int,
@@ -382,7 +386,7 @@ class PlayerBottomSheet private constructor(
             lastDisposable?.dispose()
             lastDisposable = null
         }
-        var newState = standardBottomSheetBehavior!!.state
+        var newState = standardBottomSheetBehavior?.state
         if ((instance?.mediaItemCount ?: 0) > 0 && visible) {
             if (newState != BottomSheetBehavior.STATE_EXPANDED) {
                 newState = BottomSheetBehavior.STATE_COLLAPSED
@@ -417,40 +421,9 @@ class PlayerBottomSheet private constructor(
         }
     }
 
-    override fun onStart(owner: LifecycleOwner) {
-        super.onStart(owner)
-        sessionToken =
-            SessionToken(context, ComponentName(context, GramophonePlaybackService::class.java))
-        controllerFuture =
-            MediaController
-                .Builder(context, sessionToken!!)
-                .setListener(fullPlayer.sessionListener)
-                .buildAsync()
-        controllerFuture!!.addListener(
-            {
-                instance?.addListener(this)
-                onPlaybackStateChanged(instance?.playbackState ?: Player.STATE_IDLE)
-                onMediaItemTransition(
-                    instance?.currentMediaItem,
-                    Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED
-                )
-                if ((activity.consumeAutoPlay() || prefs.getBooleanStrict("autoplay",
-                        false)) && instance?.isPlaying != true) {
-                    instance?.play()
-                }
-            },
-            MoreExecutors.directExecutor(),
-        )
-        fullPlayer.onStart(controllerFuture!!)
-    }
-
     override fun onStop(owner: LifecycleOwner) {
         super.onStop(owner)
         fullPlayer.onStop()
-        instance?.removeListener(this)
-        instance?.release()
-        controllerFuture?.cancel(true)
-        controllerFuture = null
     }
 
 }

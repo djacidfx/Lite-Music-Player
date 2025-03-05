@@ -6,8 +6,9 @@
 	<application tools:ignore="MissingApplicationIcon"
 		android:memtagMode="sync"
 		android:gwpAsanMode="always"
-		android:requestLegacyExternalStorage="true"
-		tools:targetApi="s">
+		android:icon="@mipmap/ic_launcher_xmas"
+		tools:targetApi="s"
+		tools:replace="android:icon">
 		<activity
 			android:name="com.android.development.MediaScannerActivity"
 			android:label="SD Exploder"

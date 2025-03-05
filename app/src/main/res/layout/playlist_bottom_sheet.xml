@@ -32,7 +32,7 @@
                 android:background="?attr/colorSurfaceContainer"
                 android:importantForAccessibility="no"
                 android:scaleType="centerCrop"
-                android:src="@drawable/ic_default_cover" />
+                app:srcCompat="@drawable/ic_default_cover" />
 
         </com.google.android.material.card.MaterialCardView>
 
@@ -49,7 +49,7 @@
                 android:singleLine="true"
                 android:text="@string/now_playing"
                 android:textColor="?attr/colorOnSurface"
-                android:textFontWeight="500"
+                app:textFontWeight="500"
                 android:fontFamily="sans-serif"
                 android:textSize="17sp"
                 tools:text="Now playing" />
@@ -60,7 +60,7 @@
                 android:layout_height="wrap_content"
                 android:singleLine="true"
                 android:textColor="?attr/colorOnSurfaceVariant"
-                android:textFontWeight="500"
+                app:textFontWeight="500"
                 android:fontFamily="sans-serif"
                 android:textSize="15sp"
                 tools:text="Artifact" />
@@ -82,6 +82,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
+        android:contentDescription="@string/list"
         android:scrollbars="none" />
 
 </LinearLayout>

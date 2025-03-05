@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="categories">Thể loại</string>
     <string name="settings_category_behavior">Thao tác</string>
-    <string name="operations">Thao tác</string>
     <string name="go_to_album">Xem album</string>
     <string name="unknown_album">Album chưa biết</string>
     <string name="sort_by_size">Kích cỡ</string>
@@ -12,7 +10,6 @@
     <string name="category_songs">Bài hát</string>
     <string name="compact_list">Danh sách (gọn gàng)</string>
     <string name="equalizer_not_found">Không tìm thấy bộ chỉnh âm!</string>
-    <string name="home_menu_shuffle">Ngẫu nhiên</string>
     <string name="category_genres">Thể loại</string>
     <string name="natural_order">Xếp tự nhiên</string>
     <string name="dialog_track_number">Số track</string>
@@ -21,7 +18,7 @@
     <string name="dialog_year">Năm</string>
     <string name="dialog_artist">Nghệ sĩ</string>
     <string name="opensource_info">Mã nguồn mở GPL-3.0
-\nBản quyền © 2024 Akane Foundation</string>
+\nBản quyền %s</string>
     <string name="playlist_favourite">Yêu thích</string>
     <string name="home_menu_settings">Cài đặt</string>
     <string name="home_menu_refresh">Làm mới</string>
@@ -61,7 +58,6 @@
     <string name="settings_category_appearance">Giao diện</string>
     <string name="dialog_album">Album</string>
     <string name="settings_default_progress_bar">Thanh thời lượng</string>
-    <string name="home_menu_about">Giới thiệu</string>
     <string name="details">Chi tiết</string>
     <string name="dialog_path">Đường dẫn</string>
     <string name="album_artist">Album nghệ sĩ</string>
@@ -84,7 +80,6 @@
         <item quantity="other">%d Album</item>
     </plurals>
     <string name="no_lyric_found">Không tìm thấy lời bài hát</string>
-    <string name="disc">Đĩa</string>
     <string name="dialog_disc_number">Số đĩa</string>
     <string name="unknown_title">Tên bài hát chưa biết</string>
     <string name="dialog_mime">Định dạng</string>
@@ -132,9 +127,7 @@
     <string name="settings_preference_category_application">Ứng dụng</string>
     <string name="settings_category_basic_info">Thông tin</string>
     <string name="crash_clipboard">Đã sao chép nhật ký lỗi vào bộ nhớ tạm</string>
-    <string name="settings_lyrics_contrast">Tương phản cao</string>
     <string name="settings_blacklist_folder">Loại trừ các thư mục</string>
-    <string name="delete">Xóa</string>
     <string name="settings_category_filters">Bộ lọc</string>
     <string name="settings_blacklist_folder_summary">Lọc bài hát trong một số thư mục</string>
     <string name="settings_category_full_player">Trình phát đầy đủ</string>
@@ -143,9 +136,6 @@
     <string name="settings_play_on_launch">Phát khi mở ứng dụng</string>
     <string name="preference_category_quality">Chất lượng</string>
     <string name="album_cover">Ảnh album</string>
-    <string name="delete_in_progress">Đang xóa một bài hát khác</string>
-    <string name="no">Không</string>
-    <string name="yes">Có</string>
     <string name="delete_failed">Không thể xóa bài hát</string>
     <string name="dialog_edit_metadata">Chỉnh sửa</string>
     <string name="settings_trim_lyrics">Loại bỏ dấu cách xung quanh lời bài hát</string>
@@ -153,7 +143,6 @@
     <string name="settings_blacklist">Danh sách loại trừ</string>
     <string name="deny_images">Vui lòng tắt quyền \"Truy cập ảnh &amp; video\"</string>
     <string name="grant_images">Vui lòng cho phép quyền \"Truy cập ảnh &amp; video\"</string>
-    <string name="settings_lyrics_contrast_summary">Hữu ích nếu bạn muốn đọc những dòng lời bài hát không đồng bộ</string>
     <string name="settings_lyrics_multiline_summary">Xem tất cả các dòng giữa các điểm đồng bộ là một văn bản lời bài hát</string>
     <string name="settings_lyrics_multiline">Ngắt lời bài hát thành nhiều dòng</string>
     <string name="current_playlist">Danh sách phát gần đây</string>
@@ -166,4 +155,22 @@
     <string name="album_covers_enhance_desc">Hỗ trợ ảnh bài hát chất lượng cao và cho phép ảnh bài hát khác ảnh album (yêu cầu quyền truy cập ảnh)</string>
     <string name="share">Chia sẻ</string>
     <string name="album_covers_enhance">Tải ảnh album nâng cao</string>
+    <string name="sort_by_release_date">Năm phát hành</string>
+    <string name="timer_expiry">Hẹn giờ ngủ sẽ tạm dừng bài hát vào lúc %s</string>
+    <string name="home_menu_shuffle">Trộn tất cả</string>
+    <string name="divider">Thanh chia màn hình</string>
+    <string name="dialog_bitrate">Tốc độ bit</string>
+    <string name="bitrate_unknown">Tốc độ bit chưa biết</string>
+    <string name="bitrate_format">%1$d kbps</string>
+    <string name="device_type_unknown">Không biết</string>
+    <string name="open_in_gramophone">Mở bằng Gramophone</string>
+    <string name="settings_lyrics_no_animation">Tắt hoạt ảnh</string>
+    <string name="settings_lyrics_no_animation_summary">Tắt toàn bộ hoạt ảnh chuyển động lyric</string>
+    <string name="settings_preference_category_home">Màn hình chính</string>
+    <string name="tab_order">Thiết lập trật tự tab</string>
+    <string name="back">Trở về</string>
+    <string name="play_all">Phát tất cả</string>
+    <string name="sort_by_album_artist">Album nghệ sĩ</string>
+    <string name="cannot_play_file">Không thể phát file này</string>
+    <string name="tab_order_summary">Ứng dụng sẽ hiển thị tab đầu tiên khi khởi chạy. Những tabs sau thanh chia màn hình sẽ bị ẩn.</string>
 </resources>

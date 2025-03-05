@@ -19,6 +19,9 @@
     <option name="pathToJarWithRules" value="" />
   </component>
   <component name="EntryPointsManager">
+    <entry_points version="2.0">
+      <entry_point TYPE="method" FQNAME="org.akanework.gramophone.ui.components.FullBottomSheet$-1 void onStartTrackingTouch(com.google.android.material.slider.Slider slider)" />
+    </entry_points>
     <list size="1">
       <item index="0" class="java.lang.String" itemvalue="com.bumptech.glide.annotation.GlideModule" />
     </list>
@@ -30,7 +33,7 @@
     <option name="priority" value="Medium" />
     <option name="excludeFilter" value="" />
   </component>
-  <component name="ProjectRootManager" version="2" languageLevel="JDK_17" default="true" project-jdk-name="jbr-17" project-jdk-type="JavaSDK">
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_17" project-jdk-name="jbr-21" project-jdk-type="JavaSDK">
     <output url="file://$PROJECT_DIR$/build/classes" />
   </component>
   <component name="ProjectType">

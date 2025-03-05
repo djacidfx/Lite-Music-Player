@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+	android:theme="@style/Theme.Gramophone"
+	android:layout_width="match_parent"
+	android:layout_height="wrap_content"
+	android:id="@+id/lyric_widget_item"
+	android:gravity="end"
+	android:textColor="@color/sl_lyric_text"
+	xmlns:tools="http://schemas.android.com/tools"
+	android:textFontWeight="500"
+	tools:ignore="UnusedAttribute"
+	android:textSize="@dimen/lyric_widget_nn" />

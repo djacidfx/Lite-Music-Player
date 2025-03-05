@@ -4,6 +4,10 @@
 		<attr name="textFontWeight" format="integer"/>
 	</declare-styleable>
 	<declare-styleable name="MyTooltipCompat">
-		<attr name="android:tooltipText" format="string"/>
+		<attr name="tooltipText" format="string"/>
+	</declare-styleable>
+	<declare-styleable name="AppWidget">
+		<attr name="system_app_widget_background_radius" format="dimension"/>
+		<attr name="system_app_widget_inner_radius" format="dimension"/>
 	</declare-styleable>
 </resources>

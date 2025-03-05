@@ -1,0 +1,15 @@
+{
+  "uniqueId": "io.github.bylaws.liblinkernsbypass:liblinkernsbypass",
+  "developers": [{
+	"name": "Billy Laws",
+	"organisationUrl": "https://github.com/bylaws"
+  }],
+  "artifactVersion": "aa397589",
+  "description": "A simple library to expose the linker namespace functionality in Android 9+ together with symbol hooking",
+  "name": "liblinkernsbypass",
+  "tag": "custom",
+  "website": "https://github.com/bylaws/liblinkernsbypass",
+  "licenses": [
+	"BSD-2-Clause"
+  ]
+}

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="sort_by_artist">Artista</string>
-    <string name="categories">Categorias</string>
     <string name="settings_category_appearance">Apparentia</string>
     <string name="dialog_artist">Artista</string>
     <string name="settings_category_behavior">Comportamento</string>
@@ -10,7 +9,6 @@
     <string name="settings_about_app">A proposito de</string>
     <string name="settings_player_options">Audio</string>
     <string name="settings_category_basic_info">Information basic</string>
-    <string name="home_menu_about">A proposito de</string>
     <string name="settings_about_gramophone">A proposito del application</string>
     <string name="sort_by_add_date">Data de addition</string>
     <string name="sort_by_album">Album</string>
@@ -31,7 +29,6 @@
     <string name="light">Clar</string>
     <string name="sort_by_size">Dimension</string>
     <string name="sort_by_name">Nomine</string>
-    <string name="operations">Operationes</string>
     <string name="unknown_year">Anno incognite</string>
     <string name="refreshed_songs">%1$s cantos actualisate</string>
     <string name="search">Cercar</string>
@@ -44,7 +41,6 @@
     <string name="settings_repository">Repositorio</string>
     <string name="sort_by_modified_date">Data de modification</string>
     <string name="delete_failed">Falleva le deletion del canto</string>
-    <string name="delete">Deler</string>
     <plurals name="songs">
         <item quantity="one">%d canto</item>
         <item quantity="other">%d cantos</item>
@@ -74,7 +70,7 @@
     <string name="playlist_favourite">Favorito</string>
     <string name="dialog_duration">Duration</string>
     <string name="filesystem">Systema de files</string>
-    <string name="dialog_mime">Typo Mime</string>
+    <string name="dialog_mime">Typo MIME</string>
     <string name="settings_package_type">Typo de pacchetto</string>
     <string name="unknown_title">Titulo incognite</string>
     <string name="settings_player_ui">Interfacie del reproductor</string>
@@ -91,13 +87,10 @@
     <string name="preference_category_quality">Qualitate</string>
     <string name="dialog_edit_metadata">Modificar</string>
     <string name="dialog_lyrics">Parolas de canto</string>
-    <string name="no">Non</string>
-    <string name="yes">Si</string>
     <string name="home_menu_search">Cerca</string>
     <string name="unknown_artist">Artista incognite</string>
     <string name="dismiss">Dimitter</string>
     <string name="now_playing">Reproduction in curso</string>
-    <string name="home_menu_shuffle">Aleatori</string>
     <string name="play_next">Reproducer sequente</string>
     <string name="category_playlists">Listas de reproduction</string>
     <string name="go_to_album">Vader al album</string>
@@ -106,28 +99,26 @@
     <string name="no_lyric_found">Parolas de canto non trovate</string>
     <string name="equalizer_not_found">Equalisator non trovate!</string>
     <string name="opensource_info">Sub licentia de codice aperte GPL-3.0
-\nCopyright © 2024 Akane Foundation</string>
+\nCopyright %s</string>
     <string name="settings_default_progress_bar">Barra de progresso prededinite</string>
     <string name="check_for_updates">Verifica nostre canal pro actualisationes!</string>
     <string name="settings_default_progress_bar_summary">Activar le barra de progresso con stylo Material</string>
     <string name="compact_list">Lista (compacte)</string>
     <string name="settings_content_based_color">Colores basate in le contento</string>
-    <string name="disc">Disco</string>
     <string name="dialog_disc_number">Numero de disco</string>
     <string name="settings_player_ui_summary">Interfacie de usator complete, parolas de canto</string>
     <string name="settings_appearance_summary">Apparentia del application, modos de thema</string>
     <string name="settings_customization">Personalisation</string>
     <string name="settings_customization_summary">Gerer le optiones de personalisation</string>
     <string name="settings_behavior_summary">Filtros, comportamento de initio</string>
-    <string name="settings_lyric">Parolas de canto</string>
+    <string name="settings_lyric">Parola de canto</string>
     <string name="settings_lyrics_configuration_summary">Configurar apparentia del parolas</string>
     <string name="settings_play_on_launch_summary">Reproducer le musica in le initio</string>
     <string name="settings_blacklist_folder">Lista nigre de dossieres</string>
     <string name="settings_crash_application">Facer faller le application</string>
     <string name="settings_blacklist_folder_summary">Filtrar cantos ab certe dossieres</string>
     <string name="album_cover">Copertura del album</string>
-    <string name="delete_in_progress">Jam ha altere canto in deletion</string>
-    <string name="settings_crash_application_summary">Crash-O-Matic 3000</string>
+	<string name="settings_crash_application_summary">Crash-O-Matic 3000</string>
     <string name="category_genres">Generes</string>
     <string name="unknown_genre">Genere incognite</string>
     <string name="dialog_genre">Genere</string>
@@ -158,7 +149,33 @@
     <string name="grant_images">Concede le permission a \"Imagines e videos\"</string>
     <string name="crash_clipboard">Registro de fallimentos copiate al area de transferentia</string>
     <string name="settings_trim_lyrics">Remover spatios circum le parolas</string>
-    <string name="settings_lyrics_contrast">Modo de alte contrasto</string>
-    <string name="timer">Temporisator de somno</string>
+	<string name="timer">Temporisator de somno</string>
     <string name="current_playlist">Lista de reproduction actual</string>
+    <string name="share">Compartir</string>
+    <string name="fgs_failed_text">Clicca hic pro aperir le app e continuar le reproduction</string>
+    <string name="fgs_failed_channel">Non pote resumer le reproduction</string>
+    <string name="fgs_failed_title">Fallimento in resumer le reproduction de musica</string>
+    <string name="sort_by_release_date">Data de lanceamento</string>
+    <string name="timer_expiry">Le temporisator de somno pausara le musica in %s</string>
+    <string name="separator_dot">•</string>
+    <string name="album_covers_enhance">Carga meliorate del copertura de album</string>
+    <string name="album_covers_enhance_desc">Supporta coperturas de cantos de alte qualitate e permitte haber coperturas de album e canto different (require accesso al photos)</string>
+    <string name="settings_lyrics_multiline">Leger le parolas de canto multilinea</string>
+    <string name="grant_audio">Concede le permission de \"Musica e audio\"</string>
+    <string name="settings_lyrics_multiline_summary">Tractar tote le lineas inter le punctos de synchronisation como un sol parola de canto</string>
+    <string name="app_name">Gramophone</string>
+    <string name="settings_preference_category_home">Schermo de initio</string>
+    <string name="more">Plus</string>
+    <string name="remove">Remover</string>
+    <string name="scroll_to_songs">Rolar al cantos</string>
+    <string name="tab_order">Configurar le ordinamento del schedas</string>
+    <string name="back">Retro</string>
+    <string name="play_all">Reproducer toto</string>
+    <string name="play">Reproducer</string>
+    <string name="skip_next">Saltar al sequente</string>
+    <string name="expand_less">Clauder</string>
+    <string name="skip_previous">Saltar al previe</string>
+    <string name="position_slider">Glissator del position</string>
+    <string name="scroll_to_albums">Rolar al albumes</string>
+    <string name="sort">Ordinar</string>
 </resources>

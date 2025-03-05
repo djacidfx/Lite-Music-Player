@@ -20,20 +20,21 @@ package org.akanework.gramophone.ui.adapters
 import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.MutableLiveData
+import androidx.media3.common.MediaItem
 import org.akanework.gramophone.R
-import org.akanework.gramophone.logic.utils.MediaStoreUtils
+import org.akanework.gramophone.ui.MainActivity
 import org.akanework.gramophone.ui.fragments.GeneralSubFragment
+import uk.akane.libphonograph.items.Genre
 
 /**
  * [GenreAdapter] is an adapter for displaying genres.
  */
 class GenreAdapter(
     fragment: Fragment,
-    genreList: MutableLiveData<List<MediaStoreUtils.Genre>>,
-) : BaseAdapter<MediaStoreUtils.Genre>
+) : BaseAdapter<Genre>
     (
     fragment,
-    liveData = genreList,
+    liveData = (fragment.requireActivity() as MainActivity).reader.genreListFlow,
     sortHelper = StoreItemHelper(),
     naturalOrderHelper = null,
     initialSortType = Sorter.Type.ByTitleAscending,
@@ -44,18 +45,18 @@ class GenreAdapter(
 
     override val defaultCover = R.drawable.ic_default_cover_genre
 
-    override fun virtualTitleOf(item: MediaStoreUtils.Genre): String {
+    override fun virtualTitleOf(item: Genre): String {
         return context.getString(R.string.unknown_genre)
     }
 
-    override fun onClick(item: MediaStoreUtils.Genre) {
+    override fun onClick(item: Genre) {
         mainActivity.startFragment(GeneralSubFragment()) {
-            putInt("Position", toRawPos(item))
+            putString("Id", item.id?.toString())
             putInt("Item", R.id.genres)
         }
     }
 
-    override fun onMenu(item: MediaStoreUtils.Genre, popupMenu: PopupMenu) {
+    override fun onMenu(item: Genre, popupMenu: PopupMenu) {
         popupMenu.inflate(R.menu.more_menu_less)
 
         popupMenu.setOnMenuItemClickListener { it1 ->

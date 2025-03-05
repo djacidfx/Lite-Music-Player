@@ -20,20 +20,21 @@ package org.akanework.gramophone.ui.adapters
 import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.MutableLiveData
+import androidx.media3.common.MediaItem
 import org.akanework.gramophone.R
-import org.akanework.gramophone.logic.utils.MediaStoreUtils
+import org.akanework.gramophone.ui.MainActivity
 import org.akanework.gramophone.ui.fragments.GeneralSubFragment
+import uk.akane.libphonograph.items.Date
 
 /**
  * [DateAdapter] is an adapter for displaying dates.
  */
 class DateAdapter(
     fragment: Fragment,
-    dateList: MutableLiveData<List<MediaStoreUtils.Date>>,
-) : BaseAdapter<MediaStoreUtils.Date>
+) : BaseAdapter<Date>
     (
     fragment,
-    liveData = dateList,
+    liveData = (fragment.requireActivity() as MainActivity).reader.dateListFlow,
     sortHelper = StoreItemHelper(),
     naturalOrderHelper = null,
     initialSortType = Sorter.Type.ByTitleAscending,
@@ -44,18 +45,18 @@ class DateAdapter(
 
     override val defaultCover = R.drawable.ic_default_cover_date
 
-    override fun virtualTitleOf(item: MediaStoreUtils.Date): String {
+    override fun virtualTitleOf(item: Date): String {
         return context.getString(R.string.unknown_year)
     }
 
-    override fun onClick(item: MediaStoreUtils.Date) {
+    override fun onClick(item: Date) {
         mainActivity.startFragment(GeneralSubFragment()) {
-            putInt("Position", toRawPos(item))
+            putString("Id", item.id?.toString())
             putInt("Item", R.id.dates)
         }
     }
 
-    override fun onMenu(item: MediaStoreUtils.Date, popupMenu: PopupMenu) {
+    override fun onMenu(item: Date, popupMenu: PopupMenu) {
         popupMenu.inflate(R.menu.more_menu_less)
 
         popupMenu.setOnMenuItemClickListener { it1 ->

@@ -26,18 +26,67 @@
             android:defaultValue="false"
             android:key="color_accuracy"
             android:layout="@layout/preference_switch"
-            android:summary="@string/settings_color_accuracy_summary"
             android:title="@string/settings_color_accuracy"
+            android:summary="@string/settings_color_accuracy_summary"
             android:widgetLayout="@layout/preference_switch_widget"
             app:iconSpaceReserved="false" />
 
         <Preference
             android:key="crash"
             android:layout="@layout/preference_basic"
-            android:summary="@string/settings_crash_application_summary"
             android:title="@string/settings_crash_application"
+            android:summary="@string/settings_crash_application_summary"
+            app:isPreferenceVisible="false"
             app:iconSpaceReserved="false" />
 
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="lyric_parser"
+            android:layout="@layout/preference_switch"
+            android:title="@string/settings_lyrics_parser"
+            android:summary="@string/settings_lyrics_parser_summary"
+            android:widgetLayout="@layout/preference_switch_widget"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="lyric_ui"
+            android:dependency="lyric_parser"
+            android:layout="@layout/preference_switch"
+            android:title="@string/settings_lyrics_ui"
+            android:summary="@string/settings_lyrics_ui_summary"
+            android:widgetLayout="@layout/preference_switch_widget"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="status_bar_lyrics"
+            android:layout="@layout/preference_switch"
+            android:title="@string/settings_status_bar_lyrics_title"
+            android:summary="@string/settings_status_bar_lyrics_summary"
+            android:widgetLayout="@layout/preference_switch_widget"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="pixel_perfect_measurement_legacy"
+            android:layout="@layout/preference_switch"
+            android:title="@string/settings_pixel_perfect_measurement_legacy_title"
+            android:summary="@string/settings_pixel_perfect_measurement_legacy_summary"
+            android:widgetLayout="@layout/preference_switch_widget"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="lyric_char_scaling"
+            android:layout="@layout/preference_switch"
+            android:summary="@string/settings_lyrics_char_scaling_summary"
+            android:title="@string/settings_lyrics_char_scaling"
+            android:widgetLayout="@layout/preference_switch_widget"
+            app:iconSpaceReserved="false" />
+
+
     </PreferenceCategory>
+
 
 </PreferenceScreen>

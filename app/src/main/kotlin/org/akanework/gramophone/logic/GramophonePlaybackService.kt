@@ -30,7 +30,9 @@ import android.media.audiofx.AudioEffect
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
+import android.os.Process
 import android.util.Log
 import androidx.concurrent.futures.CallbackToFutureAdapter
 import androidx.core.app.NotificationChannelCompat
@@ -39,31 +41,37 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.IllegalSeekPositionException
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED
-import androidx.media3.common.Timeline
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.BitmapLoader
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.common.util.Util.isBitmapFactorySupportedMimeType
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.util.EventLogger
+import androidx.media3.session.CacheBitmapLoader
 import androidx.media3.session.CommandButton
-import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaController
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
+import androidx.media3.session.doUpdateNotification
 import androidx.preference.PreferenceManager
 import coil3.BitmapImage
-import coil3.annotation.ExperimentalCoilApi
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
@@ -77,12 +85,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.ui.MeiZuLyricsMediaNotificationProvider
+import org.akanework.gramophone.logic.utils.AfFormatTracker
+import org.akanework.gramophone.logic.utils.AudioTrackInfo
 import org.akanework.gramophone.logic.utils.CircularShuffleOrder
-import org.akanework.gramophone.logic.utils.EndedWorkaroundPlayer
 import org.akanework.gramophone.logic.utils.LastPlayedManager
+import org.akanework.gramophone.logic.utils.LrcUtils.LrcParserOptions
 import org.akanework.gramophone.logic.utils.LrcUtils.extractAndParseLyrics
+import org.akanework.gramophone.logic.utils.LrcUtils.extractAndParseLyricsLegacy
 import org.akanework.gramophone.logic.utils.LrcUtils.loadAndParseLyricsFile
+import org.akanework.gramophone.logic.utils.LrcUtils.loadAndParseLyricsFileLegacy
 import org.akanework.gramophone.logic.utils.MediaStoreUtils
+import org.akanework.gramophone.logic.utils.SemanticLyrics
+import org.akanework.gramophone.logic.utils.exoplayer.EndedWorkaroundPlayer
+import org.akanework.gramophone.logic.utils.exoplayer.GramophoneMediaSourceFactory
+import org.akanework.gramophone.logic.utils.exoplayer.GramophoneRenderFactory
+import org.akanework.gramophone.ui.LyricWidgetProvider
 import org.akanework.gramophone.ui.MainActivity
 import kotlin.random.Random
 
@@ -93,7 +111,7 @@ import kotlin.random.Random
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Listener,
-    MediaLibraryService.MediaLibrarySession.Callback, Player.Listener, CircularShuffleOrder.Listener {
+    MediaLibraryService.MediaLibrarySession.Callback, Player.Listener, AnalyticsListener {
 
     companion object {
         private const val TAG = "GramoPlaybackService"
@@ -101,6 +119,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         private const val NOTIFY_ID = 1
         private const val PENDING_INTENT_SESSION_ID = 0
         private const val PENDING_INTENT_NOTIFY_ID = 1
+        const val PENDING_INTENT_WIDGET_ID = 2
         private const val PLAYBACK_SHUFFLE_ACTION_ON = "shuffle_on"
         private const val PLAYBACK_SHUFFLE_ACTION_OFF = "shuffle_off"
         private const val PLAYBACK_REPEAT_OFF = "repeat_off"
@@ -108,23 +127,45 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         private const val PLAYBACK_REPEAT_ONE = "repeat_one"
         const val SERVICE_SET_TIMER = "set_timer"
         const val SERVICE_QUERY_TIMER = "query_timer"
+        const val SERVICE_GET_AUDIO_FORMAT = "get_audio_format"
         const val SERVICE_GET_LYRICS = "get_lyrics"
+        const val SERVICE_GET_LYRICS_LEGACY = "get_lyrics_legacy"
+        const val SERVICE_GET_SESSION = "get_session"
         const val SERVICE_TIMER_CHANGED = "changed_timer"
+        var instanceForWidgetAndLyricsOnly: GramophonePlaybackService? = null
     }
 
+    private var lastSessionId = 0
+    private val internalPlaybackThread = HandlerThread("ExoPlayer:Playback", Process.THREAD_PRIORITY_AUDIO)
     private var mediaSession: MediaLibrarySession? = null
-    private var controller: MediaController? = null
-    private var lyrics: MutableList<MediaStoreUtils.Lyric>? = null
-    private var shuffleFactory: ((Int) -> CircularShuffleOrder)? = null
-    private var shufflePersistent: CircularShuffleOrder.Persistent? = null
+    val endedWorkaroundPlayer
+        get() = mediaSession?.player as EndedWorkaroundPlayer?
+    var controller: MediaController? = null
+        private set
+    private val sendLyrics = Runnable { scheduleSendingLyrics(false) }
+    var lyrics: SemanticLyrics? = null
+        private set
+    val syncedLyrics
+        get() = lyrics as? SemanticLyrics.SyncedLyrics
+    var lyricsLegacy: MutableList<MediaStoreUtils.Lyric>? = null
+        private set
     private lateinit var customCommands: List<CommandButton>
     private lateinit var handler: Handler
+    private lateinit var playbackHandler: Handler
     private lateinit var nm: NotificationManagerCompat
     private lateinit var lastPlayedManager: LastPlayedManager
     private val lyricsLock = Semaphore(1)
     private lateinit var prefs: SharedPreferences
+    private var lastSentHighlightedLyric: String? = null
+    private lateinit var afFormatTracker: AfFormatTracker
+    private var updatedLyricAtLeastOnce = false
+    private var downstreamFormat: Format? = null
+    private var audioSinkInputFormat: Format? = null
+    private var audioTrackInfo: AudioTrackInfo? = null
+    private var audioTrackInfoCounter = 0
+    private var audioTrackReleaseCounter = 0
 
-    private fun getRepeatCommand() =
+	private fun getRepeatCommand() =
         when (controller!!.repeatMode) {
             Player.REPEAT_MODE_OFF -> customCommands[2]
             Player.REPEAT_MODE_ALL -> customCommands[3]
@@ -140,14 +181,14 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
 
     private val timer: Runnable = Runnable {
         controller!!.pause()
-        timerDuration = 0
+        timerDuration = null
     }
 
-    private var timerDuration = 0
+    private var timerDuration: Long? = null
         set(value) {
             field = value
-            if (value > 0) {
-                handler.postDelayed(timer, value.toLong())
+            if (value != null && value > 0) {
+                handler.postDelayed(timer, value - System.currentTimeMillis())
             } else {
                 handler.removeCallbacks(timer)
             }
@@ -165,30 +206,42 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         }
     }
 
-    @OptIn(ExperimentalCoilApi::class)
+    private val seekReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val to =
+                intent.extras?.getLong("seekTo", C.INDEX_UNSET.toLong()) ?: C.INDEX_UNSET.toLong()
+            if (to != C.INDEX_UNSET.toLong())
+                controller?.seekTo(to)
+        }
+    }
+
     override fun onCreate() {
+        instanceForWidgetAndLyricsOnly = this
+        internalPlaybackThread.start()
+        playbackHandler = Handler(internalPlaybackThread.looper)
         handler = Handler(Looper.getMainLooper())
         super.onCreate()
         nm = NotificationManagerCompat.from(this)
         prefs = PreferenceManager.getDefaultSharedPreferences(this)
         setListener(this)
         setMediaNotificationProvider(
-            DefaultMediaNotificationProvider.Builder(this).build().apply {
-                setSmallIcon(R.drawable.ic_gramophone_monochrome)
-            }
+            MeiZuLyricsMediaNotificationProvider(this) { lastSentHighlightedLyric }
         )
-        if (mayThrowForegroundServiceStartNotAllowed()) {
-            // we don't need notification permission because this only is run on S/S_V2
-            nm.createNotificationChannel(NotificationChannelCompat.Builder(
-                NOTIFY_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH
-            ).apply {
-                setName(getString(R.string.fgs_failed_channel))
-                setVibrationEnabled(true)
-                setVibrationPattern(longArrayOf(0L, 200L))
-                setLightsEnabled(false)
-                setShowBadge(false)
-                setSound(null, null)
-            }.build())
+        if (mayThrowForegroundServiceStartNotAllowed()
+            || mayThrowForegroundServiceStartNotAllowedMiui()
+        ) {
+            nm.createNotificationChannel(
+                NotificationChannelCompat.Builder(
+                    NOTIFY_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH
+                ).apply {
+                    setName(getString(R.string.fgs_failed_channel))
+                    setVibrationEnabled(true)
+                    setVibrationPattern(longArrayOf(0L, 200L))
+                    setLightsEnabled(false)
+                    setShowBadge(false)
+                    setSound(null, null)
+                }.build()
+            )
         } else if (nm.getNotificationChannel(NOTIFY_CHANNEL_ID) != null) {
             // for people who upgraded from S/S_V2 to newer version
             nm.deleteNotificationChannel(NOTIFY_CHANNEL_ID)
@@ -232,53 +285,64 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     .setIconResId(R.drawable.ic_repeat_one_on)
                     .build(),
             )
-
-        // TODO https://developer.android.com/media/media3/exoplayer/shrinking
-        val player = EndedWorkaroundPlayer(ExoPlayer.Builder(
-            this,
-            DefaultRenderersFactory(this)
-                .setEnableAudioFloatOutput(
-                    prefs.getBooleanStrict("floatoutput", false))
-                .setEnableDecoderFallback(true)
-                .setEnableAudioTrackPlaybackParams( // hardware/system-accelerated playback speed
-                    prefs.getBooleanStrict("ps_hardware_acc", true))
-                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
-        )
-            .setWakeMode(C.WAKE_MODE_LOCAL)
-            .setSkipSilenceEnabled(prefs.getBooleanStrict("skip_silence", false))
-            /*.setMediaSourceFactory(
-                DefaultMediaSourceFactory(this, DefaultExtractorsFactory()
-                    .setMp3ExtractorFlags(Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING))
-            ) TODO flag breaks playback of AcousticGuitar.mp3, report exo bug + add UI toggle*/
-            .setAudioAttributes(
-                AudioAttributes
-                    .Builder()
-                    .setUsage(C.USAGE_MEDIA)
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                    .build(), true
+        afFormatTracker = AfFormatTracker(this, playbackHandler, handler)
+        afFormatTracker.formatChangedCallback = {
+            mediaSession?.broadcastCustomCommand(
+                SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY),
+                Bundle.EMPTY
             )
-            .build())
+        }
+        val player = EndedWorkaroundPlayer(
+            ExoPlayer.Builder(
+                this,
+                GramophoneRenderFactory(this, this::onAudioSinkInputFormatChanged,
+                    afFormatTracker::setAudioSink)
+	                .setEnableAudioFloatOutput(
+                        prefs.getBooleanStrict("floatoutput", false)
+                    )
+                    .setEnableDecoderFallback(true)
+                    .setEnableAudioTrackPlaybackParams( // hardware/system-accelerated playback speed
+                        prefs.getBooleanStrict("ps_hardware_acc", true)
+                    )
+                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER),
+                GramophoneMediaSourceFactory(this)
+                /* .setMp3ExtractorFlags(Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING))
+            TODO flag breaks playback of AcousticGuitar.mp3, report exo bug + add UI toggle*/
+            )
+                .setWakeMode(C.WAKE_MODE_LOCAL)
+                .setSkipSilenceEnabled(prefs.getBooleanStrict("skip_silence", false))
+                .setAudioAttributes(
+                    AudioAttributes
+                        .Builder()
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                        .build(), true
+                )
+                .setPlaybackLooper(internalPlaybackThread.looper)
+                .build()
+        )
         if (BuildConfig.DEBUG) {
             player.exoPlayer.addAnalyticsListener(EventLogger())
         }
-        sendBroadcast(Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION).apply {
-            putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
-            putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.exoPlayer.audioSessionId)
-            putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
-        })
-        lastPlayedManager = LastPlayedManager(this, player) {
-            if (mediaSession?.player?.shuffleModeEnabled == true) shufflePersistent else null }
+        player.exoPlayer.addAnalyticsListener(afFormatTracker)
+        player.exoPlayer.addAnalyticsListener(this)
+        player.exoPlayer.audioSessionId = Util.generateAudioSessionIdV21(this)
+        lastSessionId = player.exoPlayer.audioSessionId
+        player.setShuffleOrder { CircularShuffleOrder(it, 0, 0, Random.nextLong()) }
+        broadcastAudioSession()
+        lastPlayedManager = LastPlayedManager(this, player)
         lastPlayedManager.allowSavingState = false
 
         mediaSession =
             MediaLibrarySession
                 .Builder(this, player, this)
-                .setBitmapLoader(object : BitmapLoader {
+                // CacheBitmapLoader is required for MeiZuLyricsMediaNotificationProvider
+                .setBitmapLoader(CacheBitmapLoader(object : BitmapLoader {
                     // Coil-based bitmap loader to reuse Coil's caching and to make sure we use
                     // the same cover art as the rest of the app, ie MediaStore's cover
 
-                    override fun decodeBitmap(data: ByteArray)
-                    = throw UnsupportedOperationException("decodeBitmap() not supported")
+                    override fun decodeBitmap(data: ByteArray) =
+                        throw UnsupportedOperationException("decodeBitmap() not supported")
 
                     override fun loadBitmap(
                         uri: Uri
@@ -296,7 +360,12 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                             completer.set((result as BitmapImage).bitmap)
                                         },
                                         onError = { _ ->
-                                            completer.setException(Exception("coil onError called"))
+                                            completer.setException(
+                                                Exception(
+                                                    "coil onError called" +
+                                                            " (normal if no album art exists)"
+                                                )
+                                            )
                                         }
                                     )
                                     .build())
@@ -304,7 +373,8 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                     completer.addCancellationListener(
                                         { it.dispose() },
                                         ContextCompat.getMainExecutor(
-                                            this@GramophonePlaybackService)
+                                            this@GramophonePlaybackService
+                                        )
                                     )
                                 }
                             "coil load for $uri"
@@ -318,67 +388,81 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     override fun loadBitmapFromMetadata(metadata: MediaMetadata): ListenableFuture<Bitmap>? {
                         return metadata.artworkUri?.let { loadBitmap(it) }
                     }
-                })
+                }))
                 .setSessionActivity(
                     PendingIntent.getActivity(
                         this,
                         PENDING_INTENT_SESSION_ID,
                         Intent(this, MainActivity::class.java),
-                        PendingIntent.FLAG_IMMUTABLE or  PendingIntent.FLAG_UPDATE_CURRENT,
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                     )
                 )
                 .build()
         controller = MediaController.Builder(this, mediaSession!!.token).buildAsync().get()
-        handler.post {
-            if (mediaSession == null) return@post
-            lastPlayedManager.restore { items, factory ->
-                if (mediaSession == null) return@restore
-                applyShuffleSeed(true, factory.toFactory(this, controller!!))
-                if (items != null) {
-                    try {
-                        mediaSession?.player?.setMediaItems(
-                            items.mediaItems, items.startIndex, items.startPositionMs
-                        )
-                    } catch (e: IllegalSeekPositionException) {
-                        Log.e(TAG, "failed to restore: " + Log.getStackTraceString(e))
-                        // song was edited to be shorter and playback position doesn't exist anymore
-                    }
-                    // Prepare Player after UI thread is less busy (loads tracks, required for lyric)
-                    handler.post {
-                        controller?.prepare()
-                    }
-                }
-                lastPlayedManager.allowSavingState = true
-            }
-        }
         onShuffleModeEnabledChanged(controller!!.shuffleModeEnabled) // refresh custom commands
         controller!!.addListener(this)
         registerReceiver(
             headSetReceiver,
             IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
         )
+        ContextCompat.registerReceiver(
+            this,
+            seekReceiver,
+            IntentFilter("$packageName.SEEK_TO"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        lastPlayedManager.restore { items, factory ->
+            if (mediaSession == null) return@restore
+            if (items != null) {
+                if (endedWorkaroundPlayer?.nextShuffleOrder != null)
+                    throw IllegalStateException("shuffleFactory was found orphaned")
+                endedWorkaroundPlayer?.nextShuffleOrder = factory.toFactory()
+                try {
+                    mediaSession?.player?.setMediaItems(
+                        items.mediaItems, items.startIndex, items.startPositionMs
+                    )
+                } catch (e: IllegalSeekPositionException) {
+                    // song was edited to be shorter and playback position doesn't exist anymore
+                    Log.e(TAG, "failed to restore with startPositionMs, trying without... "
+                            + Log.getStackTraceString(e))
+                    try {
+                        mediaSession?.player?.setMediaItems(
+                            items.mediaItems, items.startIndex, C.TIME_UNSET
+                        )
+                    } catch (e: IllegalSeekPositionException) {
+                        // whatever...
+                        Log.e(TAG, "failed to restore: " + Log.getStackTraceString(e))
+                        endedWorkaroundPlayer?.nextShuffleOrder = null
+                    }
+                }
+                if (endedWorkaroundPlayer?.nextShuffleOrder != null)
+                    throw IllegalStateException("shuffleFactory was not consumed during restore")
+                handler.post {
+                    // Prepare Player after UI thread is less busy (loads tracks, required for lyric)
+                    controller?.prepare()
+                }
+            }
+            lastPlayedManager.allowSavingState = true
+        }
     }
 
     // When destroying, we should release server side player
     // alongside with the mediaSession.
     override fun onDestroy() {
+        instanceForWidgetAndLyricsOnly = null
+        unregisterReceiver(headSetReceiver)
+        unregisterReceiver(seekReceiver)
         // Important: this must happen before sending stop() as that changes state ENDED -> IDLE
         lastPlayedManager.save()
         mediaSession!!.player.stop()
-        sendBroadcast(Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION).apply {
-            putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
-            putExtra(
-                AudioEffect.EXTRA_AUDIO_SESSION,
-                (mediaSession!!.player as EndedWorkaroundPlayer).exoPlayer.audioSessionId
-            )
-        })
+        broadcastAudioSessionClose()
         controller!!.release()
         controller = null
         mediaSession!!.release()
         mediaSession!!.player.release()
         mediaSession = null
-        lyrics = null
-        unregisterReceiver(headSetReceiver)
+        internalPlaybackThread.quitSafely()
+        LyricWidgetProvider.update(this)
         super.onDestroy()
     }
 
@@ -394,7 +478,8 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
         if (session.isMediaNotificationController(controller)
             || session.isAutoCompanionController(controller)
-            || session.isAutomotiveController(controller)) {
+            || session.isAutomotiveController(controller)
+        ) {
             // currently, all custom actions are only useful when used by notification
             // other clients hopefully have repeat/shuffle buttons like MCT does
             for (commandButton in customCommands) {
@@ -403,18 +488,57 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             }
         }
         availableSessionCommands.add(SessionCommand(SERVICE_SET_TIMER, Bundle.EMPTY))
+        availableSessionCommands.add(SessionCommand(SERVICE_GET_SESSION, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QUERY_TIMER, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_GET_LYRICS, Bundle.EMPTY))
+        availableSessionCommands.add(SessionCommand(SERVICE_GET_LYRICS_LEGACY, Bundle.EMPTY))
+        availableSessionCommands.add(SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY))
+
         handler.post {
             session.sendCustomCommand(
                 controller,
                 SessionCommand(SERVICE_GET_LYRICS, Bundle.EMPTY),
                 Bundle.EMPTY
             )
+
+            session.sendCustomCommand(
+                controller,
+                SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY),
+                Bundle.EMPTY
+            )
         }
+
         return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
             .setAvailableSessionCommands(availableSessionCommands.build())
             .build()
+    }
+
+    override fun onAudioSessionIdChanged(audioSessionId: Int) {
+        super<Player.Listener>.onAudioSessionIdChanged(audioSessionId)
+        broadcastAudioSessionClose()
+        lastSessionId = audioSessionId
+        broadcastAudioSession()
+    }
+
+    private fun broadcastAudioSession() {
+        if (lastSessionId != 0) {
+            sendBroadcast(Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION).apply {
+                putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+                putExtra(AudioEffect.EXTRA_AUDIO_SESSION, lastSessionId)
+                putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+            })
+        } else {
+            Log.e(TAG, "session id is 0? why????? THIS MIGHT BREAK EQUALIZER")
+        }
+    }
+
+    private fun broadcastAudioSessionClose() {
+        if (lastSessionId != 0) {
+            sendBroadcast(Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION).apply {
+                putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+                putExtra(AudioEffect.EXTRA_AUDIO_SESSION, lastSessionId)
+            })
+        }
     }
 
     override fun onCustomCommand(
@@ -436,19 +560,44 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
 
             SERVICE_SET_TIMER -> {
                 // 0 = clear timer
-                timerDuration = customCommand.customExtras.getInt("duration")
+                customCommand.customExtras.getInt("duration").let {
+                    timerDuration = if (it > 0) System.currentTimeMillis() + it else null
+                }
                 SessionResult(SessionResult.RESULT_SUCCESS)
             }
 
             SERVICE_QUERY_TIMER -> {
                 SessionResult(SessionResult.RESULT_SUCCESS).also {
-                    it.extras.putInt("duration", timerDuration)
+                    timerDuration?.let { td ->
+                        it.extras.putInt("duration", (td - System.currentTimeMillis()).toInt())
+                    }
+                }
+            }
+
+            SERVICE_GET_AUDIO_FORMAT -> {
+                SessionResult(SessionResult.RESULT_SUCCESS).also {
+                    it.extras.putBundle("file_format", downstreamFormat?.toBundle())
+                    it.extras.putBundle("sink_format", audioSinkInputFormat?.toBundle())
+                    it.extras.putParcelable("track_format", audioTrackInfo)
+                    it.extras.putParcelable("hal_format", afFormatTracker.format)
                 }
             }
 
             SERVICE_GET_LYRICS -> {
                 SessionResult(SessionResult.RESULT_SUCCESS).also {
-                    it.extras.putParcelableArray("lyrics", lyrics?.toTypedArray())
+                    it.extras.putParcelable("lyrics", lyrics)
+                }
+            }
+
+            SERVICE_GET_LYRICS_LEGACY -> {
+                SessionResult(SessionResult.RESULT_SUCCESS).also {
+                    it.extras.putParcelableArray("lyrics", lyricsLegacy?.toTypedArray())
+                }
+            }
+
+            SERVICE_GET_SESSION -> {
+                SessionResult(SessionResult.RESULT_SUCCESS).also {
+                    it.extras.putInt("session", lastSessionId)
                 }
             }
 
@@ -468,7 +617,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             }
 
             else -> {
-                SessionResult(SessionResult.RESULT_ERROR_BAD_VALUE)
+                SessionResult(SessionError.ERROR_BAD_VALUE)
             }
         })
     }
@@ -479,15 +628,26 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
     ): ListenableFuture<MediaItemsWithStartPosition> {
         val settable = SettableFuture.create<MediaItemsWithStartPosition>()
         lastPlayedManager.restore { items, factory ->
-            applyShuffleSeed(true, factory.toFactory(this, this.controller!!))
             if (items == null) {
-                settable.setException(NullPointerException(
-                    "null MediaItemsWithStartPosition, see former logs for root cause"))
+                settable.setException(
+                    NullPointerException(
+                        "null MediaItemsWithStartPosition, see former logs for root cause"
+                    ).also { Log.e(TAG, Log.getStackTraceString(it)) }
+                )
             } else if (items.mediaItems.isNotEmpty()) {
+                if (endedWorkaroundPlayer?.nextShuffleOrder != null)
+                    throw IllegalStateException("shuffleFactory was found orphaned")
+                endedWorkaroundPlayer?.nextShuffleOrder = factory.toFactory()
+                // This call will only sometimes set the playlist on our controller (it won't if
+                // the system is just asking for the last played song for display purposes)
                 settable.set(items)
+                endedWorkaroundPlayer?.nextShuffleOrder = null
             } else {
-                settable.setException(IndexOutOfBoundsException(
-                    "LastPlayedManager restored empty MediaItemsWithStartPosition"))
+                settable.setException(
+                    IndexOutOfBoundsException(
+                        "LastPlayedManager restored empty MediaItemsWithStartPosition"
+                    ).also { Log.e(TAG, Log.getStackTraceString(it)) }
+                )
             }
         }
         return settable
@@ -495,54 +655,167 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
 
     override fun onTracksChanged(tracks: Tracks) {
         val mediaItem = controller!!.currentMediaItem
+
         lyricsLock.runInBg {
-            val trim = prefs.getBoolean("trim_lyrics", false)
+            val trim = prefs.getBoolean("trim_lyrics", true)
             val multiLine = prefs.getBoolean("lyric_multiline", false)
-            var lrc = loadAndParseLyricsFile(mediaItem?.getFile(), trim, multiLine)
-            if (lrc == null) {
-                loop@ for (i in tracks.groups) {
-                    for (j in 0 until i.length) {
-                        if (!i.isTrackSelected(j)) continue
-                        // note: wav files can have null metadata
-                        val trackMetadata = i.getTrackFormat(j).metadata ?: continue
-                        lrc = extractAndParseLyrics(trackMetadata, trim, multiLine) ?: continue
-                        // add empty element at the beginning
-                        lrc.add(0, MediaStoreUtils.Lyric())
-                        break@loop
+            val newParser = prefs.getBoolean("lyric_parser", false)
+            val options = LrcParserOptions(
+                trim = trim, multiLine = multiLine,
+                errorText = getString(R.string.failed_to_parse_lyric)
+            )
+            if (newParser) {
+                var lrc = loadAndParseLyricsFile(mediaItem?.getFile(), options)
+                if (lrc == null) {
+                    loop@ for (i in tracks.groups) {
+                        for (j in 0 until i.length) {
+                            if (!i.isTrackSelected(j)) continue
+                            // note: wav files can have null metadata
+                            val trackMetadata = i.getTrackFormat(j).metadata ?: continue
+                            lrc = extractAndParseLyrics(trackMetadata, options) ?: continue
+                            break@loop
+                        }
                     }
                 }
-            }
-            CoroutineScope(Dispatchers.Main).launch {
-                mediaSession?.let {
-                    lyrics = lrc
-                    it.broadcastCustomCommand(
-                        SessionCommand(SERVICE_GET_LYRICS, Bundle.EMPTY),
-                        Bundle.EMPTY
-                    )
+                CoroutineScope(Dispatchers.Main).launch {
+                    mediaSession?.let {
+                        lyrics = lrc
+                        lyricsLegacy = null
+                        it.broadcastCustomCommand(
+                            SessionCommand(SERVICE_GET_LYRICS, Bundle.EMPTY),
+                            Bundle.EMPTY
+                        )
+                        scheduleSendingLyrics(true)
+                    }
+                }.join()
+            } else {
+                var lrc = loadAndParseLyricsFileLegacy(mediaItem?.getFile(), options)
+                if (lrc == null) {
+                    loop@ for (i in tracks.groups) {
+                        for (j in 0 until i.length) {
+                            if (!i.isTrackSelected(j)) continue
+                            // note: wav files can have null metadata
+                            val trackMetadata = i.getTrackFormat(j).metadata ?: continue
+                            lrc = extractAndParseLyricsLegacy(trackMetadata, options) ?: continue
+                            // add empty element at the beginning
+                            lrc.add(0, MediaStoreUtils.Lyric())
+                            break@loop
+                        }
+                    }
                 }
-            }.join()
+                CoroutineScope(Dispatchers.Main).launch {
+                    mediaSession?.let {
+                        lyrics = null
+                        lyricsLegacy = lrc
+                        it.broadcastCustomCommand(
+                            SessionCommand(SERVICE_GET_LYRICS, Bundle.EMPTY),
+                            Bundle.EMPTY
+                        )
+                        scheduleSendingLyrics(true)
+                    }
+                }.join()
+            }
         }
+    }
+
+    override fun onAudioTrackInitialized(
+        eventTime: AnalyticsListener.EventTime,
+        audioTrackConfig: AudioSink.AudioTrackConfig
+    ) {
+        audioTrackInfoCounter++
+        audioTrackInfo = AudioTrackInfo.fromMedia3AudioTrackConfig(audioTrackConfig)
+        mediaSession?.broadcastCustomCommand(
+            SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY),
+            Bundle.EMPTY
+        )
+    }
+
+    override fun onAudioTrackReleased(
+        eventTime: AnalyticsListener.EventTime,
+        audioTrackConfig: AudioSink.AudioTrackConfig
+    ) {
+        // Normally called after the replacement has been initialized, but if old track is released
+        // without replacement, we want to instantly know that instead of keeping stale data.
+        if (++audioTrackReleaseCounter == audioTrackInfoCounter) {
+            audioTrackInfo = null
+            mediaSession?.broadcastCustomCommand(
+                SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY),
+                Bundle.EMPTY
+            )
+        }
+    }
+
+    // TODO make sure this is invalidated if... when should it be invalidated? track change?
+    override fun onDownstreamFormatChanged(
+        eventTime: AnalyticsListener.EventTime,
+        mediaLoadData: MediaLoadData
+    ) {
+        /* TODO if downstream format bitrate is not set, calculate overall bitrate
+        if (mediaLoadData.trackFormat?.bitrate == Format.NO_VALUE) {
+            (and try what the details screen does before trying this)
+            private fun calculateOverallBitrate(mediaItem: MediaItem?, duration: Long?): Int? {
+                // TODO this really should avoid counting cover or container data
+                //  or at least do a rough subtraction of cover size
+                if (mediaItem == null || duration == null || duration <= 0) return null
+
+                val uri = mediaItem.localConfiguration?.uri ?: return null
+
+                try {
+                    val file = File(uri.path!!)
+                    val sizeInBits = file.length() * 8
+                    return (sizeInBits / (duration / 1000.0)).toInt()
+                } catch (_: Exception) {
+                    return null
+                }
+            }
+        } */
+        downstreamFormat = mediaLoadData.trackFormat
+        mediaSession?.broadcastCustomCommand(
+            SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY),
+            Bundle.EMPTY
+        )
+    }
+
+    private fun onAudioSinkInputFormatChanged(inputFormat: Format?) {
+        audioSinkInputFormat = inputFormat
+        mediaSession?.broadcastCustomCommand(
+            SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY),
+            Bundle.EMPTY
+        )
+    }
+
+    override fun onPlayerError(eventTime: AnalyticsListener.EventTime, error: PlaybackException) {
+        // TODO
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         lyrics = null
+        lyricsLegacy = null
+        scheduleSendingLyrics(true)
         lastPlayedManager.save()
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
+        scheduleSendingLyrics(false)
         lastPlayedManager.save()
     }
 
     override fun onEvents(player: Player, events: Player.Events) {
-        super.onEvents(player, events)
-        // if timeline changed, handle shuffle update in onTimelineChanged() instead
-        // (onTimelineChanged() runs before both this callback and onShuffleModeEnabledChanged(),
-        // which means shuffleFactory != null is not a valid check)
-        if (events.contains(EVENT_SHUFFLE_MODE_ENABLED_CHANGED) &&
-            shuffleFactory == null && !events.contains(Player.EVENT_TIMELINE_CHANGED)) {
+        super<Player.Listener>.onEvents(player, events)
+        // if timeline changed, shuffle order is handled elsewhere instead (cloneAndInsert called by
+        // ExoPlayer for common case and nextShuffleOrder for resumption case)
+        if (events.contains(EVENT_SHUFFLE_MODE_ENABLED_CHANGED)
+            && !events.contains(Player.EVENT_TIMELINE_CHANGED)) {
             // when enabling shuffle, re-shuffle lists so that the first index is up to date
-            applyShuffleSeed(false) { CircularShuffleOrder(
-                this, it, controller!!.mediaItemCount, Random.nextLong()) }
+            Log.i(TAG, "re-shuffling playlist")
+            endedWorkaroundPlayer?.setShuffleOrder {
+                CircularShuffleOrder(
+                    it,
+                    controller!!.currentMediaItemIndex,
+                    controller!!.mediaItemCount,
+                    Random.nextLong()
+                )
+            }
         }
     }
 
@@ -554,28 +827,92 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         }
     }
 
-    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-        super.onTimelineChanged(timeline, reason)
-        if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) {
-            shuffleFactory?.let {
-                applyShuffleSeed(false, it)
-                shuffleFactory = null
-            }
-        }
-    }
-
     override fun onRepeatModeChanged(repeatMode: Int) {
-        super.onRepeatModeChanged(repeatMode)
+        super<Player.Listener>.onRepeatModeChanged(repeatMode)
         mediaSession!!.setCustomLayout(ImmutableList.of(getRepeatCommand(), getShufflingCommand()))
         if (needsMissingOnDestroyCallWorkarounds()) {
             handler.post { lastPlayedManager.save() }
         }
     }
 
-    @SuppressLint("MissingPermission") // only used on S/S_V2
+    override fun onPositionDiscontinuity(
+        oldPosition: Player.PositionInfo,
+        newPosition: Player.PositionInfo,
+        reason: Int
+    ) {
+        super<Player.Listener>.onPositionDiscontinuity(oldPosition, newPosition, reason)
+        scheduleSendingLyrics(false)
+    }
+
+    private fun scheduleSendingLyrics(new: Boolean) {
+        handler.removeCallbacks(sendLyrics)
+        sendLyricNow(new || !updatedLyricAtLeastOnce)
+        updatedLyricAtLeastOnce = true
+        val isStatusBarLyricsEnabled = prefs.getBooleanStrict("status_bar_lyrics", false)
+        val hnw = !LyricWidgetProvider.hasWidget(this)
+        if (controller?.isPlaying != true || (!isStatusBarLyricsEnabled && hnw)) return
+        val cPos = (controller?.contentPosition ?: 0).toULong()
+        // TODO support lyrics going backwards in time (start of next line is before end of this line)
+        val nextUpdate = if (syncedLyrics != null) {
+            syncedLyrics?.text?.flatMap {
+                if (hnw && it.start <= cPos) listOf() else if (hnw) listOf(it.start) else
+                    (it.words?.map { it.timeRange.start }?.filter { it > cPos } ?: listOf())
+                        .let { i -> if (it.start > cPos) i + it.start else i }
+            }?.minOrNull()
+        } else if (lyricsLegacy != null) {
+            lyricsLegacy?.find {
+                (it.timeStamp ?: -2) > cPos.toLong()
+            }?.timeStamp?.toULong()
+        } else null
+        nextUpdate?.let { handler.postDelayed(sendLyrics, (it - cPos).toLong()) }
+    }
+
+    private fun sendLyricNow(new: Boolean) {
+        if (new)
+            LyricWidgetProvider.update(this)
+        else
+            LyricWidgetProvider.adapterUpdate(this)
+        val isStatusBarLyricsEnabled = prefs.getBooleanStrict("status_bar_lyrics", false)
+        val highlightedLyric = if (isStatusBarLyricsEnabled && controller?.playWhenReady == true)
+            getCurrentLyricIndex(false)?.let {
+                syncedLyrics?.text?.get(it)?.text ?: lyricsLegacy?.get(it)?.content
+            }
+        else null
+        if (lastSentHighlightedLyric != highlightedLyric) {
+            lastSentHighlightedLyric = highlightedLyric
+            doUpdateNotification(mediaSession!!)
+        }
+    }
+    // TODO support lyrics going backwards in time (start of next line is before end of this line)
+    fun getCurrentLyricIndex(withTranslation: Boolean) =
+        if (syncedLyrics != null) {
+            syncedLyrics?.text?.indexOfLast {
+                it.start <= (controller?.currentPosition ?: 0).toULong()
+                        && (!it.isTranslated || withTranslation)
+            }?.let { if (it == -1) null else it }
+        } else if (lyricsLegacy != null) {
+            lyricsLegacy?.indexOfLast {
+                (it.timeStamp ?: Long.MAX_VALUE) <= (controller?.currentPosition ?: 0)
+                        && (!it.isTranslation || withTranslation)
+            }?.let { if (it == -1) null else it }
+        } else null
+
     override fun onForegroundServiceStartNotAllowedException() {
         Log.w(TAG, "Failed to resume playback :/")
-        if (mayThrowForegroundServiceStartNotAllowed()) {
+        if (mayThrowForegroundServiceStartNotAllowed()
+            || mayThrowForegroundServiceStartNotAllowedMiui()
+        ) {
+            if (supportsNotificationPermission() && !hasNotificationPermission()) {
+                Log.e(
+                    TAG, Log.getStackTraceString(
+                        IllegalStateException(
+                            "onForegroundServiceStartNotAllowedException shouldn't be called on T+"
+                        )
+                    )
+                )
+                return
+            }
+            @SuppressLint("MissingPermission") // false positive
             nm.notify(NOTIFY_ID, NotificationCompat.Builder(this, NOTIFY_CHANNEL_ID).apply {
                 setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 setAutoCancel(true)
@@ -602,31 +939,5 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 throw IllegalStateException("onForegroundServiceStartNotAllowedException shouldn't be called on T+")
             }
         }
-    }
-
-    private fun applyShuffleSeed(lazy: Boolean, factory: (Int) -> CircularShuffleOrder) {
-        if (lazy) {
-            shuffleFactory = factory
-        } else {
-            (mediaSession?.player as EndedWorkaroundPlayer?)?.exoPlayer?.let {
-                val data = try {
-                    factory(it.currentMediaItemIndex)
-                } catch (e: IllegalStateException) {
-                    lastPlayedManager.eraseShuffleOrder()
-                    throw e
-                }
-                it.setShuffleOrder(data.also { s ->
-                    onPersistableDataUpdated(CircularShuffleOrder.Persistent(s))
-                })
-            }
-        }
-    }
-
-    override fun onPersistableDataUpdated(order: CircularShuffleOrder.Persistent) {
-        shufflePersistent = order
-    }
-
-    override fun onLazilySetShuffleOrder(factory: (Int) -> CircularShuffleOrder) {
-        applyShuffleSeed(true, factory)
     }
 }

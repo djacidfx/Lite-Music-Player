@@ -26,20 +26,20 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import androidx.core.widget.addTextChangedListener
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.appbar.AppBarLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.closeKeyboard
 import org.akanework.gramophone.logic.enableEdgeToEdgePaddingListener
 import org.akanework.gramophone.logic.showKeyboard
 import org.akanework.gramophone.logic.ui.MyRecyclerView
-import org.akanework.gramophone.ui.LibraryViewModel
 import org.akanework.gramophone.ui.adapters.SongAdapter
 
 /**
@@ -50,8 +50,8 @@ import org.akanework.gramophone.ui.adapters.SongAdapter
  * @author AkaneTan
  */
 class SearchFragment : BaseFragment(false) {
+    // TODO this class leaks InsetSourceControl
     private val handler = Handler(Looper.getMainLooper())
-    private val libraryViewModel: LibraryViewModel by activityViewModels()
     private val filteredList: MutableList<MediaItem> = mutableListOf()
     private lateinit var editText: EditText
 
@@ -66,10 +66,13 @@ class SearchFragment : BaseFragment(false) {
         appBarLayout.enableEdgeToEdgePaddingListener()
         editText = rootView.findViewById(R.id.edit_text)
         val recyclerView = rootView.findViewById<MyRecyclerView>(R.id.recyclerview)
+        val songList = MutableStateFlow(listOf<MediaItem>())
         val songAdapter =
-            SongAdapter(this, listOf(),
+            SongAdapter(
+                this, songList,
                 true, null, false, isSubFragment = true,
-                allowDiffUtils = true, rawOrderExposed = true)
+                allowDiffUtils = true, rawOrderExposed = true
+            )
         val returnButton = rootView.findViewById<Button>(R.id.return_button)
 
         recyclerView.enableEdgeToEdgePaddingListener(ime = true)
@@ -83,7 +86,7 @@ class SearchFragment : BaseFragment(false) {
         editText.addTextChangedListener { rawText ->
             // TODO sort results by match quality? (using NaturalOrderHelper)
             if (rawText.isNullOrBlank()) {
-                songAdapter.updateList(listOf(), now = true, true)
+                songList.value = listOf()
             } else {
                 // make sure the user doesn't edit away our text while we are filtering
                 val text = rawText.toString()
@@ -92,21 +95,15 @@ class SearchFragment : BaseFragment(false) {
                     // Clear the list from the last search.
                     filteredList.clear()
                     // Filter the library.
-                    libraryViewModel.mediaItemList.value?.filter {
-                        val isMatchingTitle = it.mediaMetadata.title?.contains(text, true) ?: false
+                    filteredList.addAll(mainActivity.reader.songListFlow.first().filter {
+                        val isMatchingTitle = it.mediaMetadata.title?.contains(text, true) == true
                         val isMatchingAlbum =
-                            it.mediaMetadata.albumTitle?.contains(text, true) ?: false
+                            it.mediaMetadata.albumTitle?.contains(text, true) == true
                         val isMatchingArtist =
-                            it.mediaMetadata.artist?.contains(text, true) ?: false
+                            it.mediaMetadata.artist?.contains(text, true) == true
                         isMatchingTitle || isMatchingAlbum || isMatchingArtist
-                    }?.let {
-                        filteredList.addAll(
-                            it
-                        )
-                    }
-                    handler.post {
-                        songAdapter.updateList(filteredList, now = true, true)
-                    }
+                    })
+                    songList.value = filteredList.toList()
                 }
             }
         }

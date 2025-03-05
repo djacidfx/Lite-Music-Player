@@ -17,13 +17,16 @@
 
 package org.akanework.gramophone.logic.ui
 
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.addCallback
@@ -34,15 +37,16 @@ import androidx.core.view.marginLeft
 import androidx.core.view.marginRight
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.allowDiskAccessInStrictMode
 import org.akanework.gramophone.logic.enableEdgeToEdgePaddingListener
 import org.akanework.gramophone.logic.hasOsClipboardDialog
 import org.akanework.gramophone.logic.updateMargin
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Locale
+import androidx.core.net.toUri
 
 /**
  * BugHandlerActivity:
@@ -54,6 +58,7 @@ class BugHandlerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_bug_handler)
+        findViewById<View>(R.id.emailCard).visibility = if (BuildConfig.DEBUG) View.GONE else View.VISIBLE
         findViewById<View>(R.id.appbarlayout).enableEdgeToEdgePaddingListener()
         findViewById<MaterialToolbar>(R.id.topAppBar).setNavigationOnClickListener { finish() }
         onBackPressedDispatcher.addCallback { finish() }
@@ -73,13 +78,46 @@ class BugHandlerActivity : AppCompatActivity() {
 
         val combinedTextBuilder = StringBuilder()
         combinedTextBuilder
-            .append(getString(R.string.crash_gramophone_version)).append(':').append(' ').append(gramophoneVersion).append('\n').append('\n')
-            .append(getString(R.string.crash_phone_brand)).append(':').append("     ").append(deviceBrand).append('\n')
-            .append(getString(R.string.crash_phone_model)).append(':').append("     ").append(deviceModel).append('\n')
-            .append(getString(R.string.crash_sdk_level)).append(':').append(' ').append(sdkLevel).append('\n')
-            .append(getString(R.string.crash_thread)).append(':').append("    ").append(threadName).append('\n').append('\n').append('\n')
-            .append(getString(R.string.crash_time)).append(':').append(' ').append(formattedDateTime).append('\n')
-            .append("--------- beginning of crash").append('\n')
+            .append(getString(R.string.crash_gramophone_version))
+            .append(':')
+            .append(' ')
+            .append(gramophoneVersion)
+            .append('\n')
+            .append('\n')
+            .append(getString(R.string.crash_rtype))
+            .append(':')
+            .append(" ")
+            .append(BuildConfig.RELEASE_TYPE)
+            .append('\n')
+            .append(getString(R.string.crash_phone_brand))
+            .append(':')
+            .append("        ")
+            .append(deviceBrand)
+            .append('\n')
+            .append(getString(R.string.crash_phone_model))
+            .append(':')
+            .append("        ")
+            .append(deviceModel)
+            .append('\n')
+            .append(getString(R.string.crash_sdk_level))
+            .append(':')
+            .append("    ")
+            .append(sdkLevel)
+            .append('\n')
+            .append(getString(R.string.crash_thread))
+            .append(':')
+            .append("       ")
+            .append(threadName)
+            .append('\n')
+            .append('\n')
+            .append('\n')
+            .append(getString(R.string.crash_time))
+            .append(':')
+            .append("  ")
+            .append(formattedDateTime)
+            .append('\n')
+            .append("--------- beginning of crash")
+            .append('\n')
             .append(exceptionMessage)
 
         bugText.typeface = Typeface.MONOSPACE
@@ -87,11 +125,28 @@ class BugHandlerActivity : AppCompatActivity() {
         val baseLeft = actionShare.marginLeft
         val baseRight = actionShare.marginRight
         val baseBottom = actionShare.marginBottom
-        bugText.enableEdgeToEdgePaddingListener {
+        findViewById<View>(R.id.container).enableEdgeToEdgePaddingListener {
             actionShare.updateMargin {
                 left = baseLeft + it.left
                 right = baseRight + it.right
                 bottom = baseBottom + it.bottom
+            }
+        }
+        findViewById<Button>(R.id.sendEmail).setOnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_SENDTO).apply {
+                    setData("mailto:nift4dev@gmail.com".toUri())
+                    putExtra(
+                        Intent.EXTRA_SUBJECT,
+                        "Gramophone ${BuildConfig.MY_VERSION_NAME} crashed"
+                    )
+                    putExtra(
+                        Intent.EXTRA_TEXT,
+                        "Hi Nick,\n\nGramophone crashed!\nI was doing --INSERT DESCRIPTION HERE-- when it suddenly crashed with this log:\n\n\n$combinedTextBuilder"
+                    )
+                })
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, R.string.send_email_manually, Toast.LENGTH_LONG).show()
             }
         }
 
@@ -108,7 +163,7 @@ class BugHandlerActivity : AppCompatActivity() {
         actionShare.setOnClickListener {
             val sendIntent: Intent = Intent().apply {
                 action = Intent.ACTION_SEND
-                putExtra(Intent.EXTRA_TITLE,"Gramophone Logs")
+                putExtra(Intent.EXTRA_TITLE, "Gramophone Logs")
                 putExtra(Intent.EXTRA_TEXT, bugText.text)
                 type = "text/plain"
             }

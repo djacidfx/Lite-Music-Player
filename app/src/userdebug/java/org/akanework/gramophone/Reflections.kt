@@ -2,7 +2,6 @@ package org.akanework.gramophone
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -10,11 +9,10 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.akanework.gramophone.logic.utils.MediaStoreUtils
-import org.akanework.gramophone.ui.LibraryViewModel
+import kotlinx.coroutines.withContext
+import org.akanework.gramophone.logic.gramophoneApplication
 
 class Reflections : AppCompatActivity() {
-	private val lvm: LibraryViewModel by viewModels()
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 		enableEdgeToEdge()
@@ -26,8 +24,10 @@ class Reflections : AppCompatActivity() {
 		}
 		val r = findViewById<RecyclerView>(R.id.recyclerview)
 		CoroutineScope(Dispatchers.Default).launch {
-			MediaStoreUtils.updateLibraryWithInCoroutine(lvm, this@Reflections) {
-				r.adapter = ReflectionAdapter(lvm, null, { r.adapter = it }, false)
+			gramophoneApplication.reader.refresh()
+			withContext(Dispatchers.Main) {
+				r.adapter =
+					ReflectionAdapter(gramophoneApplication.reader, null, { r.adapter = it }, false)
 			}
 		}
 	}

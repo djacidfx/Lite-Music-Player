@@ -1,38 +1,100 @@
 @file:Suppress("UnstableApiUsage")
 
+import com.android.build.api.dsl.ApplicationBuildType
 import com.android.build.gradle.tasks.PackageAndroidArtifact
 import org.jetbrains.kotlin.util.removeSuffixIfPresent
 import java.util.Properties
 
-val aboutLibsVersion = "11.1.4" // keep in sync with plugin version
+val aboutLibsVersion = "11.2.2" // keep in sync with plugin version
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
-    id("org.jetbrains.kotlin.plugin.parcelize")
+    id("androidx.baselineprofile")
+    kotlin("android")
+    kotlin("plugin.parcelize")
     id("com.mikepenz.aboutlibraries.plugin")
 }
 
 android {
-    val releaseType = readProperties(file("../package.properties")).getProperty("releaseType")
-    val myVersionName = "." + "git rev-parse --short=6 HEAD".runCommand(workingDir = rootDir)
+    val releaseType = if (project.hasProperty("releaseType")) project.properties["releaseType"].toString()
+        else readProperties(file("../package.properties")).getProperty("releaseType")
+    val myVersionName = "." + "git rev-parse --short=7 HEAD".runCommand(workingDir = rootDir)
     if (releaseType.contains("\"")) {
         throw IllegalArgumentException("releaseType must not contain \"")
     }
 
     namespace = "org.akanework.gramophone"
-    compileSdk = 34
+    compileSdk = 35
 
     signingConfigs {
         create("release") {
-            if (readProperties(file("../package.properties")).getProperty("AKANE_RELEASE_KEY_ALIAS") != null) {
-                storeFile = file(readProperties(file("../package.properties")).getProperty("AKANE_RELEASE_STORE_FILE"))
-                storePassword = readProperties(file("../package.properties")).getProperty("AKANE_RELEASE_STORE_PASSWORD")
-                keyAlias = readProperties(file("../package.properties")).getProperty("AKANE_RELEASE_KEY_ALIAS")
-                keyPassword = readProperties(file("../package.properties")).getProperty("AKANE_RELEASE_KEY_PASSWORD")
+            if (project.hasProperty("AKANE_RELEASE_KEY_ALIAS")) {
+                storeFile = file(project.properties["AKANE_RELEASE_STORE_FILE"].toString())
+                storePassword = project.properties["AKANE_RELEASE_STORE_PASSWORD"].toString()
+                keyAlias = project.properties["AKANE_RELEASE_KEY_ALIAS"].toString()
+                keyPassword = project.properties["AKANE_RELEASE_KEY_PASSWORD"].toString()
             }
         }
+        create("release2") {
+            if (project.hasProperty("AKANE2_RELEASE_KEY_ALIAS")) {
+                storeFile = file(project.properties["AKANE2_RELEASE_STORE_FILE"].toString())
+                storePassword = project.properties["AKANE2_RELEASE_STORE_PASSWORD"].toString()
+                keyAlias = project.properties["AKANE2_RELEASE_KEY_ALIAS"].toString()
+                keyPassword = project.properties["AKANE2_RELEASE_KEY_PASSWORD"].toString()
+            }
+        }
+    }
+
+    androidResources {
+        generateLocaleConfig = true
+    }
+
+    buildFeatures {
+        buildConfig = true
+        prefab = true
+    }
+
+    packaging {
+        dex {
+            useLegacyPackaging = false
+        }
+        jniLibs {
+            useLegacyPackaging = false
+        }
+        resources {
+            excludes += "META-INF/*.version"
+            // https://youtrack.jetbrains.com/issue/KT-48019/Bundle-Kotlin-Tooling-Metadata-into-apk-artifacts
+            excludes += "kotlin-tooling-metadata.json"
+            // https://github.com/Kotlin/kotlinx.coroutines?tab=readme-ov-file#avoiding-including-the-debug-infrastructure-in-the-resulting-apk
+            excludes += "DebugProbesKt.bin"
+        }
+    }
+
+    java {
+        compileOptions {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(17)
+            }
+        }
+    }
+
+    kotlin {
+        jvmToolchain(17)
+        compilerOptions {
+            freeCompilerArgs = listOf(
+                "-Xno-param-assertions",
+                "-Xno-call-assertions",
+                "-Xno-receiver-assertions"
+            )
+        }
+    }
+
+    lint {
+        lintConfig = file("lint.xml")
+    }
+
+    baselineProfile {
+        dexLayoutOptimization = true
     }
 
     defaultConfig {
@@ -42,14 +104,11 @@ android {
         // That said, supporting Android 5.0 costs tolerable amounts of tech debt and we plan to
         // keep support for it for a while.
         minSdk = 21
-        targetSdk = 34
-        versionCode = 7
-        versionName = "1.0.5"
+        targetSdk = 35
+        versionCode = 17
+        versionName = "1.0.15"
         if (releaseType != "Release") {
             versionNameSuffix = myVersionName
-        }
-        if (project.hasProperty("AKANE_RELEASE_KEY_ALIAS")) {
-            signingConfig = signingConfigs["release"]
         }
         buildConfigField(
             "String",
@@ -61,44 +120,19 @@ android {
             "RELEASE_TYPE",
             "\"$releaseType\""
         )
+        buildConfigField(
+            "boolean",
+            "DISABLE_MEDIA_STORE_FILTER",
+            "false"
+        )
         setProperty("archivesBaseName", "Gramophone-$versionName${versionNameSuffix ?: ""}")
-
-        androidResources {
-            generateLocaleConfig = true
+        vectorDrawables {
+            useSupportLibrary = true
         }
-
-        buildFeatures {
-            buildConfig = true
-        }
-
-        packaging {
-            dex {
-                useLegacyPackaging = false
+        externalNativeBuild {
+            cmake {
+                cppFlags += ""
             }
-            jniLibs {
-                useLegacyPackaging = false
-            }
-            resources {
-                excludes += "META-INF/*.version"
-            }
-        }
-
-        compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_17
-            targetCompatibility = JavaVersion.VERSION_17
-        }
-
-        kotlinOptions {
-            jvmTarget = "17"
-            freeCompilerArgs += listOf(
-                "-Xno-param-assertions",
-                "-Xno-call-assertions",
-                "-Xno-receiver-assertions",
-            )
-        }
-
-        lint {
-            lintConfig = file("lint.xml")
         }
     }
 
@@ -110,25 +144,68 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            if (readProperties(file("../package.properties")).getProperty("AKANE_RELEASE_KEY_ALIAS") != null) {
-                signingConfig = signingConfigs["release"]
-            }
+        }
+        create("benchmarkRelease") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            buildConfigField(
+                "boolean",
+                "DISABLE_MEDIA_STORE_FILTER",
+                "true"
+            )
+            matchingFallbacks += "release"
+        }
+        create("nonMinifiedRelease") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            buildConfigField(
+                "boolean",
+                "DISABLE_MEDIA_STORE_FILTER",
+                "true"
+            )
+            matchingFallbacks += "release"
         }
         create("profiling") {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             isProfileable = true
+            matchingFallbacks += "release"
         }
         create("userdebug") {
             isMinifyEnabled = false
             isProfileable = true
             isJniDebuggable = true
             isPseudoLocalesEnabled = true
+            matchingFallbacks += "release"
         }
         debug {
             isPseudoLocalesEnabled = true
-            if (readProperties(file("../package.properties")).getProperty("AKANE_RELEASE_KEY_ALIAS") != null) {
-                signingConfig = signingConfigs["release"]
+            applicationIdSuffix = ".debug"
+        }
+    }
+
+    buildTypes.forEach {
+        (it as ApplicationBuildType).run {
+            vcsInfo {
+                include = false
             }
+            if (project.hasProperty("AKANE_RELEASE_KEY_ALIAS") || project.hasProperty("signing2")) {
+                signingConfig = signingConfigs[if (project.hasProperty("signing2"))
+                    "release2" else "release"]
+            }
+            isCrunchPngs = false // for reproducible builds TODO how much size impact does this have? where are the pngs from? can we use webp?
         }
     }
 
@@ -154,6 +231,12 @@ android {
         includeInApk = false
         includeInBundle = false
     }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 
     // https://stackoverflow.com/a/77745844
     tasks.withType<PackageAndroidArtifact> {
@@ -163,20 +246,25 @@ android {
 
 aboutLibraries {
     configPath = "app/config"
+    // Remove the "generated" timestamp to allow for reproducible builds
+    excludeFields = arrayOf("generated")
 }
 
 dependencies {
-    val media3Version = "1.4.0-alpha01"
-    implementation("androidx.activity:activity-ktx:1.9.0")
-    implementation("androidx.appcompat:appcompat:1.7.0-beta01")
-    implementation("androidx.collection:collection-ktx:1.4.0")
-    implementation("androidx.concurrent:concurrent-futures-ktx:1.1.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.2.0-alpha13")
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation(project(":libphonograph:libPhonograph"))
+    val media3Version = "1.6.0-beta01" // TODO https://github.com/androidx/media/issues/2206
+    implementation("androidx.activity:activity-ktx:1.10.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.collection:collection-ktx:1.4.5")
+    implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.2.1")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-splashscreen:1.2.0-beta01")
     //implementation("androidx.datastore:datastore-preferences:1.1.0-rc01") TODO don't abuse shared prefs
-    implementation("androidx.fragment:fragment-ktx:1.8.0-alpha02")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
+    implementation("androidx.fragment:fragment-ktx:1.8.6")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
+    implementation("androidx.media3:media3-common-ktx:$media3Version")
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-midi:$media3Version")
     implementation("androidx.media3:media3-session:$media3Version")
@@ -184,16 +272,23 @@ dependencies {
     //implementation("androidx.paging:paging-runtime-ktx:3.2.1") TODO paged, partial, flow based library loading
     //implementation("androidx.paging:paging-guava:3.2.1") TODO do we have guava? do we need this?
     implementation("androidx.preference:preference-ktx:1.2.1")
-    implementation("androidx.transition:transition-ktx:1.5.0") // <-- for predictive back
+    implementation("androidx.transition:transition-ktx:1.5.1") // <-- for predictive back TODO can we remove explicit dep now?
     implementation("com.mikepenz:aboutlibraries:$aboutLibsVersion")
     implementation("com.google.android.material:material:1.12.0")
     implementation("me.zhanghai.android.fastscroll:library:1.3.0")
-    implementation("io.coil-kt.coil3:coil:3.0.0-alpha06")
+    implementation("io.coil-kt.coil3:coil:3.0.4")
+    implementation("io.github.nift4.dlfunc:dlfunc:0.1.2")
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
+    //noinspection GradleDependency newer versions need java.nio which is api 26+
+    //implementation("com.github.albfernandez:juniversalchardet:2.0.3") TODO
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    "baselineProfile"(project(":baselineprofile"))
     // --- below does not apply to release builds ---
     debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
     // Note: JAudioTagger is not compatible with Android 5, we can't ship it in app
     debugImplementation("net.jthink:jaudiotagger:3.0.1") // <-- for "SD Exploder"
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
     "userdebugImplementation"(kotlin("reflect")) // who thought String.invoke() is a good idea?????
     debugImplementation(kotlin("reflect"))
 }

@@ -1,0 +1,1 @@
+Hotfix untuk crash ketika telepon diatur ke bahasa Filipina

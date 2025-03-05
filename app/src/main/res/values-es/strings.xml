@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="dismiss">Ignorar</string>
-    <string name="categories">Categorías</string>
     <string name="settings_category_behavior">Comportamiento</string>
-    <string name="operations">Operaciones</string>
     <string name="go_to_album">Ir al álbum</string>
     <string name="category_dates">Fechas</string>
     <string name="unknown_album">Álbum desconocido</string>
@@ -13,7 +11,6 @@
     <string name="sort_by_artist">Artista</string>
     <string name="settings_mediastore_filter">Duración mínima de la canción (segundos)</string>
     <string name="category_songs">Canciones</string>
-    <string name="disc">Disco</string>
     <string name="settings_app_theme">Tema de la aplicación</string>
     <string name="compact_list">Lista (compacto)</string>
     <string name="dialog_album_artist">Artista del álbum</string>
@@ -23,7 +20,6 @@
         <item quantity="many">%d elementos</item>
         <item quantity="other">%d elementos</item>
     </plurals>
-    <string name="home_menu_shuffle">Aleatorio</string>
     <string name="category_genres">Géneros</string>
     <string name="natural_order">Orden natural</string>
     <string name="light">Claro</string>
@@ -45,7 +41,7 @@
     <string name="dialog_year">Año</string>
     <string name="dialog_artist">Artista</string>
     <string name="opensource_info">Bajo licencia GPL-3.0
-\nCopyright © 2024Fundación Akane</string>
+\nCopyright %s</string>
     <string name="playlist_favourite">Favorito</string>
     <string name="home_menu_settings">Ajustes</string>
     <string name="home_menu_refresh">Refrescar</string>
@@ -53,7 +49,6 @@
     <string name="settings_category_appearance">Apariencia</string>
     <string name="dialog_album">Álbum</string>
     <string name="settings_default_progress_bar">Habilitar barra de progreso predeterminado</string>
-    <string name="home_menu_about">Acerca de</string>
     <string name="details">Detalles</string>
     <string name="home_menu_equalizer">Ecualizador</string>
     <string name="dialog_path">Directorio</string>
@@ -96,7 +91,7 @@
     <string name="repeat_mode">Modo de repetición</string>
     <string name="unknown_title">Título desconocido</string>
     <string name="filesystem">Sistema de archivos</string>
-    <string name="dialog_mime">Tipo Mime</string>
+    <string name="dialog_mime">Tipo MIME</string>
     <string name="dialog_duration">Duración</string>
     <string name="settings_album_round_corner">Esquinas redondeadas del álbum</string>
     <string name="sort_by_add_date">Añadir una fecha</string>
@@ -114,7 +109,7 @@
     <string name="settings_title_center_summary">Utilice el título centrado para ver el reproductor completo</string>
     <string name="settings_experimental_settings">Experimental</string>
     <string name="settings_hardware_acceleration_summary">Activar la aceleración por hardware de la velocidad de reproducción</string>
-    <string name="settings_behavior_summary">Filtros, comportamiento de inicio.</string>
+    <string name="settings_behavior_summary">Filtros, comportamiento de inicio</string>
     <string name="settings_lyrics_configuration_summary">Configurar la apariencia de las letras</string>
     <string name="settings_experimental_settings_summary">Funciones de prueba, varios</string>
     <string name="settings_album_round_corner_summary">Habilitar las esquinas redondeadas en el reproductor completo</string>
@@ -144,8 +139,6 @@
     <string name="settings_blacklist_folder_summary">Filtrar canciones de determinadas carpetas</string>
     <string name="settings_category_basic_info">Información general</string>
     <string name="settings_preference_category_application">Aplicación</string>
-    <string name="delete_in_progress">Ya estoy borrando otra canción</string>
-    <string name="delete">Borrar</string>
     <string name="delete_failed">Error al borrar la canción</string>
     <string name="settings_crash_application">La aplicación falló</string>
     <string name="settings_crash_application_summary">Crash-O-Matic 3000</string>
@@ -154,18 +147,14 @@
     <string name="dialog_lyrics">Letras</string>
     <string name="settings_category_filters">Filtros</string>
     <string name="preference_category_quality">Calidad</string>
-    <string name="yes">Sí</string>
-    <string name="no">No</string>
     <string name="settings_category_misc">Varias</string>
     <string name="settings_category_full_player">Reproductor entero</string>
-    <string name="deny_images">Por favor, deniegue el permiso a \"Imágenes y vídeos\"</string>
-    <string name="grant_images">Por favor, conceda permiso para \"Imágenes y vídeos\"</string>
+    <string name="deny_images"><![CDATA[Por favor, quite el permiso a "Fotos y vídeos"]]></string>
+    <string name="grant_images"><![CDATA[Conceda permiso para "Fotos y vídeos"]]></string>
     <string name="settings_trim_lyrics">Eliminar los espacios alrededor de las letras</string>
     <string name="crash_clipboard">Registro de fallos copiado al portapapeles</string>
-    <string name="settings_lyrics_contrast">Modo de alto contraste</string>
-    <string name="settings_lyrics_contrast_summary">Útil si desea poder ver líneas de letras inactivas</string>
     <string name="settings_lyrics_multiline">Leer las letras de varias líneas</string>
-    <string name="settings_lyrics_multiline_summary">Todas las líneas entre puntos de sincronización se tratan como texto único.</string>
+    <string name="settings_lyrics_multiline_summary">Todas las líneas entre puntos de sincronización se tratan como texto único</string>
     <string name="timer">Temporizador</string>
     <string name="current_playlist">Lista de reproducción</string>
     <string name="fgs_failed_text">Haga clic aquí para abrir la aplicación y continuar la reproducción</string>
@@ -174,4 +163,43 @@
     <string name="album_covers_enhance">Carga de portada de álbum mejorada</string>
     <string name="share">Compartir</string>
     <string name="album_covers_enhance_desc">Admite portadas de canciones de alta calidad y permite que la portada del álbum y la canción sean diferentes (requiere acceso a las fotos)</string>
+    <string name="sort_by_release_date">Fecha de lanzamiento</string>
+    <string name="timer_expiry">El temporizador de apagado pausará la música en %s</string>
+    <string name="separator_dot">•</string>
+    <string name="grant_audio"><![CDATA[Por favor, permite los permisos "Música y audio"]]></string>
+    <string name="seekbar">Seekbar</string>
+    <string name="divider">Divisor</string>
+    <string name="back">Atrás</string>
+    <string name="play_all">Reproducir todo</string>
+    <string name="sort">Clasificar</string>
+    <string name="scroll_to_songs">Ir a las canciones</string>
+    <string name="scroll_to_albums">Ir a los álbumes</string>
+    <string name="play">Reproducir</string>
+    <string name="more">Más</string>
+    <string name="remove">Eliminar</string>
+    <string name="skip_next">Saltar a la siguiente</string>
+    <string name="expand_less">Cerrar</string>
+    <string name="position_slider">Control deslizante de la ubicación</string>
+    <string name="tab_order_summary">La aplicación mostrará la primera pestaña al iniciarse. Las pestañas que estén después del divisor estarán ocultas.</string>
+    <string name="settings_preference_category_home">Pantalla de inicio</string>
+    <string name="shuffle_all">Mezclar todas</string>
+    <string name="tab_order">Configurar el orden de las pestañas</string>
+    <string name="skip_previous">Ir a la anterior</string>
+    <string name="app_name">Gramophone</string>
+    <string name="settings_lyrics_parser_summary">Habilita un nuevo analizador de letras que admite sincronización palabra por palabra, indicador de altavoz, desplazamiento y mucho más</string>
+    <string name="settings_lyrics_parser">Nuevo analizador de letras</string>
+    <string name="settings_lyrics_ui_summary">Interfaz de usuario experimental para mostrar la letra palabra por palabra con funciones avanzadas</string>
+    <string name="settings_lyrics_ui">Activar la nueva interfaz para las letras</string>
+    <string name="home_menu_shuffle">Mezclar todo</string>
+    <string name="settings_status_bar_lyrics_title">Letras en la barra de estado</string>
+    <string name="settings_status_bar_lyrics_summary">Habilite el método MeiZu que muestra las letras de las canciones en la barra de estado (solo disponible en algunos dispositivos)</string>
+    <string name="lyric_widget_description">Widget que muestra la letra de la pista actual en la reproducción</string>
+    <string name="delete">Borrar</string>
+    <string name="yes">Sí</string>
+    <string name="no">No</string>
+    <string name="sort_by_album_artist">Álbum del artista</string>
+    <string name="delete_really">¿Seguro/a que querés borrar \"%s\"? Esta acción no puede ser cambiada.</string>
+    <string name="sort_by_file_path">Ruta del archivo</string>
+    <string name="spk_channel_out_mono">Mono</string>
+    <string name="spk_channel_out_stereo">Estéreo</string>
 </resources>

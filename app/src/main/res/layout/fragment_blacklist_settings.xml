@@ -47,6 +47,7 @@
                 android:paddingStart="4dp"
                 android:paddingEnd="8dp"
                 app:layout_collapseMode="pin"
+                app:navigationContentDescription="@string/back"
                 app:navigationIcon="@drawable/ic_arrow_back"
                 app:navigationIconTint="?colorOnSurface" />
 
@@ -61,6 +62,7 @@
         android:clipToPadding="false"
         android:scrollbars="none"
         android:paddingTop="4dp"
+        android:contentDescription="@string/list"
         app:layout_behavior="com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

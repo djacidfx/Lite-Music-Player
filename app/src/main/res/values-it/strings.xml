@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_lyrics_contrast">Modalità contrasto elevato</string>
     <string name="settings_contributors">Contributori</string>
     <string name="go_to_album">Vai a album</string>
     <string name="repeat_mode">Modalità ripetizione</string>
@@ -14,33 +13,32 @@
     <plurals name="songs">
         <item quantity="one">%d Brano</item>
         <item quantity="many">%d Brani</item>
-        <item quantity="other"/>
+        <item quantity="other">%d Brani</item>
     </plurals>
     <string name="dialog_year">Anno</string>
     <plurals name="albums">
         <item quantity="one">%d Album</item>
         <item quantity="many">%d Album</item>
-        <item quantity="other"/>
+        <item quantity="other">%d Album</item>
     </plurals>
     <string name="dialog_path">Percorso</string>
     <string name="unknown_album">Album sconosciuto</string>
     <string name="folders">Cartelle</string>
     <string name="natural_order">Ordine normale</string>
     <string name="grid">Griglia</string>
-    <string name="layout">Schermo</string>
+    <string name="layout">Mostra</string>
     <string name="equalizer_not_found">Equalizzatore non trovato!</string>
     <string name="compact_list">Lista (compatta)</string>
     <string name="settings_default_progress_bar_summary">Abilita barra avanzamento stile material</string>
-    <string name="opensource_info">Open-source sotto GPL-3.0
-\nCopyright © 2024 Akane Foundation</string>
-    <string name="now_playing">In esecuzione</string>
+    <string name="opensource_info">Open-source sotto GPL-3.0\nCopyright %s</string>
+    <string name="now_playing">In riproduzione</string>
     <string name="settings_content_based_color_summary">Abilita generazione colore in base all\'album</string>
     <string name="settings_content_based_color">Colori basati sul contenuto</string>
     <string name="no_lyric_found">Testo non trovato</string>
     <string name="unknown_title">Titolo sconosciuto</string>
     <string name="settings_player_options_summary">Qualità output, comportamento riproduzione</string>
     <string name="filesystem">File di sistema</string>
-    <string name="dialog_mime">Tipo mime</string>
+    <string name="dialog_mime">Tipo MIME</string>
     <string name="settings_about_app">A riguardo</string>
     <string name="settings_customization">Personalizzazione</string>
     <string name="settings_customization_summary">Gestisci opzioni personalizzazione</string>
@@ -52,13 +50,12 @@
     <string name="settings_appearance_summary">Aspetto applicazione, modalità tema</string>
     <string name="settings_skip_silence_summary">Salta silenzio quando brani in esecuzione</string>
     <string name="settings_preference_category_application">Applicazione</string>
-    <string name="no">No</string>
     <string name="settings_lyrics_multiline">Leggi testi multilinea</string>
     <string name="settings_play_on_launch_summary">Esegui musica all\'avvio</string>
     <plurals name="items">
         <item quantity="one">%d Elemento</item>
         <item quantity="many">%d Elementi</item>
-        <item quantity="other"/>
+        <item quantity="other">%d Elementi</item>
     </plurals>
     <string name="settings_blacklist_folder_summary">Filtra brani da alcune cartelle</string>
     <string name="settings_category_basic_info">Info di base</string>
@@ -69,11 +66,8 @@
     <string name="settings_category_full_player">Player intero</string>
     <string name="settings_crash_application">Crash applicazione</string>
     <string name="dialog_lyrics">Testi</string>
-    <string name="delete">Elimina</string>
     <string name="delete_failed">Eliminazione brano fallita</string>
-    <string name="delete_in_progress">Già eliminando un altro brano</string>
-    <string name="yes">Sì</string>
-    <string name="grant_images">Per favore consenti il permesso \"immagini &amp; video\"</string>
+    <string name="grant_images">Per favore consenti l\'autorizzazione \"Foto e video\"</string>
     <string name="crash_clipboard">Registro crash copiato negli appunti</string>
     <string name="settings_trim_lyrics">Rimuovi spazi nei testi</string>
     <string name="category_songs">Brani</string>
@@ -83,17 +77,15 @@
     <plurals name="artists">
         <item quantity="one">%d Artista</item>
         <item quantity="many">%d Artisti</item>
-        <item quantity="other"/>
+        <item quantity="other">%d Artisti</item>
     </plurals>
     <string name="go_to_artist">Vai a artista</string>
     <string name="details">Dettagli</string>
     <string name="recently_added">Aggiunti recentemente</string>
     <string name="list">Lista</string>
-    <string name="operations">Operazioni</string>
     <string name="unknown_version">Versione sconosciuta</string>
     <string name="settings_app_theme">Tema app</string>
     <string name="home_menu_equalizer">Equalizzatore</string>
-    <string name="home_menu_about">A riguardo</string>
     <string name="playlist_favourite">Preferito</string>
     <string name="settings_package_type">Tipo di pacchetto</string>
     <string name="dialog_duration">Durata</string>
@@ -101,8 +93,7 @@
     <string name="settings_about_gramophone">Riguardo all\'applicazione</string>
     <string name="settings_library">Libreria</string>
     <string name="settings_hardware_acceleration">Velocità riproduzione</string>
-    <string name="deny_images">Per favore nega il permesso \"immagini &amp; video\"</string>
-    <string name="settings_lyrics_contrast_summary">Utile se vuoi essere in grado di vedere le righe dei testi inattivi</string>
+    <string name="deny_images">Per favore nega l\'autorizzazione \"Foto e video\"</string>
     <string name="settings_player_ui_summary">UI player intero, testi</string>
     <string name="settings_library_summary">Gestisci libreria media</string>
     <string name="settings_lyrics_multiline_summary">Tratta tutte le righe tra i punti di sincronizzazione come un unico testo</string>
@@ -110,7 +101,6 @@
     <string name="dialog_edit_metadata">Modifica</string>
     <string name="album_cover">Copertina album</string>
     <string name="home_menu_search">Cerca</string>
-    <string name="home_menu_shuffle">Casuale</string>
     <string name="home_menu_settings">Impostazioni</string>
     <string name="home_menu_refresh">Ricarica</string>
     <string name="category_albums">Album</string>
@@ -125,7 +115,6 @@
     <string name="sort_by_name">Nome</string>
     <string name="sort_by_artist">Artista</string>
     <string name="sort_by_album">Album</string>
-    <string name="categories">Categorie</string>
     <string name="dismiss">Rifiuta</string>
     <string name="unknown_genre">Genere sconosciuto</string>
     <string name="unknown_year">Anno sconosciuto</string>
@@ -145,7 +134,6 @@
     <string name="dialog_track_number">Numero traccia</string>
     <string name="check_for_updates">Controlla il nostro canale per aggiornamenti!</string>
     <string name="settings_default_progress_bar">Barra avanzamento di default</string>
-    <string name="disc">Disco</string>
     <string name="settings_behavior_summary">Filtri, comportamento avvio</string>
     <string name="settings_category_links">Collegamenti</string>
     <string name="settings_color_accuracy">Accuratezza colore</string>
@@ -174,4 +162,36 @@
     <string name="fgs_failed_channel">Impossibile riprendere la riproduzione</string>
     <string name="fgs_failed_text">Fai click qui per aprire l\'app e continuare la riproduzione</string>
     <string name="album_covers_enhance_desc">Supporto per copertine di alta qualità delle canzoni e possibilità di differenziare tra copertine di album e canzoni (richiede l\'accesso alle foto)</string>
+    <string name="sort_by_release_date">Data di pubblicazione</string>
+    <string name="timer_expiry">Timer riposo fermerà la musica a %s</string>
+    <string name="separator_dot">•</string>
+    <string name="grant_audio">Per favore consenti l\'autorizzazione \"Musica e audio\"</string>
+    <string name="skip_next">Salta al prossimo</string>
+    <string name="expand_less">Chiudi</string>
+    <string name="settings_preference_category_home">Schermata principale</string>
+    <string name="tab_order">Cambia ordine delle schede</string>
+    <string name="back">Indietro</string>
+    <string name="play_all">Riproduci tutto</string>
+    <string name="shuffle_all">Riproduzione casuale</string>
+    <string name="sort">Ordina</string>
+    <string name="scroll_to_albums">Vai agli album</string>
+    <string name="scroll_to_songs">Vai alle canzoni</string>
+    <string name="tab_order_summary">L\'app mostrerà la prima scheda all\'avvio. Le schede dopo il separatore saranno nascoste.</string>
+    <string name="more">Altro</string>
+    <string name="remove">Rimuovi</string>
+    <string name="settings_status_bar_lyrics_title">Barra di stato testi</string>
+    <string name="play">Esegui</string>
+    <string name="position_slider">Posizione scorrimento</string>
+    <string name="settings_lyrics_ui">Abilita nuova interfaccia testi</string>
+    <string name="skip_previous">Salta al precedente</string>
+    <string name="settings_lyrics_parser">Nuovo parser testi</string>
+    <string name="seekbar">Barra</string>
+    <string name="divider">Separatore</string>
+    <string name="app_name">Gramophone</string>
+    <string name="home_menu_shuffle">Mescola tutto</string>
+    <string name="delete">Elimina</string>
+    <string name="yes">Sì</string>
+    <string name="no">No</string>
+    <string name="sort_by_album_artist">Artista album</string>
+    <string name="sort_by_file_path">Percorso file</string>
 </resources>

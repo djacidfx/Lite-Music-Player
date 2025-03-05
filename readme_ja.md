@@ -1,43 +1,61 @@
 # Gramophone
-![GitHub](https://img.shields.io/github/license/AkaneTan/Gramophone)
-![GitHub tag (with filter)](https://img.shields.io/github/v/tag/AkaneTan/Gramophone)
-[![Telegram](https://img.shields.io/badge/-telegram-red?color=white&logo=telegram&logoColor=blue)](https://t.me/MizuhaNetwork)
-[![Matrix](https://img.shields.io/badge/-matrix-red?color=white&logo=matrix&logoColor=black)](https://matrix.to/#/#akanefoundation:matrix.org)
+![GitHub](https://img.shields.io/github/license/AkaneTan/Gramophone?style=flat-square&logoColor=white&labelColor=black&color=white)
+![GitHub tag (with filter)](https://img.shields.io/github/v/tag/AkaneTan/Gramophone?style=flat-square&logoColor=white&labelColor=black&color=white)
+[![Static Badge](https://img.shields.io/badge/Telegram-Content?style=flat-square&logo=telegram&logoColor=black&color=white)](https://t.me/AkaneDev)
 
-最新の md3 Phonograph Design な media3 音楽プレーヤー
+[English](./readme.md)
+
+Android のスタンダードを厳密に準拠した media3 と マテリアルデザインライブラリを使用して構築された健全な音楽プレーヤーです。
+
+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
+     alt="Get it on F-Droid"
+     height="80">](https://f-droid.org/packages/org.akanework.gramophone/)
 
 ## 機能
-- Material 3 デザイン
-- Monet テーマアイコン (Android 12+)
-- お気に入りの音楽を表示、再生
+- 最新の Material 3 デザイン
+- Android 12 以降の Monet テーマアイコン
+- ダイナミックカラー Monet プレーヤー UI
+- お気に入りの音楽を表示して再生
 - お気に入りの音楽を検索
-- Web ストリーミング (ご期待ください!)
-- プレイリストの追加と管理
-
-## 特徴
-- クリーンなコードと統一されたコードスタイル
-- カスタム ROM とのインラインコンパイルに対応
+- MediaStore の音楽データベースを使用した高速なアクセス
+- 同期された歌詞
+- 読み取り専用のプレイリストをサポート
 
 ## スクリーンショット
-| ![スクリーンショット 1](https://github.com/AkaneTan/Gramophone/raw/beta/resources/screenshot_1.png) | ![スクリーンショット 2](https://github.com/AkaneTan/Gramophone/raw/beta/resources/screenshot_2.png) | ![スクリーンショット 3](https://github.com/AkaneTan/Gramophone/raw/beta/resources/screenshot_3.png) |
-|---------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| ![スクリーンショット 4](https://github.com/AkaneTan/Gramophone/raw/beta/resources/screenshot_4.png) | ![スクリーンショット 5](https://github.com/AkaneTan/Gramophone/raw/beta/resources/screenshot_5.png) | ![スクリーンショット 6](https://github.com/AkaneTan/Gramophone/raw/beta/resources/screenshot_6.png) |
+| ![Screenshot 1](https://raw.githubusercontent.com/AkaneTan/Gramophone/beta/fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot_1.jpg) | ![Screenshot 2](https://raw.githubusercontent.com/AkaneTan/Gramophone/beta/fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot_2.jpg) | ![Screenshot 3](https://raw.githubusercontent.com/AkaneTan/Gramophone/beta/fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot_3.jpg) |
+|------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ![Screenshot 4](https://raw.githubusercontent.com/AkaneTan/Gramophone/beta/fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot_4.jpg) | ![Screenshot 5](https://raw.githubusercontent.com/AkaneTan/Gramophone/beta/fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot_5.jpg) | ![Screenshot 6](https://raw.githubusercontent.com/AkaneTan/Gramophone/beta/fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot_6.jpg) |
+| ![Screenshot 7](https://raw.githubusercontent.com/AkaneTan/Gramophone/beta/fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot_7.jpg) | ![Screenshot 8](https://raw.githubusercontent.com/AkaneTan/Gramophone/beta/fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot_8.jpg) | ![Screenshot 9](https://raw.githubusercontent.com/AkaneTan/Gramophone/beta/fastlane/screenshot_9.jpg) |
+
 
 ## インストール
-アプリの最新バージョンは、[リリースページ](https://github.com/AkaneTan/Gramophone/releases)からダウンロードができます。
+アプリの最新な安定バージョンは、[GitHub のリリース](https://github.com/AkaneTan/Gramophone/releases/latest)または [F-Droid](https://f-droid.org/packages/org.akanework.gramophone/) からダウンロードできます。
+
+Beta バージョンとプレビューは [Telegram チャンネル](https://t.me/FoedusProgramme)または[チャット](https://t.me/FoedusDiscussion)から入手できます。
 
 ## ビルド
-このアプリをビルドするには、Android Studio の最新版 Beta と高速なネットワークが必要です。
+このアプリをビルドするには、[Android Studio](https://developer.android.com/studio) の最新 Beta 版と高速なネットワーク環境が必要です。
 
-クローンをしてビルドを実行するだけです。
+### パッケージタイプのセットアップ
+Gramophone には、アプリのパッケージを示すためのパッケージタイプがあります。<br>
+パッケージタイプの文字列は `package.properties` という名前の外部ファイルから抽出されます。
+
+お気に入りのテキストエディタを開いて、`releaseType=SelfBuilt` と入力してリポジトリのルートフォルダに `package.properties` として保存します。
+
+その後に Android Studio を起動して独自の署名をインポートします。<br>
+これで Gramophone をビルドできるはずです。
 
 ## ライセンス
-このプロジェクトのライセンスは GNU General Public License v3.0 です。
+このプロジェクトは、GNU General Public License v3.0 に基づいてライセンスされています。<br>
+詳細については、[LICENSE](https://github.com/AkaneTan/Gramophone/blob/beta/LICENSE) ファイルを参照してください。
 
-ライセンスの詳細は [LICENSE](https://github.com/AkaneTan/Gramophone/blob/beta/LICENSE) ファイルをご参照ください。
+## 翻訳
+<a href="https://hosted.weblate.org/engage/gramophone/">
+<img src="https://hosted.weblate.org/widget/gramophone/strings-xml/287x66-white.png" alt="Translation status" />
+</a>
 
 ## お知らせ
-- バグの報告はこちら: [Telegram](https://t.me/MizuhaNetwork)
+- バグの報告はこちら: [Telegram](https://t.me/FoedusDiscussion)
 
-## 友達
+## フレンド
 [SongSync](https://github.com/lambada10/songsync)

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+	android:theme="@style/Theme.Gramophone"
+	android:id="@android:id/background"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent"
+	android:orientation="vertical"
+	android:background="?attr/colorSurface">
+
+	<ListView
+		android:id="@+id/list_view"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:divider="@null"
+		android:scrollbars="none"
+		android:clipToPadding="false"
+		android:padding="16dp" />
+
+	<TextView
+		android:id="@+id/empty_view"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:gravity="center"
+		android:textColor="@color/sl_lyric_text"
+		android:textSize="@dimen/lyric_widget_nn"
+		android:text="@string/no_lyric_found" />
+</LinearLayout>

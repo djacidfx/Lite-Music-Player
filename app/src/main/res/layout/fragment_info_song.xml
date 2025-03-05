@@ -33,6 +33,7 @@
                 android:paddingStart="4dp"
                 android:paddingEnd="8dp"
                 app:layout_collapseMode="pin"
+                app:navigationContentDescription="@string/back"
                 app:navigationIcon="@drawable/ic_arrow_back"
                 app:navigationIconTint="?colorOnSurface" />
 
@@ -58,7 +59,7 @@
                 android:text="@string/album_cover"
                 android:textColor="?colorPrimary"
                 android:fontFamily="sans-serif"
-                android:textFontWeight="500"
+                app:textFontWeight="500"
                 android:textSize="17sp"
                 android:layout_marginTop="24dp"
                 android:layout_marginStart="24dp" />
@@ -70,7 +71,7 @@
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="16dp"
                 android:adjustViewBounds="true"
-                android:src="@drawable/ic_default_cover"
+                app:srcCompat="@drawable/ic_default_cover"
                 android:scaleType="centerCrop"
                 android:importantForAccessibility="no" />
 
@@ -108,7 +109,7 @@
                     android:text="@string/dialog_title"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -121,7 +122,7 @@
                     android:textColor="?colorOnSurface"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:layout_marginStart="50dp"
                     android:fontFamily="sans-serif"
                     android:gravity="end" />
@@ -143,7 +144,7 @@
                     android:text="@string/dialog_artist"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -155,7 +156,7 @@
                     android:text="@string/unknown_artist"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:textColor="?colorOnSurface"
                     android:layout_marginStart="50dp"
                     android:fontFamily="sans-serif"
@@ -178,7 +179,7 @@
                     android:text="@string/dialog_album"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -190,7 +191,7 @@
                     android:text="@string/unknown_album"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:textColor="?colorOnSurface"
                     android:layout_marginStart="50dp"
                     android:fontFamily="sans-serif"
@@ -213,7 +214,7 @@
                     android:text="@string/dialog_album_artist"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -225,7 +226,7 @@
                     android:text="@string/unknown_artist"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:textColor="?colorOnSurface"
                     android:layout_marginStart="50dp"
                     android:fontFamily="sans-serif"
@@ -248,7 +249,7 @@
                     android:text="@string/dialog_disc_number"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -259,7 +260,7 @@
                     android:layout_gravity="center_vertical"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:textColor="?colorOnSurface"
                     tools:text="0"
                     android:layout_marginStart="50dp"
@@ -283,7 +284,7 @@
                     android:text="@string/dialog_track_number"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -294,7 +295,7 @@
                     android:layout_gravity="center_vertical"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:textColor="?colorOnSurface"
                     tools:text="0"
                     android:layout_marginStart="50dp"
@@ -315,10 +316,46 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:text="@string/dialog_bitrate"
+                    android:layout_gravity="center_vertical"
+                    android:textColor="?colorPrimary"
+                    app:textFontWeight="500"
+                    android:fontFamily="sans-serif"
+                    android:textSize="17sp" />
+
+                <TextView
+                    android:id="@+id/bit_rate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:textIsSelectable="true"
+                    android:textSize="16sp"
+                    app:textFontWeight="500"
+                    android:textColor="?colorOnSurface"
+                    tools:text="0"
+                    android:layout_marginStart="50dp"
+                    android:fontFamily="sans-serif"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/genre_box"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginBottom="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:text="@string/dialog_genre"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -330,7 +367,7 @@
                     android:text="@string/unknown_genre"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:textColor="?colorOnSurface"
                     android:layout_marginStart="50dp"
                     android:fontFamily="sans-serif"
@@ -353,7 +390,7 @@
                     android:text="@string/dialog_year"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -365,7 +402,7 @@
                     android:text="@string/unknown_year"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:textColor="?colorOnSurface"
                     android:layout_marginStart="50dp"
                     android:fontFamily="sans-serif"
@@ -396,7 +433,7 @@
                     android:text="@string/dialog_duration"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -408,7 +445,7 @@
                     android:textColor="?colorOnSurface"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:layout_marginStart="50dp"
                     android:fontFamily="sans-serif"
                     android:gravity="end" />
@@ -430,7 +467,7 @@
                     android:text="@string/dialog_mime"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -441,7 +478,7 @@
                     android:layout_gravity="center_vertical"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:textColor="?colorOnSurface"
                     android:layout_marginStart="50dp"
                     android:fontFamily="sans-serif"
@@ -464,7 +501,7 @@
                     android:text="@string/dialog_path"
                     android:layout_gravity="center_vertical"
                     android:textColor="?colorPrimary"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:fontFamily="sans-serif"
                     android:textSize="17sp" />
 
@@ -475,7 +512,7 @@
                     android:layout_gravity="center_vertical"
                     android:textIsSelectable="true"
                     android:textSize="16sp"
-                    android:textFontWeight="500"
+                    app:textFontWeight="500"
                     android:textColor="?colorOnSurface"
                     android:layout_marginStart="50dp"
                     android:fontFamily="sans-serif"
@@ -496,7 +533,7 @@
                 android:text="@string/dialog_lyrics"
                 android:textColor="?colorPrimary"
                 android:fontFamily="sans-serif"
-                android:textFontWeight="600"
+                app:textFontWeight="600"
                 android:textSize="16sp"
                 android:layout_marginTop="28dp"
                 android:layout_marginStart="24dp" />

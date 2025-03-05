@@ -25,6 +25,10 @@
 # reflection by androidx via theme attr viewInflaterClass
 -keep class org.akanework.gramophone.logic.ui.ViewCompatInflater { *; }
 
+# reflection by lyric getter xposed
+-keep class androidx.core.app.NotificationManagerCompat { *; }
+-keep class androidx.media3.common.util.Util { *; }
+
 # get rid of spammy logging
 -assumenosideeffects class
                   android.util.Log {

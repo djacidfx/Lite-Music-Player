@@ -54,10 +54,20 @@
             app:iconSpaceReserved="false" />
 
         <SwitchPreferenceCompat
-            android:defaultValue="false"
+            android:defaultValue="true"
             android:key="trim_lyrics"
             android:layout="@layout/preference_switch"
             android:title="@string/settings_trim_lyrics"
+            android:summary="@string/settings_trim_lyrics_summary"
+            android:widgetLayout="@layout/preference_switch_widget"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="lyric_multiline"
+            android:layout="@layout/preference_switch"
+            android:summary="@string/settings_lyrics_multiline_summary"
+            android:title="@string/settings_lyrics_multiline"
             android:widgetLayout="@layout/preference_switch_widget"
             app:iconSpaceReserved="false" />
 

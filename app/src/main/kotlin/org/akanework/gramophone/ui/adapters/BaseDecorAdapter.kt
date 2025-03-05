@@ -33,8 +33,7 @@ import com.google.android.material.button.MaterialButton
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.ui.ItemHeightHelper
 import org.akanework.gramophone.logic.ui.MyRecyclerView
-import org.akanework.gramophone.logic.utils.FileOpUtils
-import kotlin.random.Random
+import org.akanework.gramophone.ui.getAdapterType
 
 open class BaseDecorAdapter<T : BaseAdapter<*>>(
     protected val adapter: T,
@@ -46,8 +45,8 @@ open class BaseDecorAdapter<T : BaseAdapter<*>>(
     private val dpHeight = context.resources.getDimensionPixelSize(R.dimen.decor_height)
     private var recyclerView: MyRecyclerView? = null
     private var prefs = PreferenceManager.getDefaultSharedPreferences(context)
-    var jumpUpPos: Int? = null
-    var jumpDownPos: Int? = null
+    var jumpUpPos: (() -> Int)? = null
+    var jumpDownPos: (() -> Int)? = null
 
     override fun onCreateViewHolder(
         parent: ViewGroup,
@@ -65,19 +64,24 @@ open class BaseDecorAdapter<T : BaseAdapter<*>>(
             if (adapter is SongAdapter) View.VISIBLE else View.GONE
         holder.counter.text = context.resources.getQuantityString(pluralStr, count, count)
         holder.sortButton.visibility =
-            if (adapter.sortType != Sorter.Type.None || adapter.ownsView) View.VISIBLE else View.GONE
+            if (adapter.sortType.value != Sorter.Type.None || adapter.ownsView) View.VISIBLE else View.GONE
         holder.sortButton.setOnClickListener { view ->
             val popupMenu = PopupMenu(context, view)
             popupMenu.inflate(R.menu.sort_menu)
             val buttonMap = mapOf(
                 Pair(R.id.natural, Sorter.Type.NaturalOrder),
-                Pair(R.id.name, if (adapter.sortTypes.contains(Sorter.Type.NativeOrder))
-                    Sorter.Type.NativeOrder else Sorter.Type.ByTitleAscending),
+                Pair(
+                    R.id.name, if (adapter.sortTypes.contains(Sorter.Type.NativeOrder))
+                        Sorter.Type.NativeOrder else Sorter.Type.ByTitleAscending
+                ),
                 Pair(R.id.artist, Sorter.Type.ByArtistAscending),
                 Pair(R.id.album, Sorter.Type.ByAlbumTitleAscending),
+                Pair(R.id.album_artist, Sorter.Type.ByAlbumArtistAscending),
                 Pair(R.id.size, Sorter.Type.BySizeDescending),
                 Pair(R.id.add_date, Sorter.Type.ByAddDateDescending),
-                Pair(R.id.mod_date, Sorter.Type.ByModifiedDateDescending)
+                Pair(R.id.release_date, Sorter.Type.ByReleaseDateDescending),
+                Pair(R.id.mod_date, Sorter.Type.ByModifiedDateDescending),
+                Pair(R.id.file_path, Sorter.Type.ByFilePathAscending)
             )
             val layoutMap = mapOf(
                 Pair(R.id.list, BaseAdapter.LayoutType.LIST),
@@ -91,16 +95,16 @@ open class BaseDecorAdapter<T : BaseAdapter<*>>(
                 popupMenu.menu.findItem(it.key).isVisible = adapter.ownsView
             }
             popupMenu.menu.findItem(R.id.display).isVisible = adapter.ownsView
-            if (adapter.sortType != Sorter.Type.None) {
-                when (adapter.sortType) {
+            if (adapter.sortType.value != Sorter.Type.None) {
+                when (adapter.sortType.value) {
                     in buttonMap.values -> {
                         popupMenu.menu.findItem(
                             buttonMap.entries
-                                .first { it.value == adapter.sortType }.key
+                                .first { it.value == adapter.sortType.value }.key
                         ).isChecked = true
                     }
 
-                    else -> throw IllegalStateException("Invalid sortType ${adapter.sortType.name}")
+                    else -> throw IllegalStateException("Invalid sortType ${adapter.sortType.value.name}")
                 }
             }
             if (adapter.ownsView) {
@@ -124,7 +128,7 @@ open class BaseDecorAdapter<T : BaseAdapter<*>>(
                             if (!isSubFragment) {
                                 prefs.edit {
                                     putString(
-                                        "S" + FileOpUtils.getAdapterType(adapter).toString(),
+                                        "S" + getAdapterType(adapter).toString(),
                                         buttonMap[menuItem.itemId].toString()
                                     )
                                 }
@@ -140,7 +144,7 @@ open class BaseDecorAdapter<T : BaseAdapter<*>>(
                             if (!isSubFragment) {
                                 prefs.edit {
                                     putString(
-                                        "L" + FileOpUtils.getAdapterType(adapter).toString(),
+                                        "L" + getAdapterType(adapter).toString(),
                                         layoutMap[menuItem.itemId].toString()
                                     )
                                 }
@@ -163,7 +167,7 @@ open class BaseDecorAdapter<T : BaseAdapter<*>>(
                     shuffleModeEnabled = false
                     repeatMode = REPEAT_MODE_OFF
                     setMediaItems(songList, 0, C.TIME_UNSET)
-                    if (songList.size > 0) {
+                    if (songList.isNotEmpty()) {
                         prepare()
                         play()
                     }
@@ -177,7 +181,6 @@ open class BaseDecorAdapter<T : BaseAdapter<*>>(
                 controller?.shuffleModeEnabled = true
                 list.takeIf { it.isNotEmpty() }?.also {
                     controller?.setMediaItems(it)
-                    controller?.seekToDefaultPosition(Random.nextInt(0, it.size))
                     controller?.prepare()
                     controller?.play()
                 } ?: controller?.setMediaItems(listOf())
@@ -185,11 +188,11 @@ open class BaseDecorAdapter<T : BaseAdapter<*>>(
         }
         holder.jumpUp.visibility = if (jumpUpPos != null) View.VISIBLE else View.GONE
         holder.jumpUp.setOnClickListener {
-            scrollToViewPosition(jumpUpPos!!)
+            scrollToViewPosition(jumpUpPos!!())
         }
         holder.jumpDown.visibility = if (jumpDownPos != null) View.VISIBLE else View.GONE
         holder.jumpDown.setOnClickListener {
-            scrollToViewPosition(jumpDownPos!!)
+            scrollToViewPosition(jumpDownPos!!())
         }
     }
 
