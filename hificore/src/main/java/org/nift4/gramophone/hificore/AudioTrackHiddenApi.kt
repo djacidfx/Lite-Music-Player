@@ -34,14 +34,16 @@ object AudioTrackHiddenApi {
     data class MixPort(val id: Int, val ioHandle: Int, val name: String?, val flags: Int?, val channelMask: Int?, val format: UInt?, val sampleRate: UInt?, val hwModule: Int?, val fast: Boolean?)
     init {
         if (canLoadLib()) {
-            try {
-                Log.d(TRACE_TAG, "Loading libhificore.so")
-                System.loadLibrary("hificore")
-                libLoaded = true
-                Log.d(TRACE_TAG, "Done loading libhificore.so")
-            } catch (e: Throwable) {
-                Log.e(TAG, Log.getThrowableString(e)!!)
-            }
+            if (!AdaptiveDynamicRangeCompression.libLoaded) {
+                try {
+                    Log.d(TRACE_TAG, "Loading libhificore.so")
+                    System.loadLibrary("hificore")
+                    libLoaded = true
+                    Log.d(TRACE_TAG, "Done loading libhificore.so")
+                } catch (e: Throwable) {
+                    Log.e(TAG, Log.getThrowableString(e)!!)
+                }
+            } else libLoaded = true
         }
     }
 

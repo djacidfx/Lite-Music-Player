@@ -77,16 +77,12 @@ import kotlin.math.max
  * - negative RG gain should be applied either via setVolume()
  * - positive RG gain could be applied via DPE.Limiter.postGain/LoudnessEnhancer effect
  *     if gain is positive and peaks are so high that it'd clip, reduce gain or use the effect's DRC
- *     DPE has optional DRC via Limiter stage (MBC is not suitable)
+ *     DPE has optional DRC via MBC stage, but using single band (Limiter alone is not suitable)
  * - boost would be added via Volume effect (if volume isn't offloadable, boost can't be enabled)
  * TODO: another problem with using DPE is that it can be busy. EQ apps could work in offload as
  *  long as there's no conflict between apps. So what to do if DPE and LoudnessEnhancer+Volume are
  *  both not free? Just fall back to no boost and setVolume()? Or hide our session ID from EQ apps?
  *  Or can we use priority constructor arg to win against EQ apps?
- * LoudnessEnhancer shouldn't be used due to it's aggressive DRC starting at -8dBFS in the best
- * case. Useless DRC defeats much of ReplayGain in the first place. Equalizer can't be used because
- * a 5 or 10-band biquad filter is not suitable to increase gain linearly, and distortions defeat
- * much of the purpose of ReplayGain.
  *
  * offload ReplayGain (LoudnessEnhancer+Volume is offloadable):
  * LoudnessEnhancer target gain may at most be -8dBFS unless DRC is desired. If we FORCE operation
@@ -95,7 +91,8 @@ import kotlin.math.max
  * - if non-RG track, set LoudnessEnhancer effect to apply inverted boost gain
  * - negative RG gain should be applied via LoudnessEnhancer, set lower than -8dBFS
  * - positive RG gain should still be applied via LoudnessEnhancer, set close to but at most -8dBFS
- * - positive RG gain with desired DRC is applied via LoudnessEnhancer, but set higher than -8dBFS
+ * - DRC is not supported, LoudnessEnhancer does DRC when gain >= -8dBFS but it's heavily tuned to
+ *   speech, must avoid at all costs
  * - boost and additional headroom gain would be added via Volume effect
  * The big advantage of this weird scheme is wide compatibility with equalizer apps. But whether
  * it's worth implementing would be decided by how often LoudnessEnhancer+Volume combo is
@@ -104,6 +101,8 @@ import kotlin.math.max
  * offload ReplayGain (volume but no DPE or LoudnessEnhancer effect available):
  * Problem: can't increase volume if there is unused headroom (low peak) but positive RG gain.
  *          that defeats much of the purpose of RG.
+ * Equalizer can't be used because a 5 or 10-band biquad filter is not suitable to increase gain
+ * linearly, and distortions defeat much of the purpose of ReplayGain (-> enjoyable music listening)
  * Hence we can't use Volume effect alone if offloaded, proceed below.
  *
  * offload ReplayGain (no effects): just use setVolume() for negative gain, and give up on
