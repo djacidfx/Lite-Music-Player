@@ -842,6 +842,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                         it.second.second.buildUpon().setAverageBitrate(bitrate).build()
                                     } else it.second.second
                                     putBundle("format", format.toBundle())
+                                    putBundle("rg", ReplayGainUtil.parse(format).toBundle())
                                 } })
                             )
                         }
@@ -995,22 +996,21 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 errorText = getString(R.string.failed_to_parse_lyric)
             )
             // TODO: allow multiple lyric files/tags combining them for translations...maybe?
+            val format = tracks.getFirstSelectedTrackFormatByType(C.TRACK_TYPE_AUDIO)
             var lrc: SemanticLyrics? = null
-            loop@ for (i in tracks.groups) {
-                if (i.type != C.TRACK_TYPE_AUDIO) continue
-                for (j in 0 until i.length) {
-                    if (!i.isTrackSelected(j)) continue
+            if (format != null) {
+                lrc = loadAndParseLyricsFile(mediaItem?.getFile(),
+                    format.sampleMimeType, options)
+                if (lrc == null) {
                     // note: wav files can have null metadata
-                    val format = i.getTrackFormat(j)
-                    lrc = loadAndParseLyricsFile(mediaItem?.getFile(), format.sampleMimeType, options)
-                    if (lrc == null) {
-                        val trackMetadata = format.metadata ?: continue
+                    val trackMetadata = format.metadata
+                    if (trackMetadata != null) {
                         lrc = extractAndParseLyrics(
-                            format.sampleRate
-                            .takeIf { it != Format.NO_VALUE } ?: 0, format.sampleMimeType,
-                            trackMetadata, options).firstOrNull() ?: continue
+                            format.sampleRate.takeIf { it != Format.NO_VALUE } ?: 0,
+                            format.sampleMimeType,
+                            trackMetadata,
+                            options).firstOrNull()
                     }
-                    break@loop
                 }
             }
             withContext(Dispatchers.Main) {

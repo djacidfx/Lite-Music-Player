@@ -106,8 +106,9 @@ class PostAmpAudioSink(
     private var hasDpe = false
     private var offloadEnabled: Boolean? = null
     private var format: Format? = null
-    private var pendingFormat: Format? = null
     private var tags: ReplayGainUtil.ReplayGainInfo? = null
+    private var pendingFormat: Format? = null
+    private var pendingTags: ReplayGainUtil.ReplayGainInfo? = null
     private var deviceType: Int? = null
     private var audioSessionId = 0
     private var lastOutput: Int? = null
@@ -210,22 +211,22 @@ class PostAmpAudioSink(
         outputChannels: IntArray?
     ) {
         pendingFormat = inputFormat
+        pendingTags = ReplayGainUtil.parse(pendingFormat)
         super.configure(inputFormat, specifiedBufferSize, outputChannels)
     }
 
     fun canReuse(): Boolean {
-        val pendingTags = ReplayGainUtil.parse(pendingFormat)
         val mode: Mode
         synchronized(rgAp) {
             mode = rgAp.mode
         }
-        if (mode == Mode.Track && ((pendingTags.trackGain ?: 0f) != (tags?.trackGain ?: 0f)
-                    || (pendingTags.trackPeak ?: 1f) != (tags?.trackPeak ?: 1f))) {
+        if (mode == Mode.Track && ((pendingTags?.trackGain ?: 0f) != (tags?.trackGain ?: 0f)
+                    || (pendingTags?.trackPeak ?: 1f) != (tags?.trackPeak ?: 1f))) {
             Log.i(TAG, "can't reuse: track - $pendingTags vs $tags")
             return false
         }
-        if (mode == Mode.Album && ((pendingTags.albumGain ?: 0f) != (tags?.albumGain ?: 0f)
-                    || (pendingTags.albumPeak ?: 1f) != (tags?.albumPeak ?: 1f))) {
+        if (mode == Mode.Album && ((pendingTags?.albumGain ?: 0f) != (tags?.albumGain ?: 0f)
+                    || (pendingTags?.albumPeak ?: 1f) != (tags?.albumPeak ?: 1f))) {
             Log.i(TAG, "can't reuse: album - $pendingTags vs $tags")
             return false
         }
@@ -274,8 +275,14 @@ class PostAmpAudioSink(
     }
 
     private fun myApplyPendingConfig() {
-        format = pendingFormat
-        tags = ReplayGainUtil.parse(format)
+        if (pendingFormat != null && pendingTags != null) {
+            format = pendingFormat
+            tags = pendingTags
+            pendingFormat = null
+            pendingTags = null
+        } else {
+            Log.w(TAG, "pending format is null, did the previous AudioTrack die?")
+        }
         calculateGain() // parse new tags and apply to DPE/setVolume()
     }
 

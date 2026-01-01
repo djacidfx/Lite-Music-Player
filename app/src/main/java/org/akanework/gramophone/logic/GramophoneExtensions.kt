@@ -63,6 +63,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.Log
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
@@ -81,6 +82,7 @@ import org.akanework.gramophone.logic.utils.AudioFormatDetector
 import org.akanework.gramophone.logic.utils.AudioTrackInfo
 import org.akanework.gramophone.logic.utils.BtCodecInfo
 import org.akanework.gramophone.logic.utils.CalculationUtils
+import org.akanework.gramophone.logic.utils.ReplayGainUtil
 import org.akanework.gramophone.logic.utils.SemanticLyrics
 import org.akanework.gramophone.ui.MainActivity
 import org.jetbrains.annotations.Contract
@@ -309,13 +311,27 @@ fun MediaController.getAudioFormat(): AudioFormatDetector.AudioFormats =
             BundleCompat.getParcelableArrayList(it, "file_format",
                 Bundle::class.java)?.let { bundles -> bundles.map { bundle ->
                         bundle.getInt("type", C.TRACK_TYPE_UNKNOWN) to
-                                Format.fromBundle(bundle.getBundle("format")!!) } },
+                                (Format.fromBundle(bundle.getBundle("format")!!)
+                                        to ReplayGainUtil.ReplayGainInfo.fromBundle(bundle.getBundle("rg")!!)) } },
             it.getBundle("sink_format")?.let { bundle -> Format.fromBundle(bundle) },
             BundleCompat.getParcelable(it, "track_format", AudioTrackInfo::class.java),
             BundleCompat.getParcelable(it, "hal_format", AfFormatInfo::class.java),
             BundleCompat.getParcelable(it, "bt", BtCodecInfo::class.java)
         )
     }
+
+fun Tracks.getFirstSelectedTrackFormatByType(type: @C.TrackType Int): Format? {
+    for (i in groups) {
+        if (i.type == type) {
+            for (j in 0..<i.length) {
+                if (i.isTrackSelected(j)) {
+                    return i.getTrackFormat(j)
+                }
+            }
+        }
+    }
+    return null
+}
 
 // https://twitter.com/Piwai/status/1529510076196630528
 fun Handler.postAtFrontOfQueueAsync(callback: Runnable) {

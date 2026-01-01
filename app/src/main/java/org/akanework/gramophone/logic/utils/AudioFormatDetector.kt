@@ -10,9 +10,11 @@ import androidx.annotation.RequiresApi
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.Util
 import kotlinx.parcelize.Parcelize
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.getFirstSelectedTrackFormatByType
 
 object AudioFormatDetector {
     fun channelConfigToString(context: Context, format: Int?): String {
@@ -310,9 +312,9 @@ object AudioFormatDetector {
     }
 
     data class AudioFormats(
-        val downstreamFormat: List<Pair<Int, Format>>?, val audioSinkInputFormat: Format?,
-        val audioTrackInfo: AudioTrackInfo?, val halFormat: AfFormatInfo?,
-        val btCodecInfo: BtCodecInfo?
+        val downstreamFormat: List<Pair<Int, Pair<Format, ReplayGainUtil.ReplayGainInfo>>>?,
+        val audioSinkInputFormat: Format?, val audioTrackInfo: AudioTrackInfo?,
+        val halFormat: AfFormatInfo?, val btCodecInfo: BtCodecInfo?
     ) {
         fun prettyToString(context: Context): String? {
             if (downstreamFormat == null || audioSinkInputFormat == null || audioTrackInfo == null)
@@ -321,7 +323,32 @@ object AudioFormatDetector {
             return StringBuilder().apply {
                 downstreamFormat.forEachIndexed { i, it ->
                     append("== Downstream format [$i] ==\n")
-                    prettyPrintFormat(context, it.second)
+                    prettyPrintFormat(context, it.second.first)
+                    val replayGainTags = it.second.second
+                    if (replayGainTags.trackGain != null || replayGainTags.trackPeak != null
+                        || replayGainTags.albumGain != null || replayGainTags.albumPeak != null
+                    ) {
+                        append("ReplayGain track tags: ")
+                        if (replayGainTags.trackGain != null || replayGainTags.trackPeak != null) {
+                            append("gain=")
+                            append(replayGainTags.trackGain)
+                            append(" dB; peak=")
+                            append(replayGainTags.trackPeak)
+                            append("\n")
+                        } else {
+                            append("Not present\n")
+                        }
+                        append("ReplayGain album tags: ")
+                        if (replayGainTags.albumGain != null || replayGainTags.albumPeak != null) {
+                            append("gain=")
+                            append(replayGainTags.albumGain)
+                            append(" dB; peak=")
+                            append(replayGainTags.albumPeak)
+                            append("\n")
+                        } else {
+                            append("Not present\n")
+                        }
+                    }
                     append("\n")
                 }
                 append("== Audio sink input format ==\n")
@@ -469,7 +496,7 @@ object AudioFormatDetector {
         if (f == null) return null
         val formats = f.downstreamFormat?.filter { it.first == C.TRACK_TYPE_AUDIO }
         if (formats?.size != 1) return null
-        val format = formats.first().second
+        val format = formats.first().second.first
         val sampleRate = format.sampleRate.takeIf { it != Format.NO_VALUE }
         val bitDepth = try {
             Util.getBitDepth(format.pcmEncoding)
