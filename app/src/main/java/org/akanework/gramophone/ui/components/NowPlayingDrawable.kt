@@ -47,13 +47,13 @@ class NowPlayingDrawable(context: Context) : Drawable() {
     private var sy: Float = 1f // scale y
     private var lc: Float = 0f // left current
     private var li: Float = 0f // left initial
-    private var lt: Float = 0f // left target
+    private var lt: Float = barHeightMin.toFloat() // left target
     private var mc: Float = 0f // middle current
     private var mi: Float = 0f // middle initial
-    private var mt: Float = 0f // middle target
+    private var mt: Float = barHeightMin.toFloat() // middle target
     private var rc: Float = 0f // right current
     private var ri: Float = 0f // right initial
-    private var rt: Float = 0f // right target
+    private var rt: Float = barHeightMin.toFloat() // right target
     private var ts: Long = 0L
 
     init {
