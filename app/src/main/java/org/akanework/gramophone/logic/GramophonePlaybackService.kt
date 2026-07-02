@@ -1464,6 +1464,10 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         startIndex: Int,
         startPositionMs: Long
     ): ListenableFuture<MediaItemsWithStartPosition> {
+        if (!Flags.MQ_PREVIEW) {
+            // TODO: remove when fix mq crash bug
+            return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
+        }
         return Util.transformFutureAsync(
             onAddMediaItems(mediaSession, controller, mediaItems),
             { mediaItems ->
