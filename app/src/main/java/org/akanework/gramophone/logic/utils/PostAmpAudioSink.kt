@@ -354,7 +354,8 @@ class PostAmpAudioSink(
         //  those change events (or maybe not? we don't for broadcasts? should we, there, too?)
         // https://cs.android.com/android/platform/superproject/main/+/main:frameworks/base/media/java/android/media/audiopolicy/AudioProductStrategy.java;l=80?q=getAudioProductStrategies&ss=android%2Fplatform%2Fsuperproject%2Fmain
         Log.i(TAG, "volume changed: $groupId, $flags")
-        onVolumeChanged()
+        // if null, there are no effects that need to be notified anyway
+        handler?.post(::onVolumeChanged)
     }
 
     private fun onVolumeChanged() {
