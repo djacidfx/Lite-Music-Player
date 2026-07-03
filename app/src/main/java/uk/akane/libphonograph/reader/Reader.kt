@@ -347,7 +347,7 @@ internal object Reader {
                 val dateTakenDay = if (hasImprovedMediaStore()) {
                     dateTakenParsed?.dayOfMonth
                 } else null
-                val imgUri = GramophoneAlbumArtProvider.buildSongUri(id)
+                val imgUri = GramophoneAlbumArtProvider.buildSongUri(id, pathFile)
                 if (cdTrackNumber != null && trackNumber == null) {
                     cdTrackNumber.toIntOrNull()?.let {
                         trackNumber = it

@@ -95,12 +95,13 @@ class GramophoneAlbumArtProvider : ContentProvider() {
          *
          * @param id the song ID
          */
-        fun buildSongUri(id: Long): Uri =
+        fun buildSongUri(id: Long, songFile: File): Uri =
             Uri.Builder()
                 .scheme(ContentResolver.SCHEME_CONTENT)
                 .authority(PROVIDER_AUTHORITY)
                 .appendPath("song")
                 .appendPath(id.toString())
+                .appendQueryParameter("songFile", songFile.absolutePath)
                 .build()
     }
 
