@@ -43,6 +43,7 @@ import uk.akane.libphonograph.items.EXTRA_ALBUM_YEAR
 import uk.akane.libphonograph.items.EXTRA_ARTIST_ID
 import uk.akane.libphonograph.items.EXTRA_AUTHOR
 import uk.akane.libphonograph.items.EXTRA_CD_TRACK_NUMBER
+import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
 import uk.akane.libphonograph.items.EXTRA_MODIFIED_DATE
 import uk.akane.libphonograph.items.addDate
 import uk.akane.libphonograph.items.albumId
@@ -50,6 +51,7 @@ import uk.akane.libphonograph.items.albumYear
 import uk.akane.libphonograph.items.artistId
 import uk.akane.libphonograph.items.author
 import uk.akane.libphonograph.items.cdTrackNumber
+import uk.akane.libphonograph.items.hdArtworkUri
 import uk.akane.libphonograph.items.modifiedDate
 import java.nio.charset.StandardCharsets
 
@@ -139,6 +141,7 @@ class LastPlayedManager(
                     b.writeLong(it.mediaMetadata.modifiedDate)
                     b.writeStringSafe(it.mediaMetadata.cdTrackNumber)
                     b.writeLong(it.mediaMetadata.albumYear)
+                    b.writeUri(it.mediaMetadata.hdArtworkUri)
                     b.toString()
                 })
             prefs.edit {
@@ -242,6 +245,7 @@ class LastPlayedManager(
                             val modifiedDate = b.readLong()
                             val cdTrackNumber = b.readStringSafe()
                             val albumYear = b.readLong()
+                            val hdArtworkUri = b.readUri()
                             MediaItem.Builder()
                                 .setUri(uri)
                                 .setMediaId(mediaId!!)
@@ -284,6 +288,9 @@ class LastPlayedManager(
                                             putString(EXTRA_AUTHOR, author)
                                             if (modifiedDate != null) {
                                                 putLong(EXTRA_MODIFIED_DATE, modifiedDate)
+                                            }
+                                            if (hdArtworkUri != null) {
+                                                putParcelable(EXTRA_HD_ARTWORK_URI, hdArtworkUri)
                                             }
                                         })
                                         .build()

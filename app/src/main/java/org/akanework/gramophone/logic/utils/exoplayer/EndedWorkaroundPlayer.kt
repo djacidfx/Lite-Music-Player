@@ -16,6 +16,9 @@ import org.akanework.gramophone.logic.utils.CircularShuffleOrder
 import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.logic.utils.SemanticLyrics
 import org.json.JSONObject
+import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
+import uk.akane.libphonograph.items.artistId
+import uk.akane.libphonograph.items.hdArtworkUri
 import java.util.Objects
 
 
@@ -80,6 +83,18 @@ class EndedWorkaroundPlayer(
 
     override fun getState(): State {
         var superState = super.state
+        if (superState.currentMetadata.artworkUri != null &&
+            superState.currentMetadata.hdArtworkUri != null) {
+            superState = superState.buildUpon()
+                .setPlaylist(superState.timeline, superState.currentTracks,
+                    superState.currentMetadata.buildUpon()
+                        .setArtworkUri(superState.currentMetadata.hdArtworkUri)
+                        .setExtras(Bundle(superState.currentMetadata.extras!!).apply {
+                            remove(EXTRA_HD_ARTWORK_URI)
+                        })
+                        .build())
+                .build()
+        }
         if (BuildConfig.APPLICATION_ID == "com.tencent.qqmusic") {
             // Oplus uses package name whitelist for their lockscreen lyric feature
             val lyric = getLyric()

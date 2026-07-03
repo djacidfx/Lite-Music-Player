@@ -33,6 +33,7 @@ import coil3.imageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
+import coil3.size.Size
 import coil3.toBitmap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -55,6 +56,7 @@ import okio.sink
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.logic.utils.CoilArtPipeline
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.io.OutputStream
 import kotlin.time.Duration.Companion.milliseconds
@@ -62,8 +64,8 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * ContentProvider that serves album artwork to external processes (e.g. Android Auto).
  *
- * URI format: `content://org.akanework.gramophone.albumart/{type}/{id}/{encodedPath}`
- * where `type` is "song" or "album".
+ * URI format: `content://org.akanework.gramophone.albumart/{type}/{id}`
+ * where `type` is "song" or "album" and `id` is a song ID.
  */
 class GramophoneAlbumArtProvider : ContentProvider() {
 
@@ -77,15 +79,15 @@ class GramophoneAlbumArtProvider : ContentProvider() {
          * Builds a `content://` URI pointing to [GramophoneAlbumArtProvider].
          *
          * @param id        the ID of any song (!!! not album ID)
-         * @param imageName the image file's name
+         * @param songFile  the song file's path
          */
-        fun buildAlbumUri(id: Long, imageName: String): Uri =
+        fun buildAlbumUri(id: Long, songFile: File): Uri =
             Uri.Builder()
                 .scheme(ContentResolver.SCHEME_CONTENT)
                 .authority(PROVIDER_AUTHORITY)
                 .appendPath("album")
                 .appendPath(id.toString())
-                .appendPath(imageName)
+                .appendQueryParameter("songFile", songFile.absolutePath)
                 .build()
 
         /**
@@ -122,18 +124,19 @@ class GramophoneAlbumArtProvider : ContentProvider() {
             }
             context.imageLoader.execute(
                 ImageRequest.Builder(context)
-                .data(uri)
+                // Security: Remove query parameters as they should only be used for trusted data
+                .data(if (uri.query != null) uri.buildUpon().clearQuery().build() else uri)
                 .let {
                     // size will be used to decide if underlying file is small or full size, and if
                     // we can't use the dummy decoder, we will also get the data resized by Coil.
                     if (size != null)
                         it.size(size.x, size.y)
-                    // The URI is explicitly designed as the place to get high-quality artwork in
-                    // MediaMetadata.METADATA_KEY_ALBUM_ART javadoc, so don't default to thumbnail.
-                    // TODO(ASAP): nvm this makes m3ct super laggy, we should split queue and cur
-                    //  metadata by making cur metadata append a query param which we use to fall
-                    //  back to small version here
-                    else it
+                    // this is the only query parameter other callers may set if they wish so
+                    else if (uri.getBooleanQueryParameter("hd", false))
+                        it // added by us for current media metadata but not queue/browser items
+                    else it.size {
+                        CoilArtPipeline.getSmallSize(context).run { Size(x, y) }
+                    }
                 }
                 // Memory cache stores Bitmap, not compressed data, so we shouldn't read from
                 // it (otherwise our dummy decoder wouldn't get any data ever, and we would

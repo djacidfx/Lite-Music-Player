@@ -18,6 +18,7 @@ import androidx.media3.common.util.Log
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import org.akanework.gramophone.logic.GramophoneAlbumArtProvider
+import org.akanework.gramophone.logic.getFile
 import org.akanework.gramophone.logic.hasAudioPermission
 import org.akanework.gramophone.logic.hasImagePermission
 import org.akanework.gramophone.logic.hasImprovedMediaStore
@@ -40,6 +41,7 @@ import uk.akane.libphonograph.items.EXTRA_ALBUM_YEAR
 import uk.akane.libphonograph.items.EXTRA_ARTIST_ID
 import uk.akane.libphonograph.items.EXTRA_AUTHOR
 import uk.akane.libphonograph.items.EXTRA_CD_TRACK_NUMBER
+import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
 import uk.akane.libphonograph.items.EXTRA_MODIFIED_DATE
 import uk.akane.libphonograph.items.FileNode
 import uk.akane.libphonograph.items.Genre
@@ -426,6 +428,8 @@ internal object Reader {
                                     putLong(EXTRA_MODIFIED_DATE, modifiedDate)
                                 }
                                 putString(EXTRA_CD_TRACK_NUMBER, cdTrackNumber)
+                                putParcelable(EXTRA_HD_ARTWORK_URI, imgUri.buildUpon()
+                                    .appendQueryParameter("hd", "1").build())
                             })
                             .build(),
                     ).build()
@@ -519,11 +523,9 @@ internal object Reader {
             coverCache?.get(it.id)?.let { p ->
                 // if this is false, folder contains >1 albums
                 if (p.second.albumId == it.id) {
-                    val bestCover = MiscUtils.findBestCover(p.first)
-                    if (bestCover != null) {
-                        it.cover = GramophoneAlbumArtProvider.buildAlbumUri(p.second
-                            .songList.first().requireMediaStoreId(), bestCover.name)
-                    }
+                    it.cover = GramophoneAlbumArtProvider.buildAlbumUri(p.second
+                        .songList.first().requireMediaStoreId(), p.second
+                        .songList.first().getFile()!!)
                 }
             }
         }?.toList<Album>()

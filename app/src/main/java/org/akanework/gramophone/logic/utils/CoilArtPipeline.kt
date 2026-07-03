@@ -12,6 +12,7 @@ import android.os.CancellationSignal
 import android.os.Environment
 import android.os.OperationCanceledException
 import android.provider.MediaStore
+import androidx.core.net.toUri
 import androidx.media3.common.util.Log
 import coil3.ImageLoader
 import coil3.Uri
@@ -27,6 +28,7 @@ import coil3.pathSegments
 import coil3.request.Options
 import coil3.size.Dimension
 import coil3.size.Size
+import coil3.toAndroidUri
 import coil3.toCoilUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.InternalCoroutinesApi
@@ -41,6 +43,7 @@ import org.akanework.gramophone.logic.hasImagePermission
 import org.akanework.gramophone.logic.hasScopedStorageV1
 import org.akanework.gramophone.logic.hasScopedStorageWithMediaTypes
 import org.nift4.mediastorecompat.MediaStoreCompat
+import uk.akane.libphonograph.utils.MiscUtils
 import java.io.File
 import java.io.IOException
 import java.util.Locale
@@ -49,7 +52,7 @@ import kotlin.math.min
 
 object CoilArtPipeline {
 
-    private fun getSmallSize(context: Context): Point {
+    fun getSmallSize(context: Context): Point {
         if (hasScopedStorageV1()) {
             // refer to mThumbSize in MediaProvider.java
             val metrics = context.applicationContext.resources.displayMetrics
@@ -67,7 +70,7 @@ object CoilArtPipeline {
         return w <= smallSize.x && h <= smallSize.y
     }
 
-    data class AlbumThumbnailData(val songUri: android.net.Uri, val imageFileName: String)
+    data class AlbumThumbnailData(val songUri: android.net.Uri, val songFile: File?)
 
     class AlbumThumbnailMapper : Mapper<Uri, AlbumThumbnailData> {
         override fun map(data: Uri, options: Options): AlbumThumbnailData? {
@@ -77,7 +80,10 @@ object CoilArtPipeline {
                     throw IllegalArgumentException("Invalid uri: $data")
                 AlbumThumbnailData(ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    data.pathSegments[1].toLong()), data.pathSegments[2])
+                    data.pathSegments[1].toLong()),
+                    // Security: query parameters are removed before album art provider uses Uri
+                    data.toAndroidUri().getQueryParameter("songFile")
+                        ?.let { File(it) })
             } else null
         }
     }
@@ -95,12 +101,15 @@ object CoilArtPipeline {
             imageLoader: ImageLoader
         ): Fetcher {
             return Fetcher {
-                val songFile = getFileFor(options.context, data.songUri)
-                val imgFile = songFile.resolveSibling(data.imageFileName)
-                if (imgFile.name != data.imageFileName) // if imageFileName contains ../other/path/
-                    throw IllegalArgumentException("Bad data $data")
-                val imgUri = MediaStoreCompat.getMediaUriForFile(options.context,
-                    imgFile.absolutePath)
+                val songFile = data.songFile ?: getFileFor(options.context,
+                    data.songUri)
+                val imgFile = MiscUtils.findBestCover(songFile.parentFile!!)
+                    ?: return@Fetcher continueFetchingOrFail(
+                        LoadAudioCoverData(
+                            ContentUris.parseId(data.songUri), songFile
+                        ), options, imageLoader
+                    )
+                val imgUri = MediaStoreCompat.getMediaUriForFile(options.context, imgFile.absolutePath)
                 val data = if (isSmallSize(options.context, options.size))
                     LoadThumbnailData(imgUri)
                 else
@@ -190,7 +199,7 @@ object CoilArtPipeline {
         }
     }
 
-    data class LoadAudioCoverData(val id: Long)
+    data class LoadAudioCoverData(val id: Long, val songFile: File?)
 
     class AudioCoverKeyer : Keyer<LoadAudioCoverData> {
         override fun key(data: LoadAudioCoverData, options: Options): String {
@@ -203,7 +212,10 @@ object CoilArtPipeline {
             return if (data.scheme == ContentResolver.SCHEME_CONTENT &&
                 data.authority == GramophoneAlbumArtProvider.PROVIDER_AUTHORITY &&
                 data.pathSegments.first() == "song") {
-                LoadAudioCoverData(data.pathSegments[1].toLong())
+                LoadAudioCoverData(data.pathSegments[1].toLong(),
+                    // Security: query parameters are removed before album art provider uses Uri
+                    data.toAndroidUri().getQueryParameter("songFile")
+                        ?.let { File(it) })
             } else null
         }
     }
@@ -256,7 +268,8 @@ object CoilArtPipeline {
                 }
                 // We shouldn't trust the uri wrt path of song, otherwise this provider could be
                 // misused to get image files from any folder. So do a query here
-                val file = getFileFor(options.context, uri)
+                // (Note: data.songFile is only set for trusted data!)
+                val file = data.songFile ?: getFileFor(options.context, uri)
                 // Only poke around for files on external storage
                 if (Environment.MEDIA_UNKNOWN ==
                     Environment.getExternalStorageState(file)) {
@@ -266,7 +279,7 @@ object CoilArtPipeline {
                 // Ignore "Downloads" or top-level directories
                 val parent = file.parentFile
                 val grandParent = parent?.parentFile
-                if (parent != null && parent.getName() == Environment.DIRECTORY_DOWNLOADS) {
+                if (parent != null && parent.name == Environment.DIRECTORY_DOWNLOADS) {
                     throw NoAlbumArtException("No thumbnails in Downloads directories")
                 }
                 if (grandParent != null && Environment.MEDIA_UNKNOWN ==

@@ -99,6 +99,7 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.AsyncFunction
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -932,6 +933,46 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         customCommand: SessionCommand,
         args: Bundle
     ): ListenableFuture<SessionResult> {
+        if (customCommand.customAction == SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY) {
+            val songList = MediaItemList.getList(
+                customCommand.customExtras.getBinder("items")!!)
+            val position = customCommand.customExtras.getInt("position")
+            val title = customCommand.customExtras.getString("title")!!
+            return Futures.transform(
+                onAddMediaItems(session, controller, songList),
+                { songList ->
+                    val currentItem = endedWorkaroundPlayer!!.currentMediaItem
+                    if (currentItem?.mediaId == songList[position].mediaId) {
+                        val index = endedWorkaroundPlayer!!.currentMediaItemIndex
+                        val isLast = endedWorkaroundPlayer!!.mediaItemCount - index == 1
+                        endedWorkaroundPlayer!!.cloneQueue(title, newIsPinned = false,
+                            original = true)
+                        if (index == 0)
+                            endedWorkaroundPlayer!!.addMediaItems(0,
+                                songList.subList(0, position))
+                        else
+                            endedWorkaroundPlayer!!.replaceMediaItems(0, index,
+                                songList.subList(0, position))
+                        endedWorkaroundPlayer!!.replaceMediaItem(position,
+                            songList[position])
+                        if (isLast)
+                            endedWorkaroundPlayer!!.addMediaItems(if (songList.size > position + 1)
+                                songList.subList(position + 1, songList.size) else emptyList())
+                        else
+                            endedWorkaroundPlayer!!.replaceMediaItems(position + 1,
+                                Int.MAX_VALUE, if (songList.size > position +
+                                    1) songList.subList(position + 1, songList.size)
+                                else emptyList())
+                        endedWorkaroundPlayer!!.currentIsOriginal = true
+                    } else {
+                        endedWorkaroundPlayer!!.setMediaItems(songList, position,
+                            C.TIME_UNSET, title, pinned = false, original = true)
+                    }
+                    SessionResult(SessionResult.RESULT_SUCCESS)
+                },
+                MoreExecutors.directExecutor()
+            )
+        }
         return Futures.immediateFuture(
             when (customCommand.customAction) {
                 SERVICE_SET_TIMER -> {
@@ -1012,41 +1053,6 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     SessionResult(SessionResult.RESULT_SUCCESS).also {
                         it.extras.putParcelable("lyrics", lyrics)
                     }
-                }
-
-                SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY -> {
-                    val songList = MediaItemList.getList(
-                        customCommand.customExtras.getBinder("items")!!)
-                    val position = customCommand.customExtras.getInt("position")
-                    val title = customCommand.customExtras.getString("title")!!
-                    val currentItem = endedWorkaroundPlayer!!.currentMediaItem
-                    if (currentItem?.mediaId == songList[position].mediaId) {
-                        val index = endedWorkaroundPlayer!!.currentMediaItemIndex
-                        val isLast = endedWorkaroundPlayer!!.mediaItemCount - index == 1
-                        endedWorkaroundPlayer!!.cloneQueue(title, newIsPinned = false,
-                            original = true)
-                        if (index == 0)
-                            endedWorkaroundPlayer!!.addMediaItems(0,
-                                songList.subList(0, position))
-                        else
-                            endedWorkaroundPlayer!!.replaceMediaItems(0, index,
-                                songList.subList(0, position))
-                        endedWorkaroundPlayer!!.replaceMediaItem(position,
-                            songList[position])
-                        if (isLast)
-                            endedWorkaroundPlayer!!.addMediaItems(if (songList.size > position + 1)
-                                songList.subList(position + 1, songList.size) else emptyList())
-                        else
-                            endedWorkaroundPlayer!!.replaceMediaItems(position + 1,
-                                Int.MAX_VALUE, if (songList.size > position +
-                                    1) songList.subList(position + 1, songList.size)
-                                else emptyList())
-                        endedWorkaroundPlayer!!.currentIsOriginal = true
-                    } else {
-                        endedWorkaroundPlayer!!.setMediaItems(songList, position,
-                            C.TIME_UNSET, title, pinned = false, original = true)
-                    }
-                    SessionResult(SessionResult.RESULT_SUCCESS)
                 }
 
                 SERVICE_QB_GET_INACTIVE_LIST -> {
