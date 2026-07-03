@@ -102,6 +102,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -141,6 +142,8 @@ import uk.akane.libphonograph.items.albumId
 import uk.akane.libphonograph.manipulator.ItemManipulator
 import uk.akane.libphonograph.manipulator.PlaylistSerializer
 import uk.akane.libphonograph.manipulator.PlaylistSerializer.Entry
+import java.util.concurrent.Executor
+import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 
@@ -197,6 +200,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         get() = lyrics as? SemanticLyrics.SyncedLyrics
     private lateinit var customCommands: List<CommandButton>
     private lateinit var handler: Handler
+    private lateinit var mainExecutor: Executor
     private lateinit var playbackHandler: Handler
     private lateinit var nm: NotificationManagerCompat
     private lateinit var lastPlayedManager: LastPlayedManager
@@ -293,6 +297,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         internalPlaybackThread.start()
         playbackHandler = Handler(internalPlaybackThread.looper)
         handler = Handler(Looper.getMainLooper())
+        mainExecutor = ContextCompat.getMainExecutor(this)
         nm = NotificationManagerCompat.from(this)
         prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
         qb = QueueBoard(this)
@@ -464,9 +469,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                 .also {
                                     completer.addCancellationListener(
                                         { it.dispose() },
-                                        ContextCompat.getMainExecutor(
-                                            this@GramophonePlaybackService
-                                        )
+                                        mainExecutor
                                     )
                                 }
                             "coil load for ${data.hashCode()}"
@@ -502,9 +505,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                 .also {
                                     completer.addCancellationListener(
                                         { it.dispose() },
-                                        ContextCompat.getMainExecutor(
-                                            this@GramophonePlaybackService
-                                        )
+                                        mainExecutor
                                     )
                                 }
                             "coil load for $uri"
@@ -970,7 +971,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     }
                     SessionResult(SessionResult.RESULT_SUCCESS)
                 },
-                MoreExecutors.directExecutor()
+                mainExecutor
             )
         }
         return Futures.immediateFuture(
@@ -1470,10 +1471,6 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         startIndex: Int,
         startPositionMs: Long
     ): ListenableFuture<MediaItemsWithStartPosition> {
-        if (!Flags.MQ_PREVIEW) {
-            // TODO: remove when fix mq crash bug
-            return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
-        }
         return Util.transformFutureAsync(
             onAddMediaItems(mediaSession, controller, mediaItems),
             { mediaItems ->
@@ -1489,15 +1486,47 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 val qt = title ?: getString(R.string.unknown_playlist)
                 val items = MediaItemsWithStartPosition(list, startIndex, startPositionMs)
                 val settableFuture = SettableFuture.create<MediaItemsWithStartPosition>()
+                val fence = CompletableDeferred<Unit>()
                 CoroutineScope(Dispatchers.Main).launch {
+                    fence.await()
                     if (endedWorkaroundPlayer?.nextTitle != null)
                         throw IllegalStateException("title was found orphaned")
                     endedWorkaroundPlayer?.nextTitle = qt
                     settableFuture.set(items)
                     if (endedWorkaroundPlayer?.nextTitle != null)
-                        throw IllegalStateException("title not consumed during onSetMediaItems")
+                        throw IllegalStateException("title not consumed during onSetMediaItems" +
+                                " (\"$title\", \"${endedWorkaroundPlayer?.nextTitle}\")")
                 }
-                return@transformFutureAsync settableFuture
+                return@transformFutureAsync object : ListenableFuture<MediaItemsWithStartPosition> {
+                    override fun addListener(listener: Runnable, executor: Executor) {
+                        settableFuture.addListener(listener, executor)
+                        // When settableFuture has a value set before listener is added then set()
+                        // will not have side effect and thus we can't run code after side effect.
+                        // TODO(ASAP): this stupid fence hack does NOT seem like a net benefit for
+                        //  the code quality, maybe just give up on the onSetMediaItems API?
+                        fence.complete(Unit)
+                    }
+
+                    override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
+                        throw IllegalStateException("This shouldn't be called for this hack")
+                    }
+
+                    override fun get(): MediaItemsWithStartPosition? {
+                        return settableFuture.get()
+                    }
+
+                    override fun get(timeout: Long, unit: TimeUnit): MediaItemsWithStartPosition? {
+                        return settableFuture.get(timeout, unit)
+                    }
+
+                    override fun isCancelled(): Boolean {
+                        return settableFuture.isCancelled
+                    }
+
+                    override fun isDone(): Boolean {
+                        return settableFuture.isDone
+                    }
+                }
             })
     }
 

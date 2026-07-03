@@ -28,6 +28,7 @@ class MediaControllerViewModel(application: Application) : AndroidViewModel(appl
 
     private val context: GramophoneApplication
         get() = getApplication()
+    private val mainExecutor = ContextCompat.getMainExecutor(application)
     private var controllerLifecycle: LifecycleHost? = null
     private var controllerFuture: ListenableFuture<MediaBrowser>? = null
     private val customCommandListenersImpl = LifecycleCallbackListImpl<
@@ -83,7 +84,7 @@ class MediaControllerViewModel(application: Application) : AndroidViewModel(appl
                                 lc.lifecycleRegistry.currentState = Lifecycle.State.CREATED
                                 connectionListenersImpl.dispatch { it(instance, lc.lifecycle) }
                             }
-                        }, ContextCompat.getMainExecutor(context)
+                        }, mainExecutor
                     )
                 }
     }
