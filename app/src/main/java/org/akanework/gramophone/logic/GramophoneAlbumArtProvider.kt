@@ -176,10 +176,17 @@ class GramophoneAlbumArtProvider : ContentProvider() {
                                     // It's only safe to give the unmodified fd to reader if it is
                                     // seekable, because otherwise (pipe?) no matter when we dup, we
                                     // would eat some data when checking for JPEG header.
-                                    Os.lseek(newFd.fileDescriptor, it.startOffset,
-                                        SEEK_SET)
-                                    cfd.complete(AssetFileDescriptor(newFd, it.startOffset,
-                                        it.declaredLength))
+                                    try {
+                                        Os.lseek(newFd.fileDescriptor, it.startOffset,
+                                            SEEK_SET)
+                                        cfd.complete(AssetFileDescriptor(newFd,
+                                            it.startOffset, it.declaredLength))
+                                    } catch (t: Throwable) {
+                                        try {
+                                            newFd.close()
+                                        } catch (_: Exception) {}
+                                        throw t
+                                    }
                                 } catch (_: ErrnoException) {}
                             }
                         }
