@@ -11,6 +11,7 @@ import androidx.media3.common.util.ParsableByteArray
 import androidx.media3.extractor.metadata.id3.BinaryFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.extractor.metadata.vorbis.VorbisComment
+import org.akanework.gramophone.logic.queryWithPending
 import org.akanework.gramophone.logic.utils.SemanticLyrics.SyncedLyrics
 import org.nift4.mediastorecompat.MediaStoreCompat
 import java.io.File
@@ -155,7 +156,7 @@ object LrcUtils {
             }
             append("END")
         }
-        context.contentResolver.query(MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
+        context.contentResolver.queryWithPending(MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
             arrayOf(MediaStore.Files.FileColumns._ID), "${MediaStore
                 .Files.FileColumns.DATA} IN (" + paths.joinToString { "?" } + ")",
             paths.toTypedArray(), sortOrder).use { c ->

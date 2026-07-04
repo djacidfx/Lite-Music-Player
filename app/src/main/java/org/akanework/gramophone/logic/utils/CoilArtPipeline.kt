@@ -42,6 +42,7 @@ import org.akanework.gramophone.logic.GramophoneAlbumArtProvider
 import org.akanework.gramophone.logic.hasImagePermission
 import org.akanework.gramophone.logic.hasScopedStorageV1
 import org.akanework.gramophone.logic.hasScopedStorageWithMediaTypes
+import org.akanework.gramophone.logic.queryWithPending
 import org.nift4.mediastorecompat.MediaStoreCompat
 import org.nift4.mediastorecompat.StorageManagerCompat
 import uk.akane.libphonograph.utils.MiscUtils
@@ -142,7 +143,7 @@ object CoilArtPipeline {
                                 )
                         END
                     ) DESC""".trimIndent()
-                    options.context.contentResolver.query(MediaStore.Images.Media
+                    options.context.contentResolver.queryWithPending(MediaStore.Images.Media
                         .EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.ImageColumns._ID),
                         "${MediaStore.Images.ImageColumns.DATA} LIKE ? ESCAPE '\\'",
                         arrayOf(songFile.parent!!.replace("\\",
@@ -380,7 +381,7 @@ object CoilArtPipeline {
                         ELSE 0
                     END DESC
                     """.trimIndent()
-                    options.context.contentResolver.query(MediaStore.Images.Media
+                    options.context.contentResolver.queryWithPending(MediaStore.Images.Media
                         .EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.ImageColumns._ID),
                         "${MediaStore.Files.FileColumns.MIME_TYPE} IN ('image/jpeg'," +
                                 " 'image/png') AND ${MediaStore.Images.ImageColumns.DATA} LIKE ?" +

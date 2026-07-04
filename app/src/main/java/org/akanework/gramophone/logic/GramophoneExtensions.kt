@@ -20,10 +20,12 @@ package org.akanework.gramophone.logic
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ContentResolver
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.database.Cursor
 import android.graphics.Color
 import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.Drawable
@@ -31,10 +33,12 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
 import android.os.StrictMode
+import android.provider.MediaStore
 import android.view.View
 import android.view.ViewGroup.MarginLayoutParams
 import android.view.ViewPropertyAnimator
@@ -788,4 +792,25 @@ fun queueWithTitle(mediaItems: List<MediaItem>, mqTitle: String?): List<MediaIte
         ).build()
     ).build()
     return listOf(newFirstMediaItem) + mediaItems.drop(1)
+}
+
+fun ContentResolver.queryWithPending(uri: Uri, projection: Array<String>, selection: String?,
+                                     selectionArgs: Array<String>?, sortOrder: String?,
+                                     cancellationSignal: CancellationSignal? = null): Cursor? {
+    return if (hasImprovedMediaStore()) {
+        query(uri, projection, Bundle().apply {
+            if (selection != null)
+                putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+            if (selectionArgs != null)
+                putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
+            if (sortOrder != null)
+                putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
+            putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_INCLUDE)
+        }, cancellationSignal)
+    } else if (hasScopedStorageV1()) {
+        query(@Suppress("deprecation") MediaStore.setIncludePending(uri), projection,
+            selection, selectionArgs, sortOrder, cancellationSignal)
+    } else {
+        query(uri, projection, selection, selectionArgs, sortOrder, cancellationSignal)
+    }
 }

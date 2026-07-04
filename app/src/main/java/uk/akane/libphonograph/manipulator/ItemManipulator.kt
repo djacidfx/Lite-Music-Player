@@ -21,6 +21,7 @@ import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.getFile
 import org.akanework.gramophone.logic.gramophoneApplication
 import org.akanework.gramophone.logic.hasImprovedMediaStore
+import org.akanework.gramophone.logic.queryWithPending
 import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.ui.MainActivity
 import org.nift4.mediastorecompat.MediaStoreCompat
@@ -83,7 +84,7 @@ object ItemManipulator {
                     .toList() + uri
             } else {
                 val urisToDelete = mutableSetOf(uri)
-                context.contentResolver.query(MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
+                context.contentResolver.queryWithPending(MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
                     arrayOf(MediaStore.Files.FileColumns._ID), "${MediaStore
                         .Files.FileColumns.DATA} IN (" + extensions.joinToString { "?" } + ")",
                     extensions.map { file.resolveSibling(
