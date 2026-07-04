@@ -1502,7 +1502,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                         settableFuture.addListener(listener, executor)
                         // When settableFuture has a value set before listener is added then set()
                         // will not have side effect and thus we can't run code after side effect.
-                        // TODO(ASAP): this stupid fence hack does NOT seem like a net benefit for
+                        // TODO: this stupid fence hack does NOT seem like a net benefit for
                         //  the code quality, maybe just give up on the onSetMediaItems API?
                         fence.complete(Unit)
                     }

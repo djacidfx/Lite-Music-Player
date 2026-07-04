@@ -331,7 +331,6 @@ object CoilArtPipeline {
         }
     }
 
-    // TODO(ASAP) check if someone answered about how to get rid of internal dep
     @OptIn(InternalCoroutinesApi::class)
     private suspend inline fun <T> runWithCancellationSignal(block: (CancellationSignal) -> T): T {
         val signal = CancellationSignal()
