@@ -48,7 +48,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
-import androidx.core.content.FileProvider
 import androidx.core.content.IntentCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.net.toUri
@@ -717,22 +716,15 @@ class MainActivity : BaseActivity() {
                 val item = instance.currentMediaItem
                 val uri = item?.requestMetadata?.mediaUri
                     ?: item?.localConfiguration?.uri
-                val contentUri = if (uri?.scheme == "file") {
-                    val strict = StrictMode.getThreadPolicy()
-                    try {
-                        StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.LAX)
-                        FileProvider.getUriForFile(
-                            this,
-                            "$packageName.fileProvider",
-                            File(uri.path!!)
-                        )
-                    } finally {
-                        StrictMode.setThreadPolicy(strict)
+                val strict = StrictMode.getThreadPolicy()
+                try {
+                    StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.LAX)
+                    if (uri != null) {
+                        outContent.clipData = ClipData.newUri(contentResolver,
+                            item?.mediaMetadata?.title ?: "", uri)
                     }
-                } else uri
-                if (contentUri != null) {
-                    outContent.clipData = ClipData.newUri(contentResolver,
-                        item?.mediaMetadata?.title ?: "", contentUri)
+                } finally {
+                    StrictMode.setThreadPolicy(strict)
                 }
             } catch (e: Exception) {
                 Log.e("MainActivity", "unable to generate clip data", e)

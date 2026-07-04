@@ -12,6 +12,7 @@ const val EXTRA_ADD_DATE = "AddDate"
 const val EXTRA_MODIFIED_DATE = "ModifiedDate"
 const val EXTRA_CD_TRACK_NUMBER = "CdTrackNumber"
 const val EXTRA_HD_ARTWORK_URI = "HdArtworkUri"
+const val EXTRA_FILE = "File"
 
 val MediaMetadata.author: String?
     get() = extras?.getString(EXTRA_AUTHOR)

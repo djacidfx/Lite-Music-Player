@@ -1,5 +1,9 @@
 package org.akanework.gramophone.logic.utils
 
+import android.content.ContentUris
+import android.content.Context
+import android.net.Uri
+import android.provider.MediaStore
 import androidx.annotation.VisibleForTesting
 import androidx.media3.common.Metadata
 import androidx.media3.common.util.Log
@@ -8,6 +12,7 @@ import androidx.media3.extractor.metadata.id3.BinaryFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.extractor.metadata.vorbis.VorbisComment
 import org.akanework.gramophone.logic.utils.SemanticLyrics.SyncedLyrics
+import org.nift4.mediastorecompat.MediaStoreCompat
 import java.io.File
 import java.nio.charset.Charset
 
@@ -120,22 +125,66 @@ object LrcUtils {
     }
 
     fun loadAndParseLyricsFile(
+        context: Context,
         musicFile: File?,
         audioMimeType: String?,
         parserOptions: LrcParserOptions
     ): SemanticLyrics? {
-        return loadTextFile(
-            musicFile?.let { File(it.parentFile, it.nameWithoutExtension + ".ttml") },
-            parserOptions.errorText
-        )?.let { parseLyrics(it, audioMimeType, parserOptions, LyricFormat.TTML) }
-            ?: loadTextFile(
-                musicFile?.let { File(it.parentFile, it.nameWithoutExtension + ".srt") },
+        if (!Flags.MEDIASTORE_IO) {
+            return loadTextFile(
+                musicFile?.let { File(it.parentFile, it.nameWithoutExtension + ".ttml") },
                 parserOptions.errorText
-            )?.let { parseLyrics(it, audioMimeType, parserOptions, LyricFormat.SRT) }
-            ?: loadTextFile(
-                musicFile?.let { File(it.parentFile, it.nameWithoutExtension + ".lrc") },
-                parserOptions.errorText
-            )?.let { parseLyrics(it, audioMimeType, parserOptions, LyricFormat.LRC) }
+            )?.let { parseLyrics(it, audioMimeType, parserOptions, LyricFormat.TTML) }
+                ?: loadTextFile(
+                    musicFile?.let { File(it.parentFile, it.nameWithoutExtension + ".srt") },
+                    parserOptions.errorText
+                )?.let { parseLyrics(it, audioMimeType, parserOptions, LyricFormat.SRT) }
+                ?: loadTextFile(
+                    musicFile?.let { File(it.parentFile, it.nameWithoutExtension + ".lrc") },
+                    parserOptions.errorText
+                )?.let { parseLyrics(it, audioMimeType, parserOptions, LyricFormat.LRC) }
+        }
+        if (musicFile == null) return null
+        val paths = listOf("ttml", "srt", "lrc").map { musicFile.resolveSibling(
+            musicFile.nameWithoutExtension + ".$it").path }
+        val extensionsEnum = listOf(LyricFormat.TTML, LyricFormat.SRT, LyricFormat.LRC)
+        val sortOrder = buildString {
+            append("CASE ${MediaStore.Files.FileColumns.DATA} ")
+            paths.forEachIndexed { index, path ->
+                append("WHEN '$path' THEN $index ")
+            }
+            append("END")
+        }
+        context.contentResolver.query(MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Files.FileColumns._ID), "${MediaStore
+                .Files.FileColumns.DATA} IN (" + paths.joinToString { "?" } + ")",
+            paths.toTypedArray(), sortOrder).use { c ->
+            if (c != null && c.moveToFirst()) {
+                val idColumn = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+                do {
+                    loadTextFile(context, ContentUris.withAppendedId(
+                        MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
+                        c.getLong(idColumn)),
+                        parserOptions.errorText
+                    )?.let {
+                        return parseLyrics(it, audioMimeType, parserOptions,
+                            extensionsEnum[c.position])
+                    }
+                } while (c.moveToNext())
+            }
+        }
+        return null
+    }
+
+    private fun loadTextFile(context: Context, lrcFile: Uri, errorText: String?): String? {
+        return try {
+            context.contentResolver.openInputStream(lrcFile)!!.use {
+                it.readBytes().toString(Charset.defaultCharset())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, Log.getThrowableString(e)!!)
+            return errorText
+        }
     }
 
     private fun loadTextFile(lrcFile: File?, errorText: String?): String? {

@@ -98,6 +98,8 @@ import org.akanework.gramophone.ui.MainActivity
 import org.jetbrains.annotations.Contract
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
+import uk.akane.libphonograph.items.EXTRA_AUTHOR
+import uk.akane.libphonograph.items.EXTRA_FILE
 import java.io.File
 import java.io.FileInputStream
 import java.util.Locale
@@ -114,12 +116,8 @@ fun Player.playOrPause() {
     }
 }
 
-fun MediaItem.getUri(): Uri? {
-    return localConfiguration?.uri
-}
-
 fun MediaItem.getFile(): File? {
-    return getUri()?.toFile()
+    return mediaMetadata.extras?.getString(EXTRA_FILE)?.let { File(it) }
 }
 
 fun String.toMediaStoreId(): Long? {
@@ -133,23 +131,17 @@ fun MediaItem.requireMediaStoreId(): Long {
         ?: throw IllegalArgumentException("Media item with ID $mediaId doesn't appear to be media store item")
 }
 
-fun MediaItem.getBitrate(): Int? {
+fun MediaItem.getBitrate(context: Context): Int? {
     val retriever = MediaMetadataRetriever()
-    val file = getFile() ?: return null
-    var fd: FileInputStream? = null
+    val uri = localConfiguration?.uri ?: return null
     return try {
-        fd = file.inputStream()
-        // uses this slightly less straight-forward overload to avoid a resource leak in platform
-        retriever.setDataSource(fd.fd)
-        fd.close()
-        fd = null
+        retriever.setDataSource(context, uri)
         retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
             ?.toIntOrNull()
     } catch (e: Exception) {
         Log.w("MediaItem", "getBitrate failed", e)
         null
     } finally {
-        fd?.close()
         retriever.release()
     }
 }

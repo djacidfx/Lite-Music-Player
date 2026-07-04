@@ -12,6 +12,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import coil3.asDrawable
+import coil3.dispose
 import coil3.imageLoader
 import coil3.request.Disposable
 import coil3.request.ImageRequest
@@ -40,7 +41,6 @@ class PreviewBottomSheet(
     private val bottomSheetPreviewSubtitle: TextView
     private val bottomSheetPreviewControllerButton: MaterialButton
     private val bottomSheetPreviewNextButton: MaterialButton
-    private var lastDisposable: Disposable? = null
 
     constructor(context: Context, attrs: AttributeSet?, defStyleAttr: Int) :
             this(context, attrs, defStyleAttr, 0)
@@ -99,24 +99,17 @@ class PreviewBottomSheet(
         reason: @Player.MediaItemTransitionReason Int
     ) {
         if ((instance?.mediaItemCount ?: 0) > 0) {
-            lastDisposable?.dispose()
-            lastDisposable = context.imageLoader.enqueue(ImageRequest.Builder(context).apply {
-                target(onSuccess = {
-                    bottomSheetPreviewCover.setImageDrawable(it.asDrawable(context.resources))
-                }, onError = {
-                    bottomSheetPreviewCover.setImageDrawable(it?.asDrawable(context.resources))
-                }) // do not react to onStart() which sets placeholder
-                data(mediaItem?.mediaMetadata?.artworkUri)
+            bottomSheetPreviewCover.dispose()
+            bottomSheetPreviewCover.loadNoPlaceholder(mediaItem?.mediaMetadata?.artworkUri) {
+                // do not react to onStart() which sets placeholder
                 scale(Scale.FILL)
-                allowHardware(bottomSheetPreviewCover.isHardwareAccelerated)
                 error(R.drawable.ic_default_cover)
-            }.build())
+            }
             bottomSheetPreviewTitle.text = mediaItem?.mediaMetadata?.title
             bottomSheetPreviewSubtitle.text =
                 mediaItem?.mediaMetadata?.artist ?: context.getString(R.string.unknown_artist)
         } else {
-            lastDisposable?.dispose()
-            lastDisposable = null
+            bottomSheetPreviewCover.dispose()
         }
     }
 }

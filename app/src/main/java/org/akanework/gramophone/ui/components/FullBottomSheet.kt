@@ -63,6 +63,7 @@ import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import androidx.preference.PreferenceManager
 import coil3.asDrawable
+import coil3.dispose
 import coil3.imageLoader
 import coil3.request.Disposable
 import coil3.request.ImageRequest
@@ -249,7 +250,6 @@ class FullBottomSheet
     private val bottomSheetFullCoverFrame: MaterialCardView
     val bottomSheetFullLyricView: LyricsView by lazy { (parent as ViewGroup).findViewById(R.id.lyric_frame)!! }
     private val progressDrawable: SquigglyProgress
-    private var lastDisposable: Disposable? = null
     private var pqs: PlaylistQueueSheet? = null
 
     init {
@@ -579,11 +579,6 @@ class FullBottomSheet
             )
             onMediaMetadataChanged(instance?.mediaMetadata ?: MediaMetadata.EMPTY)
             firstTime = false
-        }
-        bottomSheetFullCover.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            if (oldRight - oldLeft != right - left || oldBottom - oldTop != bottom - top) {
-                loadCoverForImageView()
-            }
         }
     }
 
@@ -1397,9 +1392,11 @@ class FullBottomSheet
         reason: Int
     ) {
         if (instance?.mediaItemCount != 0) {
-            lastDisposable?.dispose()
-            lastDisposable = null
-            loadCoverForImageView()
+            bottomSheetFullCover.dispose()
+            bottomSheetFullCover.loadNoPlaceholder(mediaItem?.mediaMetadata?.artworkUri) {
+                scale(Scale.FILL)
+                error(R.drawable.ic_default_cover)
+            }
             if (DynamicColors.isDynamicColorAvailable() &&
                 prefs.getBooleanStrict("content_based_color", true)
             ) {
@@ -1415,8 +1412,7 @@ class FullBottomSheet
             )
             updateDuration()
         } else {
-            lastDisposable?.dispose()
-            lastDisposable = null
+            bottomSheetFullCover.dispose()
         }
     }
 
@@ -1448,36 +1444,6 @@ class FullBottomSheet
                 bottomSheetFullPosition.text = position
             }
             bottomSheetFullLyricView.updateLyricPositionFromPlaybackPos()
-        }
-    }
-
-    private fun loadCoverForImageView() {
-        if (lastDisposable != null) {
-            lastDisposable?.dispose()
-            lastDisposable = null
-            Log.e(TAG, "raced while loading cover in onMediaItemTransition?")
-        }
-        val mediaItem = instance?.currentMediaItem
-        Log.d(TAG, "load cover for " + mediaItem?.mediaMetadata?.title + " considered")
-        if (bottomSheetFullCover.width != 0 && bottomSheetFullCover.height != 0) {
-            Log.d(
-                TAG,
-                "load cover for " + mediaItem?.mediaMetadata?.title + " at " + bottomSheetFullCover.width + " " + bottomSheetFullCover.height
-            )
-            lastDisposable = context.imageLoader.enqueue(
-                ImageRequest.Builder(context).apply {
-                    data(mediaItem?.mediaMetadata?.artworkUri)
-                    size(bottomSheetFullCover.width, bottomSheetFullCover.height)
-                    scale(Scale.FILL)
-                    target(onSuccess = {
-                        bottomSheetFullCover.setImageDrawable(it.asDrawable(context.resources))
-                    }, onError = {
-                        bottomSheetFullCover.setImageDrawable(it?.asDrawable(context.resources))
-                    }) // do not react to onStart() which sets placeholder
-                    error(R.drawable.ic_default_cover)
-                    allowHardware(bottomSheetFullCover.isHardwareAccelerated)
-                }.build()
-            )
         }
     }
 

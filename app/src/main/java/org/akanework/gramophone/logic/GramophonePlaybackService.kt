@@ -1253,6 +1253,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             var lrc: SemanticLyrics? = null
             if (format != null) {
                 lrc = loadAndParseLyricsFile(
+                    applicationContext,
                     mediaItem?.getFile(),
                     format.sampleMimeType, options
                 )
@@ -1396,7 +1397,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
             bitrate = null
             bitrateFetcher.launch {
-                bitrate = mediaItem?.getBitrate() // TODO subtract cover size
+                bitrate = mediaItem?.getBitrate(this@GramophonePlaybackService) // TODO subtract cover size
                 this@GramophonePlaybackService.mediaSession?.broadcastCustomCommand(
                     SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY),
                     Bundle.EMPTY

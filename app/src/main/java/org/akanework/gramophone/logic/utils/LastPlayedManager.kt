@@ -18,11 +18,14 @@
 package org.akanework.gramophone.logic.utils
 
 import android.annotation.SuppressLint
+import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.util.Base64
 import androidx.core.content.edit
+import androidx.core.net.toFile
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -36,6 +39,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.akanework.gramophone.BuildConfig
+import org.akanework.gramophone.logic.getFile
 import org.akanework.gramophone.logic.utils.exoplayer.EndedWorkaroundPlayer
 import uk.akane.libphonograph.items.EXTRA_ADD_DATE
 import uk.akane.libphonograph.items.EXTRA_ALBUM_ID
@@ -43,6 +47,7 @@ import uk.akane.libphonograph.items.EXTRA_ALBUM_YEAR
 import uk.akane.libphonograph.items.EXTRA_ARTIST_ID
 import uk.akane.libphonograph.items.EXTRA_AUTHOR
 import uk.akane.libphonograph.items.EXTRA_CD_TRACK_NUMBER
+import uk.akane.libphonograph.items.EXTRA_FILE
 import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
 import uk.akane.libphonograph.items.EXTRA_MODIFIED_DATE
 import uk.akane.libphonograph.items.addDate
@@ -112,7 +117,7 @@ class LastPlayedManager(
                 data.mediaItems.map {
                     val b = SafeDelimitedStringConcat(":")
                     // add new entries at the bottom and remember they are null for upgrade path
-                    b.writeStringUnsafe("ver_" + 1)
+                    b.writeStringUnsafe("ver_" + 2)
                     b.writeStringSafe(it.mediaId)
                     b.writeUri(it.localConfiguration?.uri)
                     b.writeStringSafe(it.localConfiguration?.mimeType)
@@ -142,6 +147,7 @@ class LastPlayedManager(
                     b.writeStringSafe(it.mediaMetadata.cdTrackNumber)
                     b.writeLong(it.mediaMetadata.albumYear)
                     b.writeUri(it.mediaMetadata.hdArtworkUri)
+                    b.writeStringSafe(it.getFile()?.path)
                     b.toString()
                 })
             prefs.edit {
@@ -246,6 +252,12 @@ class LastPlayedManager(
                             val cdTrackNumber = b.readStringSafe()
                             val albumYear = b.readLong()
                             val hdArtworkUri = b.readUri()
+                            val file = if (version >= 2) b.readStringSafe() else uri.let {
+                                uri = ContentUris.withAppendedId(
+                                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                                    mediaId!!.substring("MediaStore:".length).toLong())
+                                it!!.toFile().path
+                            }
                             MediaItem.Builder()
                                 .setUri(uri)
                                 .setMediaId(mediaId!!)
@@ -291,6 +303,9 @@ class LastPlayedManager(
                                             }
                                             if (hdArtworkUri != null) {
                                                 putParcelable(EXTRA_HD_ARTWORK_URI, hdArtworkUri)
+                                            }
+                                            if (file != null) {
+                                                putString(EXTRA_FILE, file)
                                             }
                                         })
                                         .build()

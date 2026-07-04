@@ -25,10 +25,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ShareCompat
-import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -44,7 +42,6 @@ import org.akanework.gramophone.logic.getBooleanStrict
 import org.akanework.gramophone.logic.getFile
 import org.akanework.gramophone.logic.gramophoneApplication
 import org.akanework.gramophone.logic.requireMediaStoreId
-import org.akanework.gramophone.logic.queueWithTitle
 import org.akanework.gramophone.logic.setMediaItemsSeamlessly
 import org.akanework.gramophone.logic.ui.MyRecyclerView
 import org.akanework.gramophone.ui.MediaControllerViewModel
@@ -319,17 +316,9 @@ class SongAdapter(
                     val mimeType = item.localConfiguration?.mimeType ?: "audio/*"
 
                     try {
-                        val contentUri = if (uri.scheme == "file") {
-                            FileProvider.getUriForFile(
-                                mainActivity,
-                                "${mainActivity.packageName}.fileProvider",
-                                File(uri.path!!)
-                            )
-                        } else uri
-
                         ShareCompat.IntentBuilder(mainActivity)
                             .setType(mimeType)
-                            .setStream(contentUri)
+                            .setStream(uri)
                             .setChooserTitle("Share audio file")
                             .startChooser()
                     } catch (e: Exception) {

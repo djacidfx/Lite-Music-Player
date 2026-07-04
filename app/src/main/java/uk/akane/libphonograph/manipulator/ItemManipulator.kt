@@ -21,6 +21,7 @@ import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.getFile
 import org.akanework.gramophone.logic.gramophoneApplication
 import org.akanework.gramophone.logic.hasImprovedMediaStore
+import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.ui.MainActivity
 import org.nift4.mediastorecompat.MediaStoreCompat
 import org.nift4.mediastorecompat.StorageManagerCompat
@@ -39,9 +40,9 @@ object ItemManipulator {
     suspend fun deleteSongs(context: MainActivity, list: List<Pair<File, Long>>): (() -> Unit)? {
         val faves = context.gramophoneApplication.reader.playlistListFlow.map { it.find { p ->
             p is Favorite } }.first()
-        val songsToUnfave = list.filter { faves?.songList?.find { song -> song.getFile() ==
-                it.first } != null }.map { it.first.toUriCompat() }
-        if (faves?.id != null && songsToUnfave.isNotEmpty()) {
+        val songsToUnfave = faves?.let { _ -> list.filter { faves.songList.find { song ->
+            song.getFile() == it.first } != null }.map { it.first.toUriCompat() } }
+        if (faves?.id != null && !songsToUnfave.isNullOrEmpty()) {
             val uri = ContentUris.withAppendedId(
                     @Suppress("deprecation")
                     MediaStore.Audio.Playlists.EXTERNAL_CONTENT_URI, faves.id!!
@@ -65,19 +66,41 @@ object ItemManipulator {
                 MediaStore.Audio.Media.getContentUri("external"), id
             )
             // TODO maybe don't hardcode these extensions twice, here and in LrcUtils?
-            setOf("ttml", "lrc", "srt").asSequence().map {
-                file.resolveSibling("${file.nameWithoutExtension}.$it")
-            }.filter { it.exists() }.map {
-                // It doesn't really make sense to have >1 subtitle file so we don't need to batch the queries.
-                getIdForPath(context, it)
-            }.filter { it != null }
-                .map {
-                    ContentUris.withAppendedId(
-                        MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
-                        it!!
-                    )
+            val extensions = setOf("ttml", "lrc", "srt")
+            if (!Flags.MEDIASTORE_IO) {
+                extensions.asSequence().map {
+                    file.resolveSibling("${file.nameWithoutExtension}.$it")
+                }.filter { it.exists() }.map {
+                    // It doesn't really make sense to have >1 subtitle file so we don't need to batch the queries.
+                    getIdForPath(context, it)
+                }.filter { it != null }
+                    .map {
+                        ContentUris.withAppendedId(
+                            MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
+                            it!!
+                        )
+                    }
+                    .toList() + uri
+            } else {
+                val urisToDelete = mutableSetOf(uri)
+                context.contentResolver.query(MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Files.FileColumns._ID), "${MediaStore
+                        .Files.FileColumns.DATA} IN (" + extensions.joinToString { "?" } + ")",
+                    extensions.map { file.resolveSibling(
+                        file.nameWithoutExtension + ".$it").path }.toTypedArray(),
+                    null).use {
+                    if (it != null && it.moveToFirst()) {
+                        val idColumn = it.getColumnIndexOrThrow(
+                            MediaStore.Files.FileColumns._ID)
+                        do {
+                            urisToDelete.add(ContentUris.withAppendedId(
+                                MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
+                                it.getLong(idColumn)))
+                        } while (it.moveToNext())
+                    }
                 }
-                .toList() + uri
+                urisToDelete
+            }
         }
         return delete(context, uris)
     }

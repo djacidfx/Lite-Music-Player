@@ -41,6 +41,7 @@ import uk.akane.libphonograph.items.EXTRA_ALBUM_YEAR
 import uk.akane.libphonograph.items.EXTRA_ARTIST_ID
 import uk.akane.libphonograph.items.EXTRA_AUTHOR
 import uk.akane.libphonograph.items.EXTRA_CD_TRACK_NUMBER
+import uk.akane.libphonograph.items.EXTRA_FILE
 import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
 import uk.akane.libphonograph.items.EXTRA_MODIFIED_DATE
 import uk.akane.libphonograph.items.FileNode
@@ -382,7 +383,8 @@ internal object Reader {
 
                 // Build our mediaItem.
                 val song = MediaItem.Builder()
-                    .setUri(pathFile?.toUriCompat())
+                    .setUri(ContentUris.withAppendedId(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id))
                     .setMediaId("MediaStore:$id")
                     .setMimeType(mimeType)
                     .setMediaMetadata(
@@ -430,6 +432,7 @@ internal object Reader {
                                 putString(EXTRA_CD_TRACK_NUMBER, cdTrackNumber)
                                 putParcelable(EXTRA_HD_ARTWORK_URI, imgUri.buildUpon()
                                     .appendQueryParameter("hd", "1").build())
+                                putString(EXTRA_FILE, path)
                             })
                             .build(),
                     ).build()
