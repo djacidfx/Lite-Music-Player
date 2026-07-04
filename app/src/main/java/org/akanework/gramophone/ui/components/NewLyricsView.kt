@@ -39,6 +39,7 @@ import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.logic.utils.SemanticLyrics
 import org.akanework.gramophone.logic.utils.SpeakerEntity
 import org.akanework.gramophone.logic.utils.findBidirectionalBarriers
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -310,7 +311,7 @@ class NewLyricsView(context: Context, attrs: AttributeSet?) : ScrollingView2(con
                 val j = spForRender!!.second.subList(i, spForRender!!.second.size).find { l ->
                     (l.line?.start ?: Int.MAX_VALUE.toULong()) > it.line.start }?.line?.start
                 val nextStartTime = min(j ?: Int.MAX_VALUE.toULong(), Int.MAX_VALUE.toULong())
-                if (j != null && nextStartTime < lastTs + lyricAnimTime.toULong()) {
+                if (j != null && abs(nextStartTime.toLong() - lastTs.toLong()) < lyricAnimTime) {
                     lastTs = nextStartTime
                     endIsImplicit = true
                 }
@@ -896,7 +897,7 @@ class NewLyricsView(context: Context, attrs: AttributeSet?) : ScrollingView2(con
                 val j = spForRender!!.second.subList(i, spForRender!!.second.size).find { l ->
                     (l.line?.start ?: Int.MAX_VALUE.toULong()) > it.line.start }?.line?.start
                 val nextStartTime = min(j ?: Int.MAX_VALUE.toULong(), Int.MAX_VALUE.toULong())
-                if (j != null && nextStartTime < lastTs + lyricAnimTime.toULong()) {
+                if (j != null && abs(nextStartTime.toLong() - lastTs.toLong()) < lyricAnimTime) {
                     lastTs = nextStartTime
                     endIsImplicit = true
                 }
