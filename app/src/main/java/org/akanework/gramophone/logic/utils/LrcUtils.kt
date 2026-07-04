@@ -149,13 +149,14 @@ object LrcUtils {
         val paths = listOf("ttml", "srt", "lrc").map { musicFile.resolveSibling(
             musicFile.nameWithoutExtension + ".$it").path }
         val extensionsEnum = listOf(LyricFormat.TTML, LyricFormat.SRT, LyricFormat.LRC)
-        val sortOrder = buildString {
-            append("CASE ${MediaStore.Files.FileColumns.DATA} ")
-            paths.forEachIndexed { index, path ->
-                append("WHEN '$path' THEN $index ")
-            }
-            append("END")
-        }
+        val sortOrder = """
+            CASE
+                WHEN ${MediaStore.Files.FileColumns.DATA} LIKE '%.ttml' THEN 0
+                WHEN ${MediaStore.Files.FileColumns.DATA} LIKE '%.srt' THEN 1
+                WHEN ${MediaStore.Files.FileColumns.DATA} LIKE '%.lrc' THEN 2
+                ELSE 3
+            END
+        """.trimIndent()
         context.contentResolver.queryWithPending(MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
             arrayOf(MediaStore.Files.FileColumns._ID), "${MediaStore
                 .Files.FileColumns.DATA} IN (" + paths.joinToString { "?" } + ")",
