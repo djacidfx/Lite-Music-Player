@@ -146,33 +146,31 @@ object LrcUtils {
                 )?.let { parseLyrics(it, audioMimeType, parserOptions, LyricFormat.LRC) }
         }
         if (musicFile == null) return null
-        val paths = listOf("ttml", "srt", "lrc").map { musicFile.resolveSibling(
-            musicFile.nameWithoutExtension + ".$it").path }
+        val extensions = listOf("ttml", "srt", "lrc")
         val extensionsEnum = listOf(LyricFormat.TTML, LyricFormat.SRT, LyricFormat.LRC)
-        val sortOrder = """
-            CASE
-                WHEN ${MediaStore.Files.FileColumns.DATA} LIKE '%.ttml' THEN 0
-                WHEN ${MediaStore.Files.FileColumns.DATA} LIKE '%.srt' THEN 1
-                WHEN ${MediaStore.Files.FileColumns.DATA} LIKE '%.lrc' THEN 2
-                ELSE 3
-            END
-        """.trimIndent()
+        val loaded = hashMapOf<LyricFormat, Long>()
         context.contentResolver.queryWithPending(MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Files.FileColumns._ID), "${MediaStore
-                .Files.FileColumns.DATA} IN (" + paths.joinToString { "?" } + ")",
-            paths.toTypedArray(), sortOrder).use { c ->
+            arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.DATA),
+            "${MediaStore.Files.FileColumns.DATA} IN (" + extensions.joinToString { "?" }
+                    + ")", extensions.map { musicFile.resolveSibling(
+                musicFile.nameWithoutExtension + ".$it").path }.toTypedArray(),
+            null).use { c ->
             if (c != null && c.moveToFirst()) {
+                val dataColumn = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA)
                 val idColumn = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
                 do {
-                    loadTextFile(context, ContentUris.withAppendedId(
-                        MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI,
-                        c.getLong(idColumn)),
-                        parserOptions.errorText
-                    )?.let {
-                        return parseLyrics(it, audioMimeType, parserOptions,
-                            extensionsEnum[c.position])
-                    }
+                    loaded[extensionsEnum[extensions.indexOf(File(c.getString(
+                        dataColumn)!!).extension)]] = c.getLong(idColumn)
                 } while (c.moveToNext())
+            }
+        }
+        extensionsEnum.forEach { format ->
+            val id = loaded[format] ?: return@forEach
+            loadTextFile(context, ContentUris.withAppendedId(
+                MediaStoreCompat.FILES_EXTERNAL_CONTENT_URI, id),
+                parserOptions.errorText
+            )?.let {
+                return parseLyrics(it, audioMimeType, parserOptions, format)
             }
         }
         return null
