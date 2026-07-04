@@ -133,6 +133,7 @@ class AfFormatTracker(
         eventTime: AnalyticsListener.EventTime,
         audioTrackConfig: AudioTrackConfig
     ) {
+        if (!playbackHandler.looper.thread.isAlive) return
         playbackHandler.post {
             if (lastAudioTrack?.state == AudioTrack.STATE_UNINITIALIZED) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {

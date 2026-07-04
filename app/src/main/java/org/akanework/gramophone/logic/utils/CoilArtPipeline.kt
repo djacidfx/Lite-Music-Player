@@ -123,6 +123,7 @@ object CoilArtPipeline {
                                                imageLoader: ImageLoader): FetchResult {
         val fetchResult: FetchResult
         var searchIndex = 0
+        val data = imageLoader.components.map(data, options)
         while (true) {
             val pair = imageLoader.components.newFetcher(data, options, imageLoader,
                 searchIndex)
