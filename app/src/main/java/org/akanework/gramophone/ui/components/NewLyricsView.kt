@@ -312,7 +312,7 @@ class NewLyricsView(context: Context, attrs: AttributeSet?) : ScrollingView2(con
                     (l.line?.start ?: Int.MAX_VALUE.toULong()) > it.line.start }?.line?.start
                 val nextStartTime = min(j ?: Int.MAX_VALUE.toULong(), Int.MAX_VALUE.toULong())
                 if (j != null && abs(nextStartTime.toLong() - lastTs.toLong()) < lyricAnimTime) {
-                    lastTs = nextStartTime
+                    lastTs = nextStartTime - 1uL
                     endIsImplicit = true
                 }
             }
@@ -483,7 +483,7 @@ class NewLyricsView(context: Context, attrs: AttributeSet?) : ScrollingView2(con
                             val word = it.theWords[wordIdx]
                             spanEnd = word.charRange.last + 1 // get exclusive end
                             val gradientEndTime = min(
-                                lastTs.toFloat(),
+                                fadeOutStart.toFloat(),
                                 word.timeRange.last.toFloat()
                             )
                             val gradientStartTime = min(
