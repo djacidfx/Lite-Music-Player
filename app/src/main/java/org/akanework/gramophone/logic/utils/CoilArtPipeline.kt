@@ -390,11 +390,7 @@ object CoilArtPipeline {
                             "\\\\").replace("%", "\\%")
                             .replace("_", "\\_") + "/%"), sortOrder).use {
                         if (it == null || !it.moveToFirst()) {
-                            return@Fetcher continueFetchingOrFail(
-                                LoadAudioCoverData(
-                                    ContentUris.parseId(uri), file
-                                ), options, imageLoader
-                            )
+                            throw NoAlbumArtException("No album art found")
                         }
                         ContentUris.withAppendedId(
                             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
