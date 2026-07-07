@@ -143,12 +143,14 @@ object CoilArtPipeline {
                                 )
                         END
                     ) DESC""".trimIndent()
+                    val escaped = songFile.parent!!.replace("\\",
+                        "\\\\").replace("%", "\\%")
+                        .replace("_", "\\_")
                     options.context.contentResolver.queryWithPending(MediaStore.Images.Media
                         .EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.ImageColumns._ID),
-                        "${MediaStore.Images.ImageColumns.DATA} LIKE ? ESCAPE '\\'",
-                        arrayOf(songFile.parent!!.replace("\\",
-                            "\\\\").replace("%", "\\%")
-                            .replace("_", "\\_") + "/%"), sortOrder).use {
+                        "${MediaStore.Images.ImageColumns.DATA} LIKE ? ESCAPE '\\' AND" +
+                                " ${MediaStore.Images.ImageColumns.DATA} NOT LIKE ? ESCAPE '\\'",
+                        arrayOf("$escaped/%", "$escaped/%/%"), sortOrder).use {
                         if (it == null || !it.moveToFirst()) {
                             return@Fetcher continueFetchingOrFail(
                                 LoadAudioCoverData(
@@ -381,14 +383,16 @@ object CoilArtPipeline {
                         ELSE 0
                     END DESC
                     """.trimIndent()
+                    val escaped = parent.path.replace("\\",
+                        "\\\\").replace("%", "\\%")
+                        .replace("_", "\\_")
                     options.context.contentResolver.queryWithPending(MediaStore.Images.Media
                         .EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.ImageColumns._ID),
                         "${MediaStore.Files.FileColumns.MIME_TYPE} IN ('image/jpeg'," +
                                 " 'image/png') AND ${MediaStore.Images.ImageColumns.DATA} LIKE ?" +
-                                " ESCAPE '\\'",
-                        arrayOf(parent.path.replace("\\",
-                            "\\\\").replace("%", "\\%")
-                            .replace("_", "\\_") + "/%"), sortOrder).use {
+                                " ESCAPE '\\' AND ${MediaStore.Images.ImageColumns.DATA} NOT LIKE" +
+                                " ? ESCAPE '\\'", arrayOf("$escaped/%",
+                            "$escaped/%/%"), sortOrder).use {
                         if (it == null || !it.moveToFirst()) {
                             throw NoAlbumArtException("No album art found")
                         }
