@@ -55,14 +55,6 @@ class ExperimentalSettingsFragment : BasePreferenceFragment() {
             e = RuntimeException("skill issue")
     }
 
-    override fun onResume() {
-        super.onResume()
-        CoroutineScope(Dispatchers.IO).launch {
-            val selfLogDir = File(requireContext().cacheDir, "SelfLog")
-            selfLogDir.listFiles()?.forEach(File::delete)
-        }
-    }
-
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         if (preference.key == "crash" && BuildConfig.DEBUG) {
             throw IllegalArgumentException("I crashed your app >:)", e)

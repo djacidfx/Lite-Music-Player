@@ -44,10 +44,12 @@ import coil3.request.NullRequestDataException
 import coil3.util.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.ui.BugHandlerActivity
@@ -57,8 +59,10 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass
 import org.lsposed.hiddenapibypass.LSPass
 import org.nift4.gramophone.hificore.UacManager
 import uk.akane.libphonograph.reader.FlowReader
+import java.io.File
 import java.io.IOException
 import kotlin.system.exitProcess
+import kotlin.time.Duration.Companion.milliseconds
 
 class GramophoneApplication : Application(), SingletonImageLoader.Factory,
     Thread.UncaughtExceptionHandler, SharedPreferences.OnSharedPreferenceChangeListener {
@@ -283,6 +287,13 @@ class GramophoneApplication : Application(), SingletonImageLoader.Factory,
             }
 
             LyricWidgetProvider.update(this@GramophoneApplication)
+
+            delay(10000.milliseconds) // Wait until we are idle with useless IO
+            withContext(Dispatchers.IO) {
+                // Clean up old logs
+                val selfLogDir = File(cacheDir, "SelfLog")
+                selfLogDir.listFiles()?.forEach(File::delete)
+            }
         }
     }
 
