@@ -1,3 +1,0 @@
-- Státuszbár dalszövegek hozzáadása MeiZu eszközök esetében, egyéni ROM-ok kiválasztása és Lyric Getter Xposed (köszönet @ghhccghk-nek)
-- Többféle hiba és fagyás kijavítása
-- Fordítások frissítése, mint mindig (köszönet a keményen dolgozó fordítóknak!)

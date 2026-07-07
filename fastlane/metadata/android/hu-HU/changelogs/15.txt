@@ -1,2 +1,0 @@
-- Fülek rendezése és elrejtésének engedélyezése
-- Többféle fagyás javítása

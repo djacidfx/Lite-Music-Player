@@ -1,2 +1,0 @@
-- Consentire il riordino e la possibilità di nascondere le tab
-- Corretti crash multipli

@@ -18,7 +18,7 @@ platform :android do
     ensure_git_status_clean
   end
   def gradle_reproducible(options)
-    gradle(flags: "--no-configuration-cache --no-build-cache --no-daemon",
+    gradle(flags: "--no-build-cache --no-daemon",
            system_properties: options[:system_properties],
            tasks: ["clean", options[:task]])
   end

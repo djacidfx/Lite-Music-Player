@@ -1,4 +1,0 @@
-- Přepracování přehrávače souborů
-- Zachování zapnuté obrazovky při prohlížení textů
-- Podpora karet SD na kartě Souborový systém
-- Opravy chyb
