@@ -1491,12 +1491,17 @@ public abstract class ScrollingView2 extends View implements NestedScrollingChil
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        // TODO: is this a good idea?
-        setMeasuredDimension(getDefaultSize(getSuggestedMinimumWidth(), widthMeasureSpec),
-                getDefaultSize(getSuggestedMinimumHeight(), heightMeasureSpec));
-        onMeasureForChild(widthMeasureSpec,
+        int sidePadding = getPaddingLeft() + getPaddingRight();
+        setMeasuredDimension(Math.max(0, getDefaultSize(getSuggestedMinimumWidth(),
+                widthMeasureSpec)), getDefaultSize(getSuggestedMinimumHeight(), heightMeasureSpec));
+        int childWidthMeasureSpec = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED
+                ? MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+                : MeasureSpec.makeMeasureSpec(Math.max(MeasureSpec.getSize(widthMeasureSpec)
+                                                       - sidePadding, 0),
+                MeasureSpec.getMode(widthMeasureSpec));
+        onMeasureForChild(childWidthMeasureSpec,
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
-        setMeasuredDimension(getChildMeasuredWidth(),
+        setMeasuredDimension(getChildMeasuredWidth() + sidePadding,
                 getDefaultSize(getSuggestedMinimumHeight(), heightMeasureSpec));
     }
 
@@ -1740,8 +1745,7 @@ public abstract class ScrollingView2 extends View implements NestedScrollingChil
         mChildWidth = r - l - getPaddingRight() - getPaddingLeft();
         mHeight = mChildHeight;
         mWidth = mChildWidth;
-        onLayoutForChild(getPaddingLeft(), getPaddingTop(), getPaddingLeft() + mChildWidth,
-                getPaddingTop() + mChildHeight);
+        onLayoutForChild(getPaddingLeft(), 0, getPaddingLeft() + mChildWidth, mChildHeight);
         mIsLayoutDirty = false;
 
         if (!mIsLaidOut) {
