@@ -31,7 +31,7 @@ object Flags {
     val MEDIASTORE_IO = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
     // Before turning it on in prod we need i18n.
-    const val FORMAT_INFO_DIALOG = true // TODO(ASAP)
+    const val FORMAT_INFO_DIALOG = false
 
     // Before turning offload to true in prod we'd need a conflict resolution UI in case DPE is not
     // offloadable and RG is turned on while user tries to turn on offload (and other way around).
