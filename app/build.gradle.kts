@@ -108,7 +108,7 @@ android {
         // keep support for it for a while.
         minSdk = 21
         targetSdk = 35
-        versionCode = 22
+        versionCode = 21 // Skip 22, it was used for gplay-only hotfix.
         versionName = "1.1.0"
         if (releaseType != "Release" || versionNameSuffixOverride != null) {
             // by default the git commit hash is appended for non-release builds, however overrides
