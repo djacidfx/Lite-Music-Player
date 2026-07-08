@@ -998,7 +998,7 @@ class NewLyricsView(context: Context, attrs: AttributeSet?) : ScrollingView2(con
         val q = getScrollProgressAt(cat)
         val q1 = getScrollProgressAt(cat - 1000f)
         val distance = currentSmoothScroll!!.first.second
-        val velocity = 1000f * (q - q1) * distance
+        val velocity = (1000f * (q - q1) * distance).toFloat()
         if (cat >= currentSmoothScroll!!.first.first + currentSmoothScroll!!.first.second) {
             currentSmoothScroll = null
         }
