@@ -334,7 +334,8 @@ object CoilArtPipeline {
                         }
                     }
                 }
-                if (hasScopedStorageWithMediaTypes() && !options.context.hasImagePermission()) {
+                if (hasScopedStorageWithMediaTypes() && (Flags.REMOVE_IMAGE_PERMISSION ||
+                            !options.context.hasImagePermission())) {
                     return@Fetcher continueFetchingOrFail(LoadThumbnailData(uri),
                         options, imageLoader)
                 }

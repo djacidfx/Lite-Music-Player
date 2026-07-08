@@ -108,7 +108,7 @@ android {
         // keep support for it for a while.
         minSdk = 21
         targetSdk = 35
-        versionCode = 21
+        versionCode = 22
         versionName = "1.1.0"
         if (releaseType != "Release" || versionNameSuffixOverride != null) {
             // by default the git commit hash is appended for non-release builds, however overrides
@@ -130,6 +130,11 @@ android {
             "DISABLE_MEDIA_STORE_FILTER",
             "false"
         )
+        buildConfigField(
+            "boolean",
+            "IS_GOOGLEPLAY",
+            "false"
+        )
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -144,6 +149,26 @@ android {
                 "proguard-rules.pro",
             )
             signingConfig = signingConfigs.getByName("release")
+        }
+        create("googlePlayRelease") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = signingConfigs.getByName("release2")
+            buildConfigField(
+                "boolean",
+                "IS_GOOGLEPLAY",
+                "true"
+            )
+            buildConfigField(
+                "String",
+                "RELEASE_TYPE",
+                "\"$releaseType-play\""
+            )
+            matchingFallbacks += "release"
         }
         create("benchmarkRelease") {
             isMinifyEnabled = true

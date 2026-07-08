@@ -18,7 +18,6 @@
 package org.akanework.gramophone.ui.fragments.settings
 
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
@@ -26,7 +25,9 @@ import androidx.core.net.toUri
 import androidx.preference.Preference
 import androidx.preference.SwitchPreferenceCompat
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.hasImagePermission
 import org.akanework.gramophone.logic.hasScopedStorageWithMediaTypes
+import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.ui.fragments.BasePreferenceFragment
 import org.akanework.gramophone.ui.fragments.BaseSettingsActivity
 
@@ -36,15 +37,16 @@ class BehaviorSettingsActivity : BaseSettingsActivity(
     { BehaviorSettingsFragment() })
 
 class BehaviorSettingsFragment : BasePreferenceFragment() {
+
     override fun onResume() {
         super.onResume()
         if (hasScopedStorageWithMediaTypes()) {
             val preference = findPreference<SwitchPreferenceCompat>("album_covers")!!
             preference.isPersistent = false
-            preference.isChecked = requireContext().checkSelfPermission(
-                android.Manifest.permission.READ_MEDIA_IMAGES
-            ) ==
-                    PackageManager.PERMISSION_GRANTED
+            if (!Flags.REMOVE_IMAGE_PERMISSION)
+                preference.isChecked = requireContext().hasImagePermission()
+            else
+                preference.isVisible = false
         }
     }
 
@@ -58,14 +60,11 @@ class BehaviorSettingsFragment : BasePreferenceFragment() {
         }
         // Prior to Android 13, this changes a setting which changes MediaStoreUtils behaviour
         // Android 13 and later, this displays state of images permission granted/denied
-        if (hasScopedStorageWithMediaTypes() && preference.key == "album_covers") {
+        if (hasScopedStorageWithMediaTypes() && !Flags.REMOVE_IMAGE_PERMISSION &&
+            preference.key == "album_covers") {
             Toast.makeText(
-                requireActivity(), if (requireContext().checkSelfPermission(
-                        android.Manifest.permission.READ_MEDIA_IMAGES
-                    )
-                    == PackageManager.PERMISSION_GRANTED
-                ) R.string.deny_images else
-                    R.string.grant_images, Toast.LENGTH_LONG
+                requireActivity(), if (requireContext().hasImagePermission())
+                    R.string.deny_images else R.string.grant_images, Toast.LENGTH_LONG
             ).show()
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
             intent.setData("package:${requireContext().packageName}".toUri())

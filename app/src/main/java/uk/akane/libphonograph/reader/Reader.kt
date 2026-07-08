@@ -42,6 +42,7 @@ import org.akanework.gramophone.logic.hasImprovedMediaStore
 import org.akanework.gramophone.logic.hasScopedStorageV1
 import org.akanework.gramophone.logic.hasScopedStorageWithMediaTypes
 import org.akanework.gramophone.logic.requireMediaStoreId
+import org.akanework.gramophone.logic.utils.Flags
 import org.nift4.mediastorecompat.MediaStoreCompat
 import org.nift4.mediastorecompat.StorageManagerCompat
 import org.nift4.mediastorecompat.StorageVolumeCompat
@@ -179,7 +180,8 @@ internal object Reader {
                 }
         }
         val useEnhancedCoverReading =
-            if (hasScopedStorageWithMediaTypes() && !context.hasImagePermission()) {
+            if (hasScopedStorageWithMediaTypes() && (Flags.REMOVE_IMAGE_PERMISSION ||
+                        !context.hasImagePermission())) {
                 if (shouldUseEnhancedCoverReading == true)
                     throw SecurityException("Requested enhanced cover reading but permission isn't granted")
                 false
