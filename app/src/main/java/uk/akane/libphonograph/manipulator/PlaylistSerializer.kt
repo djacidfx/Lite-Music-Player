@@ -128,7 +128,7 @@ object PlaylistSerializer {
                         }
                         val uriLine = Uri.decode(it)
                         val link = listOf(Entry.parseUri(outFile, uriLine))
-                        val durationSeconds = extInfMatch?.groupValues?.get(1)?.toLong()
+                        val durationSeconds = extInfMatch?.groupValues?.get(1)?.toLongOrNull()
                         val tvKeys = extInfMatch?.groupValues?.get(2)?.let {
                             tvKeysRegex.findAll(it).map { match ->
                                 val key = match.groupValues[1]
