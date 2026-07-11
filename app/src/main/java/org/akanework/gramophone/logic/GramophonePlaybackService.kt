@@ -90,6 +90,7 @@ import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
+import androidx.media3.session.addToCommandQueueThenFlush
 import androidx.preference.PreferenceManager
 import coil3.BitmapImage
 import coil3.imageLoader
@@ -586,7 +587,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                             it.connectionHints
                                 .getBoolean("PrepareWhenReady", false)
                         } != null) {
-                        handler.post { mediaSession?.player?.prepare() }
+                        handler.post { endedWorkaroundPlayer?.prepare() }
                     }
                 }
             }
@@ -749,7 +750,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         // Important: this must happen before sending stop() as that changes state ENDED -> IDLE
         lastPlayedManager.save()
         scope.cancel()
-        mediaSession!!.player.stop()
+        endedWorkaroundPlayer!!.stop()
         handler.removeCallbacks(timer)
         mediaSession!!.setOptOutOfMediaButtonPlaybackResumption(controller!!.currentTimeline.isEmpty)
         proxy?.let {
@@ -758,7 +759,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         controller!!.release()
         controller = null
         mediaSession!!.release()
-        mediaSession!!.player.release()
+        endedWorkaroundPlayer!!.release()
         mediaSession = null
         broadcastAudioSessionClose()
         LyricWidgetProvider.update(this)
@@ -793,7 +794,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             }
         }
         if (controller.connectionHints.getBoolean("PrepareWhenReady", false) &&
-            this.mediaSession?.player?.currentTimeline?.isEmpty == false
+            endedWorkaroundPlayer?.currentTimeline?.isEmpty == false
         ) {
             handler.post { this.controller?.prepare() }
         }
@@ -927,7 +928,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 customCommand.customExtras.getBinder("items")!!)
             val position = customCommand.customExtras.getInt("position")
             val title = customCommand.customExtras.getString("title")!!
-            return Futures.transform(
+            val itemsFuture = Futures.transform(
                 onAddMediaItems(session, controller, songList),
                 { songList ->
                     val currentItem = endedWorkaroundPlayer!!.currentMediaItem
@@ -963,6 +964,10 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 },
                 mainExecutor
             )
+            // Ensure no further player commands (such as play) are executed until we're done.
+            session.addToCommandQueueThenFlush(controller) { Futures.transform(itemsFuture,
+                { null }, MoreExecutors.directExecutor()) }
+            return itemsFuture
         }
         return Futures.immediateFuture(
             when (customCommand.customAction) {
@@ -1667,14 +1672,14 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         else null
         if (lastSentHighlightedLyric != highlightedLyric) {
             lastSentHighlightedLyric = highlightedLyric
-            mediaSession?.let {
-                handler.post {
+            handler.post {
+                endedWorkaroundPlayer?.let {
                     // This will access the media notification controller's getters. But because
                     // controller callback ordering is undefined and in practice our service
                     // controller sometimes gets called first, this would cause us to access a stale
                     // PlaybackInfo in the media notification controller which causes wrong decision
                     // for startInForegroundRequired and that leads to crash.
-                    if (Looper.myLooper() != it.player.applicationLooper)
+                    if (Looper.myLooper() != it.applicationLooper)
                         throw UnsupportedOperationException("wrong looper for triggerNotificationUpdate")
                     isManualNotificationUpdate = true
                     triggerNotificationUpdate()
