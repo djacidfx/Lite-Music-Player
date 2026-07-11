@@ -176,7 +176,7 @@ class EndedWorkaroundPlayer(
         if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
         if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
         if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
-        val ret = super.handleSetMediaItems(mediaItems, startIndex, startPositionMs)
+        val ret = super.handleSetMediaItems(mediaItems, startIndex, startPositionMs, null)
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was not consumed during set")
         return ret
