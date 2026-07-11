@@ -18,6 +18,7 @@
 package org.akanework.gramophone.logic.utils.exoplayer
 
 import android.os.Bundle
+import androidx.core.os.BundleCompat
 import androidx.media3.common.C
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.ForwardingSimpleBasePlayer
@@ -65,11 +66,9 @@ class EndedWorkaroundPlayer(
     val exoPlayer
         get() = player as ExoPlayer
 
-    // TODO: can't we do this in a cleaner way?
     var nextShuffleOrder:
             ((firstIndex: Int, mediaItemCount: Int, EndedWorkaroundPlayer) -> CircularShuffleOrder)? =
         null
-    var nextTitle: String? = null
     var currentTitle: String? = null
     var currentIsPinned = false
     var currentIsOriginal = false
@@ -161,10 +160,16 @@ class EndedWorkaroundPlayer(
         startPositionMs: Long,
         title: String,
         pinned: Boolean,
-        original: Boolean
+        original: Boolean,
+        newShuffleOrder: CircularShuffleOrder.Persistent?
     ) {
         cloneQueue(title, pinned, original)
+        if (nextShuffleOrder != null)
+            throw IllegalStateException("shuffleFactory was found orphaned")
+        nextShuffleOrder = newShuffleOrder?.toFactory()
         super.handleSetMediaItems(mediaItems, startIndex, startPositionMs)
+        if (nextShuffleOrder != null)
+            throw IllegalStateException("shuffleFactory was not consumed during set")
     }
 
     override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> {
@@ -201,8 +206,6 @@ class EndedWorkaroundPlayer(
     fun cloneQueue(newTitle: String, newIsPinned: Boolean, original: Boolean) {
         if (currentTitle == null && !exoPlayer.currentTimeline.isEmpty)
             throw IllegalStateException("have media items but current title is null, logic bug")
-        if (nextTitle != null)
-            throw IllegalStateException("title leaked in cloneQueue")
         else if (currentTitle != null && Flags.MQ_PREVIEW) {
             queueBoard.addQueue(
                 currentTitle!!,
@@ -228,13 +231,19 @@ class EndedWorkaroundPlayer(
     override fun handleSetMediaItems(
         mediaItems: List<MediaItem>,
         startIndex: Int,
-        startPositionMs: Long
+        startPositionMs: Long,
+        extras: Bundle?
     ): ListenableFuture<*> {
-        if (nextTitle == null)
-            throw IllegalArgumentException("setMediaItems called but nextTitle is null, logic bug")
-        val title = nextTitle!!
-        nextTitle = null
-        cloneQueue(title, newIsPinned = false, original = true)
-        return super.handleSetMediaItems(mediaItems, startIndex, startPositionMs)
+        if (nextShuffleOrder != null)
+            throw IllegalStateException("shuffleFactory was found orphaned")
+        val nextTitle = extras?.getString("nextTitle")
+            ?: throw IllegalArgumentException("setMediaItems called but nextTitle is null, logic bug")
+        nextShuffleOrder = BundleCompat.getParcelable(extras, "nextShuffleOrder",
+            CircularShuffleOrder.Persistent::class.java)?.toFactory()
+        cloneQueue(nextTitle, newIsPinned = false, original = true)
+        val ret = super.handleSetMediaItems(mediaItems, startIndex, startPositionMs)
+        if (nextShuffleOrder != null)
+            throw IllegalStateException("shuffleFactory was not consumed during set")
+        return ret
     }
 }

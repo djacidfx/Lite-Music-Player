@@ -297,19 +297,14 @@ class QueueBoard(
                 "Setting current queue; $mq; ids: ${plr.currentMediaItem?.mediaId}, ${mq.queue[mq.startIndex].mediaId}"
             )
         val seed = mq.shuffleOrder
-        if (plr.nextShuffleOrder != null)
-            throw IllegalStateException("shuffleFactory was found orphaned")
         plr.shuffleModeEnabled = mq.shuffleModeEnabled
         plr.repeatMode = mq.repeatMode
         plr.isEnded = mq.ended
-        plr.nextShuffleOrder = seed?.toFactory()
         plr.setMediaItems(
             mq.queue, mq.startIndex,
             mq.startPositionMs,
-            mq.title, mq.expiry.value == null, mq.isOriginal
+            mq.title, mq.expiry.value == null, mq.isOriginal, seed
         )
-        if (plr.nextShuffleOrder != null)
-            throw IllegalStateException("shuffleFactory was not consumed during restore")
     }
 
     /**

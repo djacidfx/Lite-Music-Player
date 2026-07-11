@@ -564,36 +564,27 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             lastPlayedManager.restore { items, factory ->
                 if (mediaSession == null) return@restore
                 if (items != null) {
-                    if (endedWorkaroundPlayer?.nextShuffleOrder != null)
-                        throw IllegalStateException("shuffleFactory was found orphaned")
-                    if (endedWorkaroundPlayer?.nextTitle != null)
-                        throw IllegalStateException("title was found orphaned")
                     if (lastPlayedManager.allowSavingState)
                         return@restore // media items were already applied to player
-                    endedWorkaroundPlayer?.nextShuffleOrder = factory.toFactory()
-                    endedWorkaroundPlayer?.nextTitle = "LastPlayedManager" // TODO(MQ)
+                    val extras = Bundle()
+                    extras.putString("nextTitle", "LastPlayedManager") // TODO(MQ)
+                    extras.putParcelable("nextShuffleOrder", factory)
                     val list = runBlocking { mapMediaItemsForFavorites(items.mediaItems) }
                     try {
-                        mediaSession?.player?.setMediaItems(
+                        endedWorkaroundPlayer?.setMediaItems(
                             list,
                             items.startIndex,
-                            items.startPositionMs
+                            items.startPositionMs,
+                            extras
                         )
                     } catch (e: IllegalSeekPositionException) {
                         try {
-                            mediaSession?.player?.setMediaItems(list)
+                            endedWorkaroundPlayer?.setMediaItems(list, extras)
                             Log.w(TAG, "failed to restore index", e)
                         } catch (_: IllegalSeekPositionException) {
                             Log.e(TAG, "failed to restore", e)
-                            // invalid data, whatever...
-                            endedWorkaroundPlayer?.nextShuffleOrder = null
-                            endedWorkaroundPlayer?.nextTitle = null
                         }
                     }
-                    if (endedWorkaroundPlayer?.nextShuffleOrder != null)
-                        throw IllegalStateException("shuffleFactory was not consumed during restore")
-                    if (endedWorkaroundPlayer?.nextTitle != null)
-                        throw IllegalStateException("title was not consumed during restore")
                     if (mediaSession?.connectedControllers?.find {
                             it.connectionHints
                                 .getBoolean("PrepareWhenReady", false)
@@ -966,8 +957,9 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                 else emptyList())
                         endedWorkaroundPlayer!!.currentIsOriginal = true
                     } else {
-                        endedWorkaroundPlayer!!.setMediaItems(songList, position,
-                            C.TIME_UNSET, title, pinned = false, original = true)
+                        endedWorkaroundPlayer!!.setMediaItems(songList, startIndex = position,
+                            startPositionMs = C.TIME_UNSET, title, pinned = false, original = true,
+                            newShuffleOrder = null)
                     }
                     SessionResult(SessionResult.RESULT_SUCCESS)
                 },
@@ -1146,20 +1138,13 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                         ).also { Log.e(TAG, Log.getThrowableString(it)!!) }
                     )
                 } else {
-                    if (endedWorkaroundPlayer?.nextShuffleOrder != null)
-                        throw IllegalStateException("shuffleFactory was found orphaned")
-                    if (endedWorkaroundPlayer?.nextTitle != null)
-                        throw IllegalStateException("title was found orphaned")
                     if (isForPlayback && items.mediaItems.isNotEmpty()) {
                         val list = runBlocking { mapMediaItemsForFavorites(items.mediaItems) }
-                        endedWorkaroundPlayer?.nextShuffleOrder = factory.toFactory()
-                        endedWorkaroundPlayer?.nextTitle = "EndedWorkaroundPlayer" // TODO(MQ)
                         settable.set(MediaItemsWithStartPosition(list, items.startIndex,
-                            items.startPositionMs))
-                        if (endedWorkaroundPlayer?.nextShuffleOrder != null)
-                            throw IllegalStateException("shuffleFactory was not consumed during resumption")
-                        if (endedWorkaroundPlayer?.nextTitle != null)
-                            throw IllegalStateException("title was not consumed during resumption")
+                            items.startPositionMs, Bundle().apply {
+                                putString("nextTitle", "LastPlayedManager") // TODO(MQ)
+                                putParcelable("nextShuffleOrder", factory)
+                            }))
                     } else if (items.mediaItems.isNotEmpty()) {
                         var theItem = items.mediaItems[items.startIndex]
                         if (theItem.mediaMetadata.durationMs != null &&
@@ -1472,7 +1457,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         startIndex: Int,
         startPositionMs: Long
     ): ListenableFuture<MediaItemsWithStartPosition> {
-        return Util.transformFutureAsync(
+        return Futures.transform(
             onAddMediaItems(mediaSession, controller, mediaItems),
             { mediaItems ->
                 val title = mediaItems.firstOrNull()?.mediaMetadata?.extras
@@ -1485,50 +1470,9 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                         }).build()).build()
                 } else mediaItems
                 val qt = title ?: getString(R.string.unknown_playlist)
-                val items = MediaItemsWithStartPosition(list, startIndex, startPositionMs)
-                val settableFuture = SettableFuture.create<MediaItemsWithStartPosition>()
-                val fence = CompletableDeferred<Unit>()
-                CoroutineScope(Dispatchers.Main).launch {
-                    fence.await()
-                    if (endedWorkaroundPlayer?.nextTitle != null)
-                        throw IllegalStateException("title was found orphaned")
-                    endedWorkaroundPlayer?.nextTitle = qt
-                    settableFuture.set(items)
-                    if (endedWorkaroundPlayer?.nextTitle != null)
-                        throw IllegalStateException("title not consumed during onSetMediaItems" +
-                                " (\"$title\", \"${endedWorkaroundPlayer?.nextTitle}\")")
-                }
-                return@transformFutureAsync object : ListenableFuture<MediaItemsWithStartPosition> {
-                    override fun addListener(listener: Runnable, executor: Executor) {
-                        settableFuture.addListener(listener, executor)
-                        // When settableFuture has a value set before listener is added then set()
-                        // will not have side effect and thus we can't run code after side effect.
-                        // TODO: this stupid fence hack does NOT seem like a net benefit for
-                        //  the code quality, maybe just give up on the onSetMediaItems API?
-                        fence.complete(Unit)
-                    }
-
-                    override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
-                        throw IllegalStateException("This shouldn't be called for this hack")
-                    }
-
-                    override fun get(): MediaItemsWithStartPosition? {
-                        return settableFuture.get()
-                    }
-
-                    override fun get(timeout: Long, unit: TimeUnit): MediaItemsWithStartPosition? {
-                        return settableFuture.get(timeout, unit)
-                    }
-
-                    override fun isCancelled(): Boolean {
-                        return settableFuture.isCancelled
-                    }
-
-                    override fun isDone(): Boolean {
-                        return settableFuture.isDone
-                    }
-                }
-            })
+                return@transform MediaItemsWithStartPosition(list, startIndex, startPositionMs,
+                    Bundle().apply { putString("nextTitle", qt) })
+            }, MoreExecutors.directExecutor())
     }
 
     override fun onAddMediaItems(
