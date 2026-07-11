@@ -561,25 +561,22 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             }
         }
         scope.launch {
-            lastPlayedManager.restore { items, factory ->
+            lastPlayedManager.restore { items ->
                 if (mediaSession == null) return@restore
                 if (items != null) {
                     if (lastPlayedManager.allowSavingState)
                         return@restore // media items were already applied to player
-                    val extras = Bundle()
-                    extras.putString("nextTitle", "LastPlayedManager") // TODO(MQ)
-                    extras.putParcelable("nextShuffleOrder", factory)
                     val list = runBlocking { mapMediaItemsForFavorites(items.mediaItems) }
                     try {
                         endedWorkaroundPlayer?.setMediaItems(
                             list,
                             items.startIndex,
                             items.startPositionMs,
-                            extras
+                            items.extras
                         )
                     } catch (e: IllegalSeekPositionException) {
                         try {
-                            endedWorkaroundPlayer?.setMediaItems(list, extras)
+                            endedWorkaroundPlayer?.setMediaItems(list, items.extras)
                             Log.w(TAG, "failed to restore index", e)
                         } catch (_: IllegalSeekPositionException) {
                             Log.e(TAG, "failed to restore", e)
@@ -959,7 +956,8 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     } else {
                         endedWorkaroundPlayer!!.setMediaItems(songList, startIndex = position,
                             startPositionMs = C.TIME_UNSET, title, pinned = false, original = true,
-                            newShuffleOrder = null)
+                            newShuffleOrder = null, ended = false, repeatMode = null,
+                            shuffleModeEnabled = null, playbackParameters = null)
                     }
                     SessionResult(SessionResult.RESULT_SUCCESS)
                 },
@@ -1130,7 +1128,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
     ): ListenableFuture<MediaItemsWithStartPosition> {
         val settable = SettableFuture.create<MediaItemsWithStartPosition>()
         val job = scope.launch {
-            lastPlayedManager.restore { items, factory ->
+            lastPlayedManager.restore { items ->
                 if (items == null) {
                     settable.setException(
                         NullPointerException(
@@ -1141,10 +1139,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     if (isForPlayback && items.mediaItems.isNotEmpty()) {
                         val list = runBlocking { mapMediaItemsForFavorites(items.mediaItems) }
                         settable.set(MediaItemsWithStartPosition(list, items.startIndex,
-                            items.startPositionMs, Bundle().apply {
-                                putString("nextTitle", "LastPlayedManager") // TODO(MQ)
-                                putParcelable("nextShuffleOrder", factory)
-                            }))
+                            items.startPositionMs, items.extras))
                     } else if (items.mediaItems.isNotEmpty()) {
                         var theItem = items.mediaItems[items.startIndex]
                         if (theItem.mediaMetadata.durationMs != null &&

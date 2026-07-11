@@ -23,6 +23,7 @@ import androidx.media3.common.C
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.ForwardingSimpleBasePlayer
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.Log
 import androidx.media3.exoplayer.ExoPlayer
@@ -72,7 +73,7 @@ class EndedWorkaroundPlayer(
     var currentTitle: String? = null
     var currentIsPinned = false
     var currentIsOriginal = false
-    var isEnded = false
+    private var isEnded = false
         set(value) {
             if (BuildConfig.DEBUG) {
                 Log.d(TAG, "isEnded set to $value (was $field)")
@@ -161,15 +162,24 @@ class EndedWorkaroundPlayer(
         title: String,
         pinned: Boolean,
         original: Boolean,
-        newShuffleOrder: CircularShuffleOrder.Persistent?
-    ) {
+        newShuffleOrder: CircularShuffleOrder.Persistent?,
+        ended: Boolean,
+        repeatMode: Int?,
+        shuffleModeEnabled: Boolean?,
+        playbackParameters: PlaybackParameters?
+    ): ListenableFuture<*> {
         cloneQueue(title, pinned, original)
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was found orphaned")
         nextShuffleOrder = newShuffleOrder?.toFactory()
-        super.handleSetMediaItems(mediaItems, startIndex, startPositionMs)
+        isEnded = ended
+        if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
+        if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
+        if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
+        val ret = super.handleSetMediaItems(mediaItems, startIndex, startPositionMs)
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was not consumed during set")
+        return ret
     }
 
     override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> {
@@ -234,16 +244,18 @@ class EndedWorkaroundPlayer(
         startPositionMs: Long,
         extras: Bundle?
     ): ListenableFuture<*> {
-        if (nextShuffleOrder != null)
-            throw IllegalStateException("shuffleFactory was found orphaned")
         val nextTitle = extras?.getString("nextTitle")
             ?: throw IllegalArgumentException("setMediaItems called but nextTitle is null, logic bug")
-        nextShuffleOrder = BundleCompat.getParcelable(extras, "nextShuffleOrder",
-            CircularShuffleOrder.Persistent::class.java)?.toFactory()
-        cloneQueue(nextTitle, newIsPinned = false, original = true)
-        val ret = super.handleSetMediaItems(mediaItems, startIndex, startPositionMs)
-        if (nextShuffleOrder != null)
-            throw IllegalStateException("shuffleFactory was not consumed during set")
-        return ret
+        val seed = BundleCompat.getParcelable(extras, "nextShuffleOrder",
+            CircularShuffleOrder.Persistent::class.java)
+        val isEnded = extras.getBoolean("isEnded")
+        val repeatMode = if (extras.containsKey("repeatMode")) extras.getInt("repeatMode") else null
+        val shuffleModeEnabled = if (extras.containsKey("shuffleModeEnabled"))
+            extras.getBoolean("shuffleModeEnabled") else null
+        val playbackParameters = if (extras.containsKey("playbackParameters"))
+            PlaybackParameters.fromBundle(extras.getBundle("playbackParameters")!!) else null
+        return setMediaItems(mediaItems, startIndex, startPositionMs, nextTitle, false,
+            true, seed, isEnded, repeatMode, shuffleModeEnabled,
+            playbackParameters)
     }
 }

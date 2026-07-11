@@ -166,7 +166,7 @@ class LastPlayedManager(
         }
     }
 
-    suspend fun restore(callback: (MediaItemsWithStartPosition?, CircularShuffleOrder.Persistent) -> Unit) {
+    suspend fun restore(callback: (MediaItemsWithStartPosition?) -> Unit) {
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "decoding playlist...")
         }
@@ -188,7 +188,7 @@ class LastPlayedManager(
                 val lastPlayedIdx = prefs.getInt("last_played_idx", 0)
                 val lastPlayedPos = prefs.getLong("last_played_pos", 0)
                 if (lastPlayedGrp == null || lastPlayedLst == null) {
-                    runCallback(callback, seed) { null }
+                    withContext(Dispatchers.Main) { callback(null) }
                     return@withContext
                 }
                 val repeatMode = prefs.getInt("repeat_mode", Player.REPEAT_MODE_OFF)
@@ -313,9 +313,17 @@ class LastPlayedManager(
                                 .build()
                         },
                     lastPlayedIdx,
-                    lastPlayedPos
+                    lastPlayedPos,
+                    Bundle().apply {
+                        putString("nextTitle", "LastPlayedManager") // TODO(MQ)
+                        putParcelable("nextShuffleOrder", seed)
+                        putBoolean("isEnded", ended)
+                        putInt("repeatMode", repeatMode)
+                        putBoolean("shuffleModeEnabled", shuffleModeEnabled)
+                        putParcelable("playbackParameters", playbackParameters.toBundle())
+                    }
                 )
-                runCallback(callback, seed) {
+                withContext(Dispatchers.Main) {
                     if (BuildConfig.DEBUG) {
                         Log.d(
                             TAG,
@@ -323,11 +331,7 @@ class LastPlayedManager(
                                     "shuffle $shuffleModeEnabled, ended $ended)..."
                         )
                     }
-                    controller.isEnded = ended
-                    controller.repeatMode = repeatMode
-                    controller.shuffleModeEnabled = shuffleModeEnabled
-                    controller.playbackParameters = playbackParameters
-                    data
+                    callback(data)
                 }
                 return@withContext
             } catch (e: Exception) {
@@ -336,22 +340,11 @@ class LastPlayedManager(
                 } catch (_: Exception) {
                 }
                 Log.e(TAG, Log.getThrowableString(e)!!)
-                runCallback(callback, seed) { null }
+                withContext(Dispatchers.Main) { callback(null) }
                 return@withContext
             }
         }
     }
-}
-
-private suspend inline fun runCallback(
-    crossinline callback: (
-        MediaItemsWithStartPosition?,
-        CircularShuffleOrder.Persistent
-    ) -> Unit,
-    seed: CircularShuffleOrder.Persistent,
-    noinline parameter: () -> MediaItemsWithStartPosition?
-) {
-    withContext(Dispatchers.Main) { callback(parameter(), seed) }
 }
 
 private class SafeDelimitedStringConcat(private val delimiter: String) {

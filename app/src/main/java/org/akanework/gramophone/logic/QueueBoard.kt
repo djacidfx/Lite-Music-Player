@@ -296,14 +296,11 @@ class QueueBoard(
                 TAG,
                 "Setting current queue; $mq; ids: ${plr.currentMediaItem?.mediaId}, ${mq.queue[mq.startIndex].mediaId}"
             )
-        val seed = mq.shuffleOrder
-        plr.shuffleModeEnabled = mq.shuffleModeEnabled
-        plr.repeatMode = mq.repeatMode
-        plr.isEnded = mq.ended
         plr.setMediaItems(
             mq.queue, mq.startIndex,
             mq.startPositionMs,
-            mq.title, mq.expiry.value == null, mq.isOriginal, seed
+            mq.title, mq.expiry.value == null, mq.isOriginal, mq.shuffleOrder, mq.ended,
+            mq.repeatMode, mq.shuffleModeEnabled, null
         )
     }
 
