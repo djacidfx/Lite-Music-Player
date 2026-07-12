@@ -1,0 +1,4 @@
+- Redesign do reprodutor de ficheiros
+- Manter ecrã ligado quando ver letras
+- Suporte para cartões SD na aba do sistema de ficheiros
+- Consertos de bugs
