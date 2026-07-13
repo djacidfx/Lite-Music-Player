@@ -172,6 +172,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         const val SERVICE_GET_LYRICS = "get_lyrics"
         const val SERVICE_TIMER_CHANGED = "changed_timer"
         const val SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY = "set_media_items_seamlessly"
+        const val SERVICE_SET_MEDIA_ITEMS_ATOMIC = "set_media_items_atomic"
 
         const val SERVICE_QB_GET_INACTIVE_LIST = "qb_get_inactive_list"
         const val SERVICE_QB_LOAD_QUEUE = "qb_load"
@@ -803,6 +804,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         availableSessionCommands.add(SessionCommand(SERVICE_GET_LYRICS, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY, Bundle.EMPTY))
+        availableSessionCommands.add(SessionCommand(SERVICE_SET_MEDIA_ITEMS_ATOMIC, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_GET_INACTIVE_LIST, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_GET_QUEUE_FOR_UI, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_LOAD_QUEUE, Bundle.EMPTY))
@@ -923,16 +925,18 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         customCommand: SessionCommand,
         args: Bundle
     ): ListenableFuture<SessionResult> {
-        if (customCommand.customAction == SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY) {
+        if (customCommand.customAction == SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY
+            || customCommand.customAction == SERVICE_SET_MEDIA_ITEMS_ATOMIC) {
             val songList = MediaItemList.getList(
                 customCommand.customExtras.getBinder("items")!!)
             val position = customCommand.customExtras.getInt("position")
             val title = customCommand.customExtras.getString("title")!!
+            val seamless = customCommand.customAction == SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY
             val itemsFuture = Futures.transform(
                 onAddMediaItems(session, controller, songList),
                 { songList ->
-                    val currentItem = endedWorkaroundPlayer!!.currentMediaItem
-                    if (currentItem?.mediaId == songList[position].mediaId) {
+                    if (seamless && endedWorkaroundPlayer!!.currentMediaItem
+                            ?.mediaId == songList[position].mediaId) {
                         val index = endedWorkaroundPlayer!!.currentMediaItemIndex
                         val isLast = endedWorkaroundPlayer!!.mediaItemCount - index == 1
                         endedWorkaroundPlayer!!.cloneQueue(title, newIsPinned = false,
@@ -955,10 +959,14 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                 else emptyList())
                         endedWorkaroundPlayer!!.currentIsOriginal = true
                     } else {
+                        val shuffleModeEnabled = if (!seamless && customCommand.customExtras.containsKey("shuffleEnabled"))
+                            customCommand.customExtras.getBoolean("shuffleEnabled") else null
+                        val repeatMode = if (!seamless && customCommand.customExtras.containsKey("repeatMode"))
+                            customCommand.customExtras.getInt("repeatMode") else null
                         endedWorkaroundPlayer!!.setMediaItems(songList, startIndex = position,
                             startPositionMs = C.TIME_UNSET, title, pinned = false, original = true,
-                            newShuffleOrder = null, ended = false, repeatMode = null,
-                            shuffleModeEnabled = null, playbackParameters = null)
+                            newShuffleOrder = null, ended = false, repeatMode = repeatMode,
+                            shuffleModeEnabled = shuffleModeEnabled, playbackParameters = null)
                     }
                     SessionResult(SessionResult.RESULT_SUCCESS)
                 },

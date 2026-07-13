@@ -88,6 +88,7 @@ import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVIC
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_REORDER
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_UNPIN_QUEUE
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QUERY_TIMER
+import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_SET_MEDIA_ITEMS_ATOMIC
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_SET_TIMER
 import org.akanework.gramophone.logic.utils.AfFormatInfo
@@ -310,6 +311,21 @@ fun MediaController.setMediaItemsSeamlessly(items: List<MediaItem>, position: In
             customExtras.putBinder("items", MediaItemList(items))
             customExtras.putInt("position", position)
             customExtras.putString("title", title)
+        }, Bundle.EMPTY
+    )
+}
+
+fun MediaController.setMediaItemsWithTitle(items: List<MediaItem>, position: Int = C.INDEX_UNSET, title: String,
+                                        shuffleEnabled: Boolean? = null, repeatMode: @Player.RepeatMode Int? = null) {
+    sendCustomCommand(
+        SessionCommand(SERVICE_SET_MEDIA_ITEMS_ATOMIC, Bundle.EMPTY).apply {
+            customExtras.putBinder("items", MediaItemList(items))
+            customExtras.putInt("position", position)
+            customExtras.putString("title", title)
+            if (shuffleEnabled != null)
+                customExtras.putBoolean("shuffleEnabled", shuffleEnabled)
+            if (repeatMode != null)
+                customExtras.putInt("repeatMode", repeatMode)
         }, Bundle.EMPTY
     )
 }
@@ -781,6 +797,8 @@ operator fun PaddingValues.plus(other: PaddingValues): PaddingValues = PaddingVa
     bottom = this.calculateBottomPadding() + other.calculateBottomPadding(),
 )
 
+/*
+TODO: use it with AA
 fun queueWithTitle(mediaItems: List<MediaItem>, mqTitle: String?): List<MediaItem> {
     if (mediaItems.isEmpty() || mqTitle == null) return mediaItems
     val firstMediaItem = mediaItems.first()
@@ -793,6 +811,7 @@ fun queueWithTitle(mediaItems: List<MediaItem>, mqTitle: String?): List<MediaIte
     ).build()
     return listOf(newFirstMediaItem) + mediaItems.drop(1)
 }
+ */
 
 fun ContentResolver.queryWithPending(uri: Uri, projection: Array<String>, selection: String?,
                                      selectionArgs: Array<String>?, sortOrder: String?,

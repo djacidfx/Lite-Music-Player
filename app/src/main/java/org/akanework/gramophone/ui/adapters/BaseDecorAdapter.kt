@@ -35,7 +35,7 @@ import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.ui.ItemHeightHelper
 import org.akanework.gramophone.logic.ui.MyRecyclerView
 import org.akanework.gramophone.logic.ui.QuickLinearSmoothScroller
-import org.akanework.gramophone.logic.queueWithTitle
+import org.akanework.gramophone.logic.setMediaItemsWithTitle
 import org.akanework.gramophone.ui.fragments.AdapterFragment
 import org.akanework.gramophone.ui.getAdapterType
 
@@ -172,13 +172,11 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 val controller = adapter.getActivity().getPlayer()
                 val songList = adapter.getSongList()
                 controller?.apply {
-                    shuffleModeEnabled = false
-                    repeatMode = REPEAT_MODE_OFF
-                    setMediaItems(
-                        queueWithTitle(
-                            songList,
-                            runBlocking { adapter.queueTitle!!.first() }
-                        )
+                    setMediaItemsWithTitle(
+                        songList,
+                        title = runBlocking { adapter.queueTitle!!.first() },
+                        shuffleEnabled = false,
+                        repeatMode = REPEAT_MODE_OFF,
                     )
                     if (songList.isNotEmpty()) {
                         prepare()
@@ -189,14 +187,12 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 val list = adapter.getAlbumList()
                 val controller = adapter.getActivity().getPlayer()
                 controller?.apply {
-                    repeatMode = REPEAT_MODE_OFF
-                    shuffleModeEnabled = false
                     list.takeIf { it.isNotEmpty() }?.also { albums ->
-                        setMediaItems(
-                            queueWithTitle(
-                                albums.flatMap { it.songList },
-                                runBlocking { adapter.queueTitle.first() }
-                            )
+                        setMediaItemsWithTitle(
+                            albums.flatMap { it.songList },
+                            title = runBlocking { adapter.queueTitle.first() },
+                            shuffleEnabled = false,
+                            repeatMode = REPEAT_MODE_OFF,
                         )
                         prepare()
                         play()
@@ -210,12 +206,10 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 val songList = adapter.getSongList()
                 val controller = adapter.getActivity().getPlayer()
                 controller?.apply {
-                    shuffleModeEnabled = true
-                    setMediaItems(
-                        queueWithTitle(
-                            songList,
-                            runBlocking { adapter.queueTitle!!.first() }
-                        )
+                    setMediaItemsWithTitle(
+                        songList,
+                        title = runBlocking { adapter.queueTitle!!.first() },
+                        shuffleEnabled = true,
                     )
                     if (songList.isNotEmpty()) {
                         prepare()
@@ -226,15 +220,13 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 val list = adapter.getAlbumList()
                 val controller = adapter.getActivity().getPlayer()
                 controller?.apply {
-                    repeatMode = REPEAT_MODE_OFF
-                    shuffleModeEnabled = false
                     list.takeIf { it.isNotEmpty() }?.also { albums ->
-                        setMediaItems(
-                            queueWithTitle(
-                                albums.shuffled().flatMap { it.songList },
-                                context.getString(R.string.shuffled,
-                                    runBlocking { adapter.queueTitle.first() })
-                            )
+                        setMediaItemsWithTitle(
+                            albums.shuffled().flatMap { it.songList },
+                            title = context.getString(R.string.shuffled,
+                                    runBlocking { adapter.queueTitle.first() }),
+                            shuffleEnabled = false,
+                            repeatMode = REPEAT_MODE_OFF,
                         )
                         prepare()
                         play()
