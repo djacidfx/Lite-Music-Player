@@ -566,29 +566,31 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             lastPlayedManager.restore { items ->
                 if (mediaSession == null) return@restore
                 if (items != null) {
-                    if (lastPlayedManager.allowSavingState)
-                        return@restore // media items were already applied to player
-                    val list = runBlocking { mapMediaItemsForFavorites(items.mediaItems) }
-                    try {
-                        endedWorkaroundPlayer?.setMediaItems(
-                            list,
-                            items.startIndex,
-                            items.startPositionMs,
-                            items.extras
-                        )
-                    } catch (e: IllegalSeekPositionException) {
+                    val list = mapMediaItemsForFavorites(items.mediaItems)
+                    withContext(Dispatchers.Main) {
+                        if (lastPlayedManager.allowSavingState)
+                            return@withContext // media items were already applied to player
                         try {
-                            endedWorkaroundPlayer?.setMediaItems(list, items.extras)
-                            Log.w(TAG, "failed to restore index", e)
-                        } catch (_: IllegalSeekPositionException) {
-                            Log.e(TAG, "failed to restore", e)
+                            endedWorkaroundPlayer?.setMediaItems(
+                                list,
+                                items.startIndex,
+                                items.startPositionMs,
+                                items.extras
+                            )
+                        } catch (e: IllegalSeekPositionException) {
+                            try {
+                                endedWorkaroundPlayer?.setMediaItems(list, items.extras)
+                                Log.w(TAG, "failed to restore index", e)
+                            } catch (_: IllegalSeekPositionException) {
+                                Log.e(TAG, "failed to restore", e)
+                            }
                         }
-                    }
-                    if (mediaSession?.connectedControllers?.find {
-                            it.connectionHints
-                                .getBoolean("PrepareWhenReady", false)
-                        } != null) {
-                        handler.post { endedWorkaroundPlayer?.prepare() }
+                        if (mediaSession?.connectedControllers?.find {
+                                it.connectionHints
+                                    .getBoolean("PrepareWhenReady", false)
+                            } != null) {
+                            handler.post { endedWorkaroundPlayer?.prepare() }
+                        }
                     }
                 }
             }
@@ -1150,7 +1152,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     )
                 } else {
                     if (isForPlayback && items.mediaItems.isNotEmpty()) {
-                        val list = runBlocking { mapMediaItemsForFavorites(items.mediaItems) }
+                        val list = mapMediaItemsForFavorites(items.mediaItems)
                         settable.set(MediaItemsWithStartPosition(list, items.startIndex,
                             items.startPositionMs, items.extras))
                     } else if (items.mediaItems.isNotEmpty()) {

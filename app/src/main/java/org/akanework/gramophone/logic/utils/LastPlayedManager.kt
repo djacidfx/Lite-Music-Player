@@ -166,7 +166,7 @@ class LastPlayedManager(
         }
     }
 
-    suspend fun restore(callback: (MediaItemsWithStartPosition?) -> Unit) {
+    suspend fun restore(callback: suspend (MediaItemsWithStartPosition?) -> Unit) {
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "decoding playlist...")
         }
@@ -188,7 +188,7 @@ class LastPlayedManager(
                 val lastPlayedIdx = prefs.getInt("last_played_idx", 0)
                 val lastPlayedPos = prefs.getLong("last_played_pos", 0)
                 if (lastPlayedGrp == null || lastPlayedLst == null) {
-                    withContext(Dispatchers.Main) { callback(null) }
+                    callback(null)
                     return@withContext
                 }
                 val repeatMode = prefs.getInt("repeat_mode", Player.REPEAT_MODE_OFF)
@@ -323,16 +323,14 @@ class LastPlayedManager(
                         putParcelable("playbackParameters", playbackParameters.toBundle())
                     }
                 )
-                withContext(Dispatchers.Main) {
-                    if (BuildConfig.DEBUG) {
-                        Log.d(
-                            TAG,
-                            "restoring playlist (${data.mediaItems.size} items, repeat $repeatMode, " +
-                                    "shuffle $shuffleModeEnabled, ended $ended)..."
-                        )
-                    }
-                    callback(data)
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        TAG,
+                        "restoring playlist (${data.mediaItems.size} items, repeat $repeatMode, " +
+                                "shuffle $shuffleModeEnabled, ended $ended)..."
+                    )
                 }
+                callback(data)
                 return@withContext
             } catch (e: Exception) {
                 try {
@@ -340,7 +338,7 @@ class LastPlayedManager(
                 } catch (_: Exception) {
                 }
                 Log.e(TAG, Log.getThrowableString(e)!!)
-                withContext(Dispatchers.Main) { callback(null) }
+                callback(null)
                 return@withContext
             }
         }
