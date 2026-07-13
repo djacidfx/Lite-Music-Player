@@ -283,23 +283,24 @@ class GramophoneAlbumArtProvider : ContentProvider() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ht = HandlerThread("pfd_${System.currentTimeMillis()}")
             ht.start()
+            var bytesRef: ByteArray? = bytes
             val pfd = try {
                 // Specifically ImageDecoder on Android P or later needs a seekable file descriptor
                 context.getSystemService<StorageManager>()!!.openProxyFileDescriptor(
                     ParcelFileDescriptor.MODE_READ_ONLY,
                     object : ProxyFileDescriptorCallback() {
                         override fun onGetSize(): Long {
-                            return bytes.size.toLong()
+                            return bytesRef!!.size.toLong()
                         }
 
                         override fun onRead(offset: Long, size: Int, data: ByteArray): Int {
                             val offset = offset.toInt()
                             var size = size
-                            if (offset + size > bytes.size) {
-                                size = bytes.size - offset
+                            if (offset + size > bytesRef!!.size) {
+                                size = bytesRef!!.size - offset
                             }
                             System.arraycopy(
-                                bytes, offset, data, 0,
+                                bytesRef!!, offset, data, 0,
                                 size
                             )
                             return size
@@ -307,6 +308,10 @@ class GramophoneAlbumArtProvider : ContentProvider() {
 
                         override fun onRelease() {
                             ht.quitSafely()
+                            // Before Android 15 QPR1, onRelease() is called but callback itself is
+                            // never garbage collected. So ensure we don't leak the bitmap in this
+                            // case too, to avoid large memory leaks due to this platform bug.
+                            bytesRef = null
                         }
                     }, Handler(ht.looper)
                 )
