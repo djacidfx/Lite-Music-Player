@@ -24,6 +24,7 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.Parcel
 import android.util.Log
+import android.util.Log.d
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.core.os.BundleCompat
 import androidx.media3.common.BundleListRetriever
@@ -85,7 +86,18 @@ class QueueBoard(
         if (startIndex != -1) {
             new = new.copy(startIndex = startIndex, startPositionMs = C.TIME_UNSET)
         }
-        setCurrQueue(new)
+        val plr = player.endedWorkaroundPlayer!!
+        if (QUEUE_DEBUG)
+            d(
+                TAG,
+                "Setting current queue; $new; ids: ${plr.currentMediaItem?.mediaId}, ${new.queue[new.startIndex].mediaId}"
+            )
+        plr.setMediaItems(
+            new.queue, new.startIndex,
+            new.startPositionMs,
+            new.title, new.expiry.value == null, new.isOriginal, new.shuffleOrder, new.ended,
+            new.repeatMode, new.shuffleModeEnabled, null
+        )
     }
 
     /**
@@ -280,28 +292,6 @@ class QueueBoard(
                 Log.d(TAG, "Failed to rename queue. Not found")
             return false
         }
-    }
-
-    /**
-     * Load a queue into the media player. This should be called on the main thread.
-     *
-     * @param mq Queue object
-     */
-    private fun setCurrQueue(
-        mq: MultiQueueObject
-    ) {
-        val plr = player.endedWorkaroundPlayer!!
-        if (QUEUE_DEBUG)
-            Log.d(
-                TAG,
-                "Setting current queue; $mq; ids: ${plr.currentMediaItem?.mediaId}, ${mq.queue[mq.startIndex].mediaId}"
-            )
-        plr.setMediaItems(
-            mq.queue, mq.startIndex,
-            mq.startPositionMs,
-            mq.title, mq.expiry.value == null, mq.isOriginal, mq.shuffleOrder, mq.ended,
-            mq.repeatMode, mq.shuffleModeEnabled, null
-        )
     }
 
     /**

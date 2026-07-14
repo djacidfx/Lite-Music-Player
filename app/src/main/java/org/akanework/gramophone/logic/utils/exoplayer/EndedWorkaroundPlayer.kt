@@ -17,6 +17,7 @@
 
 package org.akanework.gramophone.logic.utils.exoplayer
 
+import android.content.Context
 import android.os.Bundle
 import androidx.core.os.BundleCompat
 import androidx.media3.common.C
@@ -27,6 +28,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.Log
 import androidx.media3.exoplayer.ExoPlayer
+import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
@@ -47,6 +49,7 @@ import java.util.Objects
  * to restore STATE_ENDED as well and fake it for media3 until it indeed wraps around playlist.
  */
 class EndedWorkaroundPlayer(
+    val context: Context,
     exoPlayer: ExoPlayer,
     private val getLyric: () -> SemanticLyrics?,
     val queueBoard: QueueBoard
@@ -166,20 +169,62 @@ class EndedWorkaroundPlayer(
         ended: Boolean,
         repeatMode: Int?,
         shuffleModeEnabled: Boolean?,
-        playbackParameters: PlaybackParameters?
-    ): ListenableFuture<*> {
+        playbackParameters: PlaybackParameters?,
+    ) {
         cloneQueue(title, pinned, original)
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was found orphaned")
-        nextShuffleOrder = newShuffleOrder?.toFactory()
-        isEnded = ended
         if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
         if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
         if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
-        val ret = super.handleSetMediaItems(mediaItems, startIndex, startPositionMs, null)
+        nextShuffleOrder = newShuffleOrder?.toFactory()
+        super.handleSetMediaItems(mediaItems, startIndex, startPositionMs)
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was not consumed during set")
-        return ret
+        isEnded = ended
+    }
+
+    fun setMediaItemsSeamlessly(
+        mediaItems: List<MediaItem>,
+        startIndex: Int,
+        title: String,
+        pinned: Boolean,
+        original: Boolean,
+        repeatMode: Int?,
+        shuffleModeEnabled: Boolean?,
+        playbackParameters: PlaybackParameters?,
+    ) {
+        if (startIndex == C.INDEX_UNSET)
+            throw IllegalArgumentException("Can't seamlessly set playlist with default position")
+        if (nextShuffleOrder != null)
+            throw IllegalStateException("shuffleFactory was found orphaned")
+        if (currentMediaItem?.mediaId == mediaItems[startIndex].mediaId) {
+            val index = currentMediaItemIndex
+            val isLast = mediaItemCount - index == 1
+            cloneQueue(title, newIsPinned = false, original = true)
+            if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
+            if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
+            if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
+            if (index == 0)
+                super.handleAddMediaItems(0, mediaItems.subList(0, startIndex))
+            else
+                super.handleReplaceMediaItems(0, index,
+                    mediaItems.subList(0, startIndex))
+            super.handleReplaceMediaItems(startIndex, startIndex,
+                listOf(mediaItems[startIndex]))
+            if (isLast) {
+                if (mediaItems.size > startIndex + 1)
+                    super.handleAddMediaItems(Int.MAX_VALUE, mediaItems
+                        .subList(startIndex + 1, mediaItems.size))
+            } else
+                super.handleReplaceMediaItems(startIndex + 1, Int.MAX_VALUE,
+                    if (mediaItems.size > startIndex + 1) mediaItems.subList(
+                        startIndex + 1, mediaItems.size) else emptyList())
+        } else {
+            setMediaItems(mediaItems, startIndex, C.TIME_UNSET, title, pinned,
+                original, null, false, repeatMode, shuffleModeEnabled,
+                playbackParameters)
+        }
     }
 
     override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> {
@@ -241,21 +286,20 @@ class EndedWorkaroundPlayer(
     override fun handleSetMediaItems(
         mediaItems: List<MediaItem>,
         startIndex: Int,
-        startPositionMs: Long,
-        extras: Bundle?
+        startPositionMs: Long
     ): ListenableFuture<*> {
-        val nextTitle = extras?.getString("nextTitle")
-            ?: throw IllegalArgumentException("setMediaItems called but nextTitle is null, logic bug")
-        val seed = BundleCompat.getParcelable(extras, "nextShuffleOrder",
-            CircularShuffleOrder.Persistent::class.java)
-        val isEnded = extras.getBoolean("isEnded")
-        val repeatMode = if (extras.containsKey("repeatMode")) extras.getInt("repeatMode") else null
-        val shuffleModeEnabled = if (extras.containsKey("shuffleModeEnabled"))
-            extras.getBoolean("shuffleModeEnabled") else null
-        val playbackParameters = if (extras.containsKey("playbackParameters"))
-            PlaybackParameters.fromBundle(extras.getBundle("playbackParameters")!!) else null
-        return setMediaItems(mediaItems, startIndex, startPositionMs, nextTitle, false,
-            true, seed, isEnded, repeatMode, shuffleModeEnabled,
-            playbackParameters)
+        val title = mediaItems.firstOrNull()?.mediaMetadata?.extras?.getString("mq_title")
+        val list = if (title != null) mediaItems.toMutableList().apply {
+            this[0] = this[0].buildUpon().setMediaMetadata(this[0].mediaMetadata.buildUpon()
+                .setExtras(Bundle(this[0].mediaMetadata.extras!!).apply {
+                    // Remove mq_title extra as this is purely for transport to here
+                    remove("mq_title")
+                }).build()).build()
+        } else mediaItems
+        val qt = title ?: context.getString(R.string.unknown_playlist)
+        setMediaItems(list, startIndex, startPositionMs, qt, false,
+            true, null, false, null,
+            null, null)
+        return Futures.immediateVoidFuture()
     }
 }

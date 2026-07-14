@@ -166,7 +166,13 @@ class LastPlayedManager(
         }
     }
 
-    suspend fun restore(callback: suspend (MediaItemsWithStartPosition?) -> Unit) {
+    class RestoredPlaylist(
+        val items: MediaItemsWithStartPosition, val title: String,
+        val seed: CircularShuffleOrder.Persistent?, val isEnded: Boolean, val repeatMode: Int,
+        val shuffle: Boolean, val playbackParameters: PlaybackParameters
+    )
+
+    suspend fun restore(callback: suspend (RestoredPlaylist?) -> Unit) {
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "decoding playlist...")
         }
@@ -314,14 +320,6 @@ class LastPlayedManager(
                         },
                     lastPlayedIdx,
                     lastPlayedPos,
-                    Bundle().apply {
-                        putString("nextTitle", "LastPlayedManager") // TODO(MQ)
-                        putParcelable("nextShuffleOrder", seed)
-                        putBoolean("isEnded", ended)
-                        putInt("repeatMode", repeatMode)
-                        putBoolean("shuffleModeEnabled", shuffleModeEnabled)
-                        putParcelable("playbackParameters", playbackParameters.toBundle())
-                    }
                 )
                 if (BuildConfig.DEBUG) {
                     Log.d(
@@ -330,7 +328,8 @@ class LastPlayedManager(
                                 "shuffle $shuffleModeEnabled, ended $ended)..."
                     )
                 }
-                callback(data)
+                callback(RestoredPlaylist(data, "LastPlayedManager" /* TODO(MQ) */,
+                    seed, ended, repeatMode, shuffleModeEnabled, playbackParameters))
                 return@withContext
             } catch (e: Exception) {
                 try {

@@ -225,7 +225,8 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
     private var bitrate: Int? = null
     private var btInfo: BtCodecInfo? = null
     private var proxy: BtCodecInfo.Companion.Proxy? = null
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(Dispatchers.Main)
+    private val lastPlaylistLoaded = CompletableDeferred<Unit>()
     private val lyricsFetcher = CoroutineScope(Dispatchers.IO.limitedParallelism(1))
     private val bitrateFetcher = CoroutineScope(Dispatchers.IO.limitedParallelism(1))
 
@@ -376,6 +377,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         prefs.registerOnSharedPreferenceChangeListener(this)
         onSharedPreferenceChanged(prefs, null) // read initial values
         val player = EndedWorkaroundPlayer(
+            this,
             exoPlayer = ExoPlayer.Builder(
                 this,
                 GramophoneRenderFactory(
@@ -566,24 +568,43 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             lastPlayedManager.restore { items ->
                 if (mediaSession == null) return@restore
                 if (items != null) {
-                    val list = mapMediaItemsForFavorites(items.mediaItems)
+                    val list = mapMediaItemsForFavorites(items.items.mediaItems)
                     withContext(Dispatchers.Main) {
                         if (lastPlayedManager.allowSavingState)
                             return@withContext // media items were already applied to player
                         try {
-                            endedWorkaroundPlayer?.setMediaItems(
-                                list,
-                                items.startIndex,
-                                items.startPositionMs,
-                                items.extras
-                            )
-                        } catch (e: IllegalSeekPositionException) {
-                            try {
-                                endedWorkaroundPlayer?.setMediaItems(list, items.extras)
-                                Log.w(TAG, "failed to restore index", e)
-                            } catch (_: IllegalSeekPositionException) {
-                                Log.e(TAG, "failed to restore", e)
+                            if (list.size >= items.items.startIndex) {
+                                endedWorkaroundPlayer?.setMediaItems(
+                                    list,
+                                    items.items.startIndex,
+                                    items.items.startPositionMs,
+                                    items.title,
+                                    false, /* TODO(MQ) */
+                                    true, /* TODO(MQ) */
+                                    items.seed,
+                                    items.isEnded,
+                                    items.repeatMode,
+                                    items.shuffle,
+                                    items.playbackParameters,
+                                )
+                            } else {
+                                endedWorkaroundPlayer?.setMediaItems(
+                                    list,
+                                    C.INDEX_UNSET,
+                                    C.TIME_UNSET,
+                                    items.title,
+                                    false, /* TODO(MQ) */
+                                    true, /* TODO(MQ) */
+                                    items.seed,
+                                    items.isEnded,
+                                    items.repeatMode,
+                                    items.shuffle,
+                                    items.playbackParameters,
+                                )
+                                Log.w(TAG, "failed to restore index")
                             }
+                        } catch (e: IllegalSeekPositionException) {
+                            Log.e(TAG, "failed to restore", e)
                         }
                         if (mediaSession?.connectedControllers?.find {
                                 it.connectionHints
@@ -592,10 +613,11 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                             handler.post { endedWorkaroundPlayer?.prepare() }
                         }
                     }
-                }
+                } else
+                    lastPlaylistLoaded.complete(Unit)
             }
         }
-        scope.launch {
+        scope.launch(Dispatchers.Default) {
             gramophoneApplication.reader.playlistListFlow.map { it.find { p -> p is Favorite } }
                 .collect { list ->
                     val ids = list?.songList?.map { it.mediaId } ?: emptyList()
@@ -937,33 +959,14 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             val itemsFuture = Futures.transform(
                 onAddMediaItems(session, controller, songList),
                 { songList ->
-                    if (seamless && endedWorkaroundPlayer!!.currentMediaItem
-                            ?.mediaId == songList[position].mediaId) {
-                        val index = endedWorkaroundPlayer!!.currentMediaItemIndex
-                        val isLast = endedWorkaroundPlayer!!.mediaItemCount - index == 1
-                        endedWorkaroundPlayer!!.cloneQueue(title, newIsPinned = false,
-                            original = true)
-                        if (index == 0)
-                            endedWorkaroundPlayer!!.addMediaItems(0,
-                                songList.subList(0, position))
-                        else
-                            endedWorkaroundPlayer!!.replaceMediaItems(0, index,
-                                songList.subList(0, position))
-                        endedWorkaroundPlayer!!.replaceMediaItem(position,
-                            songList[position])
-                        if (isLast)
-                            endedWorkaroundPlayer!!.addMediaItems(if (songList.size > position + 1)
-                                songList.subList(position + 1, songList.size) else emptyList())
-                        else
-                            endedWorkaroundPlayer!!.replaceMediaItems(position + 1,
-                                Int.MAX_VALUE, if (songList.size > position +
-                                    1) songList.subList(position + 1, songList.size)
-                                else emptyList())
-                        endedWorkaroundPlayer!!.currentIsOriginal = true
+                    if (seamless) {
+                        endedWorkaroundPlayer!!.setMediaItemsSeamlessly(songList,
+                            position, title, pinned = false, original = true,
+                            repeatMode = null, shuffleModeEnabled = null, playbackParameters = null)
                     } else {
-                        val shuffleModeEnabled = if (!seamless && customCommand.customExtras.containsKey("shuffleEnabled"))
+                        val shuffleModeEnabled = if (customCommand.customExtras.containsKey("shuffleEnabled"))
                             customCommand.customExtras.getBoolean("shuffleEnabled") else null
-                        val repeatMode = if (!seamless && customCommand.customExtras.containsKey("repeatMode"))
+                        val repeatMode = if (customCommand.customExtras.containsKey("repeatMode"))
                             customCommand.customExtras.getInt("repeatMode") else null
                         endedWorkaroundPlayer!!.setMediaItems(songList, startIndex = position,
                             startPositionMs = C.TIME_UNSET, title, pinned = false, original = true,
@@ -1142,6 +1145,14 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         isForPlayback: Boolean
     ): ListenableFuture<MediaItemsWithStartPosition> {
         val settable = SettableFuture.create<MediaItemsWithStartPosition>()
+        if (isForPlayback) {
+            scope.launch {
+                lastPlaylistLoaded.await()
+                Util.handlePlayButtonAction(endedWorkaroundPlayer)
+                settable.setException(MediaSession.ManuallyHandlePlaybackResumption())
+            }
+            return settable
+        }
         val job = scope.launch {
             lastPlayedManager.restore { items ->
                 if (items == null) {
@@ -1151,33 +1162,29 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                         ).also { Log.e(TAG, Log.getThrowableString(it)!!) }
                     )
                 } else {
-                    if (isForPlayback && items.mediaItems.isNotEmpty()) {
-                        val list = mapMediaItemsForFavorites(items.mediaItems)
-                        settable.set(MediaItemsWithStartPosition(list, items.startIndex,
-                            items.startPositionMs, items.extras))
-                    } else if (items.mediaItems.isNotEmpty()) {
-                        var theItem = items.mediaItems[items.startIndex]
+                    if (items.items.mediaItems.isNotEmpty()) {
+                        var theItem = items.items.mediaItems[items.items.startIndex]
                         if (theItem.mediaMetadata.durationMs != null &&
                             theItem.mediaMetadata.durationMs!! > 0 &&
-                            items.startPositionMs != C.TIME_UNSET
+                            items.items.startPositionMs != C.TIME_UNSET
                         ) {
                             theItem = theItem.buildUpon()
                                 .setMediaMetadata(
                                     theItem.mediaMetadata.buildUpon()
                                     .setExtras(Bundle(theItem.mediaMetadata.extras).apply {
-                                        if (items.startPositionMs == 0L) {
+                                        if (items.items.startPositionMs == 0L) {
                                             putInt(
                                                 MediaConstants.EXTRAS_KEY_COMPLETION_STATUS,
                                                 MediaConstants.EXTRAS_VALUE_COMPLETION_STATUS_NOT_PLAYED
                                             )
-                                        } else if (items.startPositionMs != theItem.mediaMetadata.durationMs!!) {
+                                        } else if (items.items.startPositionMs != theItem.mediaMetadata.durationMs!!) {
                                             putInt(
                                                 MediaConstants.EXTRAS_KEY_COMPLETION_STATUS,
                                                 MediaConstants.EXTRAS_VALUE_COMPLETION_STATUS_PARTIALLY_PLAYED
                                             )
                                             putDouble(
                                                 MediaConstants.EXTRAS_KEY_COMPLETION_PERCENTAGE,
-                                                (items.startPositionMs.toDouble() /
+                                                (items.items.startPositionMs.toDouble() /
                                                         theItem.mediaMetadata.durationMs!!)
                                                     .coerceIn(0.0, 1.0)
                                             )
@@ -1193,11 +1200,11 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                         settable.set(
                             MediaItemsWithStartPosition(
                                 listOf(theItem),
-                                0, items.startPositionMs
+                                0, items.items.startPositionMs
                             )
                         )
                     } else {
-                        settable.set(items)
+                        settable.set(items.items)
                     }
                 }
             }
@@ -1459,32 +1466,6 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         }
     }
 
-    // To avoid race conditions, the future here must be completed on session application thread
-    override fun onSetMediaItems(
-        mediaSession: MediaSession,
-        controller: MediaSession.ControllerInfo,
-        mediaItems: List<MediaItem>,
-        startIndex: Int,
-        startPositionMs: Long
-    ): ListenableFuture<MediaItemsWithStartPosition> {
-        return Futures.transform(
-            onAddMediaItems(mediaSession, controller, mediaItems),
-            { mediaItems ->
-                val title = mediaItems.firstOrNull()?.mediaMetadata?.extras
-                    ?.getString("mq_title")
-                val list = if (title != null) mediaItems.toMutableList().apply {
-                    this[0] = this[0].buildUpon().setMediaMetadata(this[0].mediaMetadata.buildUpon()
-                        .setExtras(Bundle(this[0].mediaMetadata.extras!!).apply {
-                            // Remove mq_title extra as this is purely for transport to here
-                            remove("mq_title")
-                        }).build()).build()
-                } else mediaItems
-                val qt = title ?: getString(R.string.unknown_playlist)
-                return@transform MediaItemsWithStartPosition(list, startIndex, startPositionMs,
-                    Bundle().apply { putString("nextTitle", qt) })
-            }, MoreExecutors.directExecutor())
-    }
-
     override fun onAddMediaItems(
         mediaSession: MediaSession,
         controller: MediaSession.ControllerInfo,
@@ -1562,6 +1543,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
     override fun onTimelineChanged(timeline: Timeline, reason: @Player.TimelineChangeReason Int) {
         if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) {
             lastPlayedManager.allowSavingState = true
+            lastPlaylistLoaded.complete(Unit)
             refreshMediaButtonCustomLayout()
             if (!computeRgMode(false))
                 throw IllegalStateException("unreachable, mode failed with force=false")
