@@ -40,9 +40,9 @@ import android.os.storage.StorageManager
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants.SEEK_SET
-import android.util.Log
 import androidx.core.content.getSystemService
 import androidx.core.os.BundleCompat
+import androidx.media3.common.util.Log
 import coil3.ColorImage
 import coil3.decode.ContentMetadata
 import coil3.decode.DecodeResult

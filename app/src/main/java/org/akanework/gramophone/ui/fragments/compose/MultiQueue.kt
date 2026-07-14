@@ -167,9 +167,7 @@ fun MqListItem(
                         }
                     }
                 }
-                Column(
-
-                ) {
+                Column {
                     Text(
                         text = "${index + 1}. ${mq.getTitleForUi()}",
                         maxLines = 1,

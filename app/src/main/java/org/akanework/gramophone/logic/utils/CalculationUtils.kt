@@ -117,4 +117,4 @@ object CalculationUtils {
 }
 
 fun Long.convertDurationToTimeStamp(zero: Boolean = false) =
-    CalculationUtils.convertDurationToTimeStamp(this, zero)
+    convertDurationToTimeStamp(this, zero)

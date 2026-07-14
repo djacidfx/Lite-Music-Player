@@ -23,11 +23,11 @@ import android.os.Build;
 import android.os.SystemClock;
 import android.text.format.DateUtils;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.View;
 
 import androidx.annotation.DeprecatedSinceApi;
 import androidx.appcompat.widget.AppCompatTextView;
+import androidx.media3.common.util.Log;
 
 import java.util.Formatter;
 import java.util.IllegalFormatException;

@@ -46,7 +46,7 @@ class TabOrderPreference(context: Context, attrs: AttributeSet) : DialogPreferen
             persistString(new)
         }
 
-    override fun onGetDefaultValue(a: TypedArray, index: Int): Any? {
+    override fun onGetDefaultValue(a: TypedArray, index: Int): Any {
         return a.getString(index) ?: ""
     }
 
@@ -58,7 +58,7 @@ class TabOrderPreference(context: Context, attrs: AttributeSet) : DialogPreferen
         return R.layout.tab_order_dialog
     }
 
-    class TabOrderDialog() : PreferenceDialogFragmentCompat() {
+    class TabOrderDialog : PreferenceDialogFragmentCompat() {
         private val adapter by lazy { TabOrderAdapter((preference as TabOrderPreference).value) }
 
         override fun onBindDialogView(view: View) {

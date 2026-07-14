@@ -18,7 +18,6 @@
 package org.akanework.gramophone.ui.adapters
 
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.Animation

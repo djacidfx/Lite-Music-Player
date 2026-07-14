@@ -23,14 +23,13 @@ import android.os.Binder
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Parcel
-import android.util.Log
-import android.util.Log.d
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.core.os.BundleCompat
 import androidx.media3.common.BundleListRetriever
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player.REPEAT_MODE_OFF
+import androidx.media3.common.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.akanework.gramophone.logic.utils.CircularShuffleOrder
 import org.akanework.gramophone.logic.utils.MediaItemList
@@ -73,7 +72,7 @@ class QueueBoard(
         index: Int,
         startIndex: Int = -1
     ) {
-        Log.v(TAG, "commitQueue() called")
+        Log.d(TAG, "commitQueue() called")
         if (index < 0 || index >= masterQueues.size) {
             Log.w(
                 TAG,
@@ -88,7 +87,7 @@ class QueueBoard(
         }
         val plr = player.endedWorkaroundPlayer!!
         if (QUEUE_DEBUG)
-            d(
+            Log.d(
                 TAG,
                 "Setting current queue; $new; ids: ${plr.currentMediaItem?.mediaId}, ${new.queue[new.startIndex].mediaId}"
             )
@@ -219,7 +218,7 @@ class QueueBoard(
         try {
             masterQueues.removeAt(index)
         } catch (e: IndexOutOfBoundsException) {
-            Log.w(TAG, e.message, e)
+            Log.w(TAG, e.message.toString(), e)
             return false
         }
 

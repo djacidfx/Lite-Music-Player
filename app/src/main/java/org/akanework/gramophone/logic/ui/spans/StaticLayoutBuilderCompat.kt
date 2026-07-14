@@ -70,7 +70,7 @@ class StaticLayoutBuilderCompat private constructor(
         this.start = 0
         this.end = source.length
         this.alignment = Layout.Alignment.ALIGN_NORMAL
-        this.maxLines = Int.Companion.MAX_VALUE
+        this.maxLines = Int.MAX_VALUE
         this.lineSpacingAdd = DEFAULT_LINE_SPACING_ADD
         this.lineSpacingMultiplier = DEFAULT_LINE_SPACING_MULTIPLIER
         this.hyphenationFrequency = DEFAULT_HYPHENATION_FREQUENCY

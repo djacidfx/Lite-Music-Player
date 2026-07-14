@@ -113,7 +113,7 @@ private sealed class SyntacticLrc {
     data class Metadata(val name: String, val value: String) : SyntacticLrc()
     data class LyricText(val text: String) : SyntacticLrc()
     data class InvalidText(val text: String) : SyntacticLrc()
-    open class NewLine() : SyntacticLrc() {
+    open class NewLine : SyntacticLrc() {
         class SyntheticNewLine : NewLine()
     }
 

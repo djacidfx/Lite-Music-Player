@@ -24,7 +24,7 @@ import android.os.Environment
 import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.core.util.Consumer
-import org.nift4.mediastorecompat.Log
+import androidx.media3.common.util.Log
 import org.nift4.mediastorecompat.MediaStoreCompat
 import org.nift4.mediastorecompat.StorageManagerCompat
 import java.io.File

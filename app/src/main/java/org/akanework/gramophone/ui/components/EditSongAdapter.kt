@@ -112,7 +112,7 @@ abstract class EditSongAdapter(
     abstract fun onRowMoved(from: Int, to: Int) // must call notifyItemMoved() if actually moving
     abstract fun removeItem(pos: Int) // must call notifyItemRemoved() if actually removing
 
-    inner class PlaylistCardMoveCallback() :
+    inner class PlaylistCardMoveCallback :
         ItemTouchHelper.SimpleCallback(
             ItemTouchHelper.UP or ItemTouchHelper.DOWN,
             ItemTouchHelper.START or ItemTouchHelper.END
