@@ -201,7 +201,7 @@ class EndedWorkaroundPlayer(
         if (currentMediaItem?.mediaId == mediaItems[startIndex].mediaId) {
             val index = currentMediaItemIndex
             val isLast = mediaItemCount - index == 1
-            cloneQueue(title, newIsPinned = false, original = true)
+            cloneQueue(title, pinned, original)
             if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
             if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
             if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
