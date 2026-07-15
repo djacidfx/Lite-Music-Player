@@ -252,8 +252,8 @@ class BugHandlerActivity : BaseActivity() {
                         try {
                             startActivity(Intent(Intent.ACTION_SEND).apply {
                                 selector =
-                                    Intent(Intent.ACTION_SENDTO).apply { setData("mailto:nift4dev@gmail.com".toUri()) }
-                                putExtra(Intent.EXTRA_EMAIL, arrayOf("nift4dev@gmail.com"))
+                                    Intent(Intent.ACTION_SENDTO).apply { setData("mailto:nift4@posteo.net".toUri()) }
+                                putExtra(Intent.EXTRA_EMAIL, arrayOf("nift4@posteo.net"))
                                 putExtra(
                                     Intent.EXTRA_SUBJECT,
                                     "Gramophone ${BuildConfig.MY_VERSION_NAME} crashed"
@@ -279,7 +279,7 @@ class BugHandlerActivity : BaseActivity() {
                                 getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = ClipData.newPlainText(
                                 "email text",
-                                "Send below text to nift4dev@gmail.com:\n\n\n$mailText"
+                                "nift4@posteo.net\n\n\n$mailText"
                             )
                             allowDiskAccessInStrictMode {
                                 clipboard.setPrimaryClip(clip)
