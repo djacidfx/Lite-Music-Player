@@ -947,8 +947,14 @@ class MqState(
         }
 
         init {
+            // wait for MediaBrowser to update before updating recycler
             if (index == -1) {
-                playlistQueueSheet?.forceUpdate()
+                instance.addListener(object : Player.Listener {
+                    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                        instance.removeListener(this)
+                        playlistQueueSheet?.forceUpdate()
+                    }
+                })
             }
         }
         detachedQueue?.repeatMode?.let {
