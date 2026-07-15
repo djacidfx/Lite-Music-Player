@@ -318,13 +318,6 @@ fun QueueInfo(
     val MediumCornerRadius = 12.dp
     // clean up later
 
-    LaunchedEffect(mqState.inactiveQueues.size) {
-        if (mqState.inactiveQueues.isEmpty()) {
-            mqState.resetHead()
-            mqState.toggleExpand()
-        }
-    }
-
     Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -851,6 +844,9 @@ class MqState(
         private set
 
     var isEditAllowed by mutableStateOf(false)
+
+    val numQueues
+        get() = inactiveQueues.size + if (activeQueue != null) 1 else 0
 
     init {
         instance.addListener(this)

@@ -208,6 +208,7 @@ class PlaylistQueueSheet(
                         if (forceInitState) {
                             mqState.init {
                                 forceUpdate()
+                                mqState.resetHead(false)
                             }
                             forceInit.value = false
                         }
