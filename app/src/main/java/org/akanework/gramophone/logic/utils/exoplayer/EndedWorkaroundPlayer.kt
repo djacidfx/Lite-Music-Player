@@ -104,15 +104,18 @@ class EndedWorkaroundPlayer(
     override fun getState(): State {
         var superState = super.state
         if (superState.currentMetadata.artworkUri != null &&
-            superState.currentMetadata.hdArtworkUri != null) {
+            superState.currentMetadata.hdArtworkUri != null
+        ) {
             superState = superState.buildUpon()
-                .setPlaylist(superState.timeline, superState.currentTracks,
+                .setPlaylist(
+                    superState.timeline, superState.currentTracks,
                     superState.currentMetadata.buildUpon()
                         .setArtworkUri(superState.currentMetadata.hdArtworkUri)
                         .setExtras(Bundle(superState.currentMetadata.extras!!).apply {
                             remove(EXTRA_HD_ARTWORK_URI)
                         })
-                        .build())
+                        .build()
+                )
                 .build()
         }
         if (BuildConfig.APPLICATION_ID == "com.tencent.qqmusic") {
@@ -120,7 +123,8 @@ class EndedWorkaroundPlayer(
             val lyric = getLyric()
             if (lyric != null && lyric is SemanticLyrics.SyncedLyrics) {
                 superState = superState.buildUpon()
-                    .setPlaylist(superState.timeline, superState.currentTracks,
+                    .setPlaylist(
+                        superState.timeline, superState.currentTracks,
                         superState.currentMetadata.buildUpon()
                             .setExtras((superState.currentMetadata.extras?.let { Bundle(it) }
                                 ?: Bundle()).apply {
@@ -129,20 +133,28 @@ class EndedWorkaroundPlayer(
                                     put("artist", superState.currentMetadata.artist)
                                     // Put lyric hash code into songId as well to be able to reset
                                     // lyrics if they load late or get changed.
-                                    put("songId", superState.playlist.getOrNull(
-                                        superState.currentMediaItemIndex)?.mediaItem?.mediaId
-                                        .toString() + Objects.toIdentityString(lyric))
+                                    put(
+                                        "songId", superState.playlist.getOrNull(
+                                            superState.currentMediaItemIndex
+                                        )?.mediaItem?.mediaId
+                                            .toString() + Objects.toIdentityString(lyric)
+                                    )
                                     // This can parse some odd Netease-specific JSON list or normal
                                     // LRC without bells and whistles (fwiw, the Netease format is
                                     // not even better than plain LRC), no word sync as of right now
-                                    put("lyric", lyric.text.joinToString(
-                                        "\n") {
-                                        val s = it.start.toLong() / 1000
-                                        "[%02d:%02d.%02d]".format(s / 60, s % 60,
-                                            (it.start.toLong() % 1000) / 10) + it.text
-                                    })
+                                    put(
+                                        "lyric", lyric.text.joinToString(
+                                            "\n"
+                                        ) {
+                                            val s = it.start.toLong() / 1000
+                                            "[%02d:%02d.%02d]".format(
+                                                s / 60, s % 60,
+                                                (it.start.toLong() % 1000) / 10
+                                            ) + it.text
+                                        })
                                 }.toString())
-                            }).build()).build()
+                            }).build()
+                    ).build()
             }
         }
         if (isEnded) {
@@ -208,22 +220,33 @@ class EndedWorkaroundPlayer(
             if (index == 0)
                 super.handleAddMediaItems(0, mediaItems.subList(0, startIndex))
             else
-                super.handleReplaceMediaItems(0, index,
-                    mediaItems.subList(0, startIndex))
-            super.handleReplaceMediaItems(startIndex, startIndex,
-                listOf(mediaItems[startIndex]))
+                super.handleReplaceMediaItems(
+                    0, index,
+                    mediaItems.subList(0, startIndex)
+                )
+            super.handleReplaceMediaItems(
+                startIndex, startIndex,
+                listOf(mediaItems[startIndex])
+            )
             if (isLast) {
                 if (mediaItems.size > startIndex + 1)
-                    super.handleAddMediaItems(Int.MAX_VALUE, mediaItems
-                        .subList(startIndex + 1, mediaItems.size))
+                    super.handleAddMediaItems(
+                        Int.MAX_VALUE, mediaItems
+                            .subList(startIndex + 1, mediaItems.size)
+                    )
             } else
-                super.handleReplaceMediaItems(startIndex + 1, Int.MAX_VALUE,
+                super.handleReplaceMediaItems(
+                    startIndex + 1, Int.MAX_VALUE,
                     if (mediaItems.size > startIndex + 1) mediaItems.subList(
-                        startIndex + 1, mediaItems.size) else emptyList())
+                        startIndex + 1, mediaItems.size
+                    ) else emptyList()
+                )
         } else {
-            setMediaItems(mediaItems, startIndex, C.TIME_UNSET, title, pinned,
+            setMediaItems(
+                mediaItems, startIndex, C.TIME_UNSET, title, pinned,
                 original, null, false, repeatMode, shuffleModeEnabled,
-                playbackParameters)
+                playbackParameters
+            )
         }
     }
 
@@ -273,8 +296,14 @@ class EndedWorkaroundPlayer(
                 exoPlayer.currentPosition,
                 currentIsPinned,
                 currentIsOriginal,
-                CircularShuffleOrder.Persistent(exoPlayer.shuffleOrder as
-                        CircularShuffleOrder),
+                repeatMode,
+                if (shuffleModeEnabled) {
+                    CircularShuffleOrder.Persistent(
+                        exoPlayer.shuffleOrder as CircularShuffleOrder
+                    )
+                } else {
+                    null
+                },
                 exoPlayer.playbackState == STATE_ENDED,
             )
         }
@@ -290,16 +319,20 @@ class EndedWorkaroundPlayer(
     ): ListenableFuture<*> {
         val title = mediaItems.firstOrNull()?.mediaMetadata?.extras?.getString("mq_title")
         val list = if (title != null) mediaItems.toMutableList().apply {
-            this[0] = this[0].buildUpon().setMediaMetadata(this[0].mediaMetadata.buildUpon()
+            this[0] = this[0].buildUpon().setMediaMetadata(
+                this[0].mediaMetadata.buildUpon()
                 .setExtras(Bundle(this[0].mediaMetadata.extras!!).apply {
                     // Remove mq_title extra as this is purely for transport to here
                     remove("mq_title")
-                }).build()).build()
+                }).build()
+            ).build()
         } else mediaItems
         val qt = title ?: context.getString(R.string.unknown_playlist)
-        setMediaItems(list, startIndex, startPositionMs, qt, false,
+        setMediaItems(
+            list, startIndex, startPositionMs, qt, false,
             true, null, false, null,
-            null, null)
+            null, null
+        )
         return Futures.immediateVoidFuture()
     }
 }

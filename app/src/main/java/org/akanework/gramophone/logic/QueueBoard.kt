@@ -23,13 +23,14 @@ import android.os.Binder
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Parcel
+import android.util.Log
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.core.os.BundleCompat
 import androidx.media3.common.BundleListRetriever
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.Player.REPEAT_MODE_OFF
-import androidx.media3.common.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.akanework.gramophone.logic.utils.CircularShuffleOrder
 import org.akanework.gramophone.logic.utils.MediaItemList
@@ -47,7 +48,7 @@ class QueueBoard(
     val masterQueues: MutableList<MultiQueueObject> = mutableListOf(),
     queues: MutableList<MultiQueueObject> = ArrayList(),
 ) {
-    private val QUEUE_DEBUG = true
+    private val QUEUE_DEBUG = true // TODO: disable when done
     private val TAG = QueueBoard::class.simpleName.toString()
 
     init {
@@ -166,6 +167,7 @@ class QueueBoard(
         startPositionMs: Long?,
         shouldPin: Boolean,
         isOriginal: Boolean,
+        repeatMode: (@Player.RepeatMode Int)?,
         shuffleOrder: CircularShuffleOrder.Persistent?,
         ended: Boolean,
     ): MultiQueueObject {
@@ -176,6 +178,7 @@ class QueueBoard(
                 TAG, "Adding to queue \"$title\". medialist size = ${mediaList.size}. " +
                         "replace/startIndex = $mediaItemIndex"
             )
+        if (mediaList.isEmpty()) throw IllegalArgumentException("Media list cannot be empty")
 
         // Title is (effectively) uid
         masterQueues.removeAll { it.title.trimEnd() == title }
@@ -192,7 +195,7 @@ class QueueBoard(
             queue = ArrayList(mediaList),
             startIndex = mediaItemIndex,
             startPositionMs = startPositionMs ?: C.TIME_UNSET,
-            repeatMode = player.endedWorkaroundPlayer!!.repeatMode,
+            repeatMode = repeatMode ?: 0,
             shuffleOrder = shuffleOrder,
             ended = ended,
             isOriginal = isOriginal,
@@ -219,6 +222,35 @@ class QueueBoard(
             masterQueues.removeAt(index)
         } catch (e: IndexOutOfBoundsException) {
             Log.w(TAG, e.message.toString(), e)
+            return false
+        }
+
+        return true
+    }
+
+    /**
+     * Deletes a queue.
+     *
+     * When deleting the active queue, the last inactive queue is loaded. When the active queue is
+     * the only queue, playback is stopped.
+     *
+     * @param index
+     * @return true if the deletion is successful, otherwise false.
+     */
+    fun deleteQueue(title: String): Boolean {
+        val mq = masterQueues.find { it.title == title }
+        val index = mq?.let {
+            masterQueues.indexOf(it)
+        }
+        if (QUEUE_DEBUG)
+            Log.d(TAG, "DELETING QUEUE AT INDEX: $index")
+
+        if (index == null) return false
+
+        try {
+            masterQueues.removeAt(index)
+        } catch (e: IndexOutOfBoundsException) {
+            Log.w(TAG, e.message, e)
             return false
         }
 
@@ -270,8 +302,16 @@ class QueueBoard(
         )
     }
 
-    fun renameQueue(mq: MultiQueueObject, newName: String): Boolean {
-        if (masterQueues.any { it.title == newName }) {
+    fun renameQueue(index: Int, newName: String, dryRun: Boolean): Boolean {
+        if (index >= masterQueues.size) return false
+        return renameQueue(masterQueues[index], newName, dryRun)
+    }
+
+    fun renameQueue(mq: MultiQueueObject, newName: String, dryRun: Boolean): Boolean {
+        // TODO(MQ) how to handle isOriginal and i18n bs.
+        // If you rename a queue to "Folder1 (+)" and have a non-original queue named "Folder 1", then you will have 2 queues the same name
+        val plr = player.endedWorkaroundPlayer!!
+        if (plr.currentTitle == newName || masterQueues.any { it.title == newName }) {
             if (QUEUE_DEBUG)
                 Log.d(TAG, "Failed to rename queue to \"$newName\". Already exists")
             return false
@@ -279,12 +319,11 @@ class QueueBoard(
         val found = masterQueues.any { it == mq }
         if (found) {
             val oldIndex = masterQueues.indexOf(mq)
-            masterQueues[oldIndex] = masterQueues[oldIndex].copy(title = newName)
+            if (!dryRun) {
+                masterQueues[oldIndex] = masterQueues[oldIndex].copy(title = newName, isOriginal = true)
+            }
             if (QUEUE_DEBUG)
                 Log.d(TAG, "Successfully renamed queue from \"${mq.title}\" to \"$newName\"")
-            return true
-        } else if (player.endedWorkaroundPlayer?.currentTitle == mq.title) {
-            player.endedWorkaroundPlayer!!.currentTitle = mq.title
             return true
         } else {
             if (QUEUE_DEBUG)
@@ -329,6 +368,15 @@ data class MultiQueueObject(
     val id: Long, // queue uid
     var index: Int, // order of queue
     var title: String,
+    /**
+     * Expiry denotes when this queue is eligible for auto removal; these events happen when
+     * triggered by the user, or automatically on QueueBoard initialization, or when the user switches any queue.
+     *
+     * Active queues will never be automatically removed, however, the pin state does not
+     * automatically change. When a pinned queue becomes an active queue, it will remain pinned when
+     * it becomes inactive. If said queue is unpinned, then it will renew its expiry time when it
+     * becomes inactive.
+     */
     var expiry: MutableStateFlow<Long?>,
     /**
      * The order of songs are dynamic. This should not be accessed from outside QueueBoard.
@@ -337,7 +385,7 @@ data class MultiQueueObject(
 
     var startIndex: Int = C.INDEX_UNSET, // position of current song
     var startPositionMs: Long = C.TIME_UNSET,
-    var repeatMode: Int = 0,
+    var repeatMode: @Player.RepeatMode Int = 0,
 
     var shuffleOrder: CircularShuffleOrder.Persistent? = null,
     var ended: Boolean = false,
@@ -408,7 +456,7 @@ data class MultiQueueObject(
             putInt("startIndex", startIndex)
             putLong("startPositionMs", startPositionMs)
             putInt("repeatMode", repeatMode)
-            putBoolean("shuffleModeEnabled", shuffleModeEnabled)
+
             putBoolean("ended", ended)
             putBoolean("isOriginal", isOriginal)
             putParcelable("shuffleOrder", shuffleOrder)

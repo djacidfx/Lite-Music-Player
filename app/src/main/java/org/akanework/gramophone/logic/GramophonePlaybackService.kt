@@ -49,7 +49,6 @@ import androidx.core.content.IntentCompat
 import androidx.core.content.edit
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.AudioAttributes
-import androidx.media3.common.BundleListRetriever
 import androidx.media3.common.C
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.Format
@@ -99,7 +98,6 @@ import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import com.google.common.collect.ImmutableList
-import com.google.common.util.concurrent.AsyncFunction
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
@@ -110,6 +108,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -150,7 +149,7 @@ import uk.akane.libphonograph.manipulator.ItemManipulator
 import uk.akane.libphonograph.manipulator.PlaylistSerializer
 import uk.akane.libphonograph.manipulator.PlaylistSerializer.Entry
 import java.util.concurrent.Executor
-import java.util.concurrent.TimeUnit
+import kotlin.collections.emptyList
 import kotlin.random.Random
 
 
@@ -181,12 +180,14 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         const val SERVICE_SET_MEDIA_ITEMS_ATOMIC = "set_media_items_atomic"
 
         const val SERVICE_QB_GET_INACTIVE_LIST = "qb_get_inactive_list"
+        const val SERVICE_QB_GET_NUM_QUEUES = "qb_get_num_queues"
         const val SERVICE_QB_LOAD_QUEUE = "qb_load"
         const val SERVICE_QB_GET_QUEUE_FOR_UI = "qb_get_queue_for_ui"
         const val SERVICE_QB_DEL = "qb_delete"
         const val SERVICE_QB_REORDER = "qb_reorder"
         const val SERVICE_QB_PIN_QUEUE ="qb_pin_queue"
         const val SERVICE_QB_UNPIN_QUEUE ="qb_unpin_queue"
+        const val SERVICE_QB_RENAME_QUEUE ="qb_rename"
 
         const val SERVICE_QB_AGE = "qb_age"
 
@@ -866,6 +867,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         availableSessionCommands.add(SessionCommand(SERVICE_GET_AUDIO_FORMAT, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_SET_MEDIA_ITEMS_ATOMIC, Bundle.EMPTY))
+        availableSessionCommands.add(SessionCommand(SERVICE_QB_GET_NUM_QUEUES, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_GET_INACTIVE_LIST, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_GET_QUEUE_FOR_UI, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_LOAD_QUEUE, Bundle.EMPTY))
@@ -873,6 +875,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         availableSessionCommands.add(SessionCommand(SERVICE_QB_REORDER, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_PIN_QUEUE, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_UNPIN_QUEUE, Bundle.EMPTY))
+        availableSessionCommands.add(SessionCommand(SERVICE_QB_RENAME_QUEUE, Bundle.EMPTY))
         return builder.setAvailableSessionCommands(availableSessionCommands.build()).build()
     }
 
@@ -1101,6 +1104,13 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     }
                 }
 
+                SERVICE_QB_GET_NUM_QUEUES -> {
+                    SessionResult(SessionResult.RESULT_SUCCESS).also { res ->
+                       val numQueues = qb.masterQueues.size + if (endedWorkaroundPlayer!!.currentTitle == null) 0 else 1
+                        res.extras.putInt("num_queues", numQueues)
+                    }
+                }
+
                 SERVICE_QB_GET_INACTIVE_LIST -> {
                     SessionResult(SessionResult.RESULT_SUCCESS).also { res ->
                         val queueList: List<MultiQueueObject> = qb.getInactiveQueues()
@@ -1112,7 +1122,26 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 SERVICE_QB_GET_QUEUE_FOR_UI -> {
                     SessionResult(SessionResult.RESULT_SUCCESS).also { res ->
                         val index = customCommand.customExtras.getInt("index")
-                        val queueList: List<MultiQueueObject> = qb.getQueue(index)
+                        val queueList: List<MultiQueueObject> = if (index != -1) {
+                            qb.getQueue(index)
+                        } else {
+                            val plr = endedWorkaroundPlayer!!
+                            listOf(
+                                MultiQueueObject(
+                                    id = -1,
+                                    index = 0,
+                                    title = plr.currentTitle ?: getString(R.string.unknown_playlist),
+                                    expiry = MutableStateFlow(0),
+                                    queue = ArrayList(),
+                                    startIndex = plr.currentMediaItemIndex,
+                                    startPositionMs = C.TIME_UNSET,
+                                    repeatMode = plr.repeatMode,
+                                    shuffleOrder = null,
+                                    ended = plr.playbackState == Player.STATE_ENDED,
+                                    isOriginal = plr.currentIsOriginal,
+                                )
+                            )
+                        }
                         val binder = MultiQueueList(queueList)
                         res.extras.putBinder("allQueues", binder)
                     }
@@ -1138,7 +1167,12 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
 
                 SERVICE_QB_UNPIN_QUEUE -> {
                     val index = customCommand.customExtras.getInt("index")
-                    val expiry = qb.unpinQueue(index)
+                    val expiry: Long = if (index != -1) {
+                        qb.unpinQueue(index)
+                    } else {
+                        endedWorkaroundPlayer!!.currentIsPinned = false
+                        0L // fake value, not (and shouldn't) be used in UI
+                    }
                     SessionResult(SessionResult.RESULT_SUCCESS).also { res ->
                         res.extras.putLong("expiry", expiry)
                     }
@@ -1146,10 +1180,57 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
 
                 SERVICE_QB_DEL -> {
                     val index = customCommand.customExtras.getInt("index")
-                    val status = qb.deleteQueue(index)
+                    val status: Boolean = if (index != -1) {
+                        qb.deleteQueue(index)
+                    } else {
+                        try {
+                            val nextQueueIndex = qb.getInactiveQueues().size - 1
+                            if (nextQueueIndex < 0) {
+                                endedWorkaroundPlayer!!.clearMediaItems()
+                                true
+                            } else {
+                                val currentTitle = endedWorkaroundPlayer!!.currentTitle
+                                val nextQueue = qb.getQueue(nextQueueIndex).first()
+                                qb.commitQueue(nextQueueIndex, nextQueue.startIndex)
+                                currentTitle?.let {
+                                    // TODO: nick plz do delete active queue if this is too cursed
+                                    qb.deleteQueue(it)
+                                }
+                                true
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, e.message.toString(), e)
+                            false
+                        }
+                    }
+
                     SessionResult(SessionResult.RESULT_SUCCESS).also { res ->
                         res.extras.putBoolean("status", status)
+                    }
+                }
+
+                SERVICE_QB_RENAME_QUEUE -> {
+                    val index = customCommand.customExtras.getInt("index")
+                    val title = customCommand.customExtras.getString("title")
+                    val dryRun = customCommand.customExtras.getBoolean("dryRun")
+
+                    val status = if (title.isNullOrBlank()) {
+                        false
+                    } else if (index == -1) {
+                        if (qb.masterQueues.any { it.title == title }) {
+                            false
+                        } else {
+                            if (!dryRun) {
+                                endedWorkaroundPlayer!!.currentTitle = title
+                            }
+                            true
                         }
+                    } else  {
+                        qb.renameQueue(index, title, dryRun)
+                    }
+                    SessionResult(SessionResult.RESULT_SUCCESS).also { res ->
+                        res.extras.putBoolean("status", status)
+                    }
                 }
 
                 SERVICE_QB_AGE -> {

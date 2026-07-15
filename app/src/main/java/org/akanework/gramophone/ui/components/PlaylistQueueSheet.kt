@@ -25,13 +25,13 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.size
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -46,13 +46,18 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted.Companion.WhileSubscribed
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.runBlocking
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.deleteQueue
 import org.akanework.gramophone.logic.dpToPx
 import org.akanework.gramophone.logic.getBooleanStrict
+import org.akanework.gramophone.logic.getInactiveQueues
+import org.akanework.gramophone.logic.getNumQueues
 import org.akanework.gramophone.logic.getQueueForUi
 import org.akanework.gramophone.logic.loadQueue
 import org.akanework.gramophone.logic.replaceAllSupport
@@ -65,6 +70,9 @@ import org.akanework.gramophone.ui.fragments.compose.QueueRoot
 import org.akanework.gramophone.ui.fragments.compose.rememberMqState
 import java.util.LinkedList
 
+// TODO:
+//  queue menu flickers when queue sheet isnt full height
+//  unique(title, isOriginal) for queue title checks. separate (+) indicator. show id for queue
 class PlaylistQueueSheet(
     context: Context, private val activity: MainActivity
 ) : BottomSheetDialog(context), Player.Listener {
@@ -81,6 +89,7 @@ class PlaylistQueueSheet(
     // the compose queue elements
     private var detachedHead = MutableStateFlow(false)
     private var detachedQueue: Int? = null
+    private var forceInit = MutableStateFlow(false)
 
     init {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
@@ -175,7 +184,10 @@ class PlaylistQueueSheet(
                             },
                             onResetHead = {
                                 detachedHead.value = false
+                                detachedQueue = null
                                 // detachedQueue is "consumed" by the LaunchedEffect below
+
+                                forceRefresh()
                             },
                         )
                     val pagerState = rememberPagerState(
@@ -183,12 +195,27 @@ class PlaylistQueueSheet(
                         pageCount = { 2 }
                     )
 
-                    val igiveupnamingvariables by detachedHead.collectAsState()
-                    LaunchedEffect(igiveupnamingvariables) {
+                    val detachedHeadState by detachedHead.collectAsState()
+                    LaunchedEffect(detachedHeadState) {
                         if (!detachedHead.value && detachedQueue != null) {
                             mqState.resetHead(false)
-                            mqState.toggleExpand()
+                            mqState.init()
                             detachedQueue = null
+                        }
+                    }
+                    val forceInitState by forceInit.collectAsState()  // TODO(MQ) there has to be a better way
+                    LaunchedEffect(forceInitState) {
+                        if (forceInitState) {
+                            mqState.init {
+                                // wait for MediaBrowser to update before updating recycler
+                                instance?.addListener(object : Player.Listener {
+                                    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                                        instance!!.removeListener(this)
+                                        forceUpdate()
+                                    }
+                                })
+                            }
+                            forceInit.value = false
                         }
                     }
 
@@ -265,7 +292,14 @@ class PlaylistQueueSheet(
         playlistAdapter.updateList(mq)
     }
 
-    inner class PlaylistCardAdapter : EditSongAdapter(activity, true) {
+    fun forceRefresh() {
+        // TODO: ask google, AI, or nick how to do recycler view stuff
+        //  1. how to not need to update entire list and just refresh the visible ones than need to be updated
+        //  2. can we update the list in a different efficient manner?
+        playlistAdapter.notifyItemRangeChanged(0, playlistAdapter.playlist.first.size)
+    }
+
+    inner class PlaylistCardAdapter : EditSongAdapter(activity, true, detachedHead) {
         var playlist: Pair<MutableList<Int>, MutableList<MediaItem>> = dumpPlaylist()
         var currentMediaItemIndex: Int? = null
             set(value) {
@@ -372,10 +406,26 @@ class PlaylistQueueSheet(
 
         override fun removeItem(pos: Int) {
             val instance = activity.getPlayer()
+
+            // remove queue if this is the last item, dismiss if no queues left
+            if (playlist.first.size <= 1) {
+                val status = instance?.deleteQueue(-1)
+                if (status != true) throw IllegalStateException("Failed to clear queue")
+
+                if (instance.getNumQueues() == 0) {
+                    dismiss()
+                } else {
+                    // force ui refresh
+                    forceInit.value = true
+                }
+                return
+            }
+
             val idx = playlist.first.removeAt(pos)
             playlist.first.replaceAllSupport { if (it > idx) it - 1 else it }
             instance?.removeMediaItem(idx)
             playlist.second.removeAt(idx)
+
             notifyItemRemoved(pos)
             if (pos == currentMediaItemIndex) {
                 notifyItemChanged(currentMediaItemIndex!!, true)
@@ -422,14 +472,15 @@ class PlaylistQueueSheet(
             playlist = pl
             notifyDataSetChanged()
 
-            // update playing indicator, scroll to, drag handle visibility
+            // update playing indicator, scroll to
             val i = (mq?.second?.startIndex ?: instance?.currentMediaItemIndex).let {
                 if (it == -1) 0 else it
             }
             currentMediaItemIndex = i?.let { playlist.first.indexOf(i) }
-            recyclerView.post {
-                recyclerView.smoothScrollToPosition(currentMediaItemIndex ?: 0)
-            }
+            // TODO: make not crash when delete queue
+//            recyclerView.post {
+//                recyclerView.smoothScrollToPosition(currentMediaItemIndex ?: 0)
+//            }
 
             updateTimer(mq?.second?.startIndex, mq?.second?.startPositionMs)
         }

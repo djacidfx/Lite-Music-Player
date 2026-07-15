@@ -54,7 +54,6 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.Insets
-import androidx.core.net.toFile
 import androidx.core.os.BundleCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -68,7 +67,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.Log
-import androidx.media3.exoplayer.source.ShuffleOrder
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
@@ -82,9 +80,11 @@ import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVIC
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_AGE
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_DEL
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_GET_INACTIVE_LIST
+import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_GET_NUM_QUEUES
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_GET_QUEUE_FOR_UI
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_LOAD_QUEUE
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_PIN_QUEUE
+import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_RENAME_QUEUE
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_REORDER
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_UNPIN_QUEUE
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QUERY_TIMER
@@ -96,6 +96,7 @@ import org.akanework.gramophone.logic.utils.AudioFormatDetector
 import org.akanework.gramophone.logic.utils.AudioTrackInfo
 import org.akanework.gramophone.logic.utils.BtCodecInfo
 import org.akanework.gramophone.logic.utils.CalculationUtils
+import org.akanework.gramophone.logic.utils.CircularShuffleOrder
 import org.akanework.gramophone.logic.utils.MediaItemList
 import org.akanework.gramophone.logic.utils.ReplayGainUtil
 import org.akanework.gramophone.logic.utils.SemanticLyrics
@@ -103,10 +104,8 @@ import org.akanework.gramophone.ui.MainActivity
 import org.jetbrains.annotations.Contract
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
-import uk.akane.libphonograph.items.EXTRA_AUTHOR
 import uk.akane.libphonograph.items.EXTRA_FILE
 import java.io.File
-import java.io.FileInputStream
 import java.util.Locale
 import kotlin.math.max
 
@@ -384,6 +383,14 @@ fun MediaController.getAudioFormat(): AudioFormatDetector.AudioFormats =
         )
     }
 
+fun MediaController.getNumQueues(): Int =
+    sendCustomCommand(
+        SessionCommand(SERVICE_QB_GET_NUM_QUEUES, Bundle.EMPTY),
+        Bundle.EMPTY
+    ).get().extras.run {
+        getInt("num_queues")
+    }
+
 fun MediaController.getInactiveQueues(): List<MultiQueueObject> =
     sendCustomCommand(
         SessionCommand(SERVICE_QB_GET_INACTIVE_LIST, Bundle.EMPTY),
@@ -393,6 +400,7 @@ fun MediaController.getInactiveQueues(): List<MultiQueueObject> =
         MultiQueueList.getList(binder)
     }
 
+// TODO: call without media list
 fun MediaController.getQueue(index: Int = C.INDEX_UNSET): MultiQueueObject? =
     sendCustomCommand(
         SessionCommand(SERVICE_QB_GET_QUEUE_FOR_UI, Bundle.EMPTY).apply {
@@ -403,7 +411,7 @@ fun MediaController.getQueue(index: Int = C.INDEX_UNSET): MultiQueueObject? =
         MultiQueueList.getList(binder).firstOrNull()
     }
 
-fun MediaController.getQueueForUi(index: Int = -1): Pair<MutableList<Int>, MultiQueueObject>? {
+fun MediaController.getQueueForUi(index: Int = C.INDEX_UNSET): Pair<MutableList<Int>, MultiQueueObject>? {
     if (index == -1) {
         return null
     }
@@ -474,6 +482,19 @@ fun MediaController.reorderQueue(from: Int, to: Int): Boolean =
         SessionCommand(SERVICE_QB_REORDER, Bundle.EMPTY).apply {
             customExtras.putInt("from", from)
             customExtras.putInt("to", to)
+        }, Bundle.EMPTY
+    ).get().extras.run {
+        if (containsKey("status"))
+            getBoolean("status")
+        else throw IllegalArgumentException("expected status to be set")
+    }
+
+fun MediaController.renameQueue(index: Int, title: String, dryRun: Boolean): Boolean =
+    sendCustomCommand(
+        SessionCommand(SERVICE_QB_RENAME_QUEUE, Bundle.EMPTY).apply {
+            customExtras.putInt("index", index)
+            customExtras.putString("title", title)
+            customExtras.putBoolean("dryRun", dryRun)
         }, Bundle.EMPTY
     ).get().extras.run {
         if (containsKey("status"))
