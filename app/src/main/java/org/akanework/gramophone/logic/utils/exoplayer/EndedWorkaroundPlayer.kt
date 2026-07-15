@@ -275,7 +275,7 @@ class EndedWorkaroundPlayer(
 
     override fun handleRemoveMediaItems(fromIndex: Int, toIndex: Int): ListenableFuture<*> {
         currentIsOriginal = false
-        if (fromIndex == 0 && toIndex == Int.MAX_VALUE) { // clearMediaItems() -> delete queue
+        if (fromIndex == 0 && toIndex >= mediaItemCount) { // clearMediaItems() -> delete queue
             currentTitle = null
         }
         return super.handleRemoveMediaItems(fromIndex, toIndex)
@@ -284,7 +284,7 @@ class EndedWorkaroundPlayer(
     fun cloneQueue(newTitle: String, newIsPinned: Boolean, original: Boolean) {
         if (currentTitle == null && !exoPlayer.currentTimeline.isEmpty)
             throw IllegalStateException("have media items but current title is null, logic bug")
-        else if (currentTitle != null && Flags.MQ_PREVIEW) {
+        else if (currentTitle != null && mediaItemCount > 0 && Flags.MQ_PREVIEW) {
             queueBoard.addQueue(
                 currentTitle!!,
                 ArrayList<MediaItem>(exoPlayer.mediaItemCount).apply {

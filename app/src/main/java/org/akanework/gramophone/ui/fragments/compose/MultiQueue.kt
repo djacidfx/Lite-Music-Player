@@ -92,6 +92,7 @@ import org.akanework.gramophone.logic.MultiQueueObject
 import org.akanework.gramophone.logic.age
 import org.akanework.gramophone.logic.deleteQueue
 import org.akanework.gramophone.logic.getInactiveQueues
+import org.akanework.gramophone.logic.getNumQueues
 import org.akanework.gramophone.logic.getQueue
 import org.akanework.gramophone.logic.getQueueForUi
 import org.akanework.gramophone.logic.loadQueue
@@ -943,6 +944,10 @@ class MqState(
         if (index >= 0 && index < inactiveQueues.size && inactiveQueues[index] == detachedQueue) {
             // this detached queue will so disappear just like my hopes and dreams. Switch off it
             resetHead()
+        }
+
+        if (instance.getNumQueues() == 0) {
+            playlistQueueSheet?.dismiss()
         }
 
         init {
