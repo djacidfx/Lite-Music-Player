@@ -922,6 +922,11 @@ class MqState(
     }
 
     fun removeQueue(index: Int = getQueueListSize() - 1) {
+        if (Flags.MQ_PREVIEW) {
+            instance.clearMediaItems()
+            return
+        }
+
         val status = instance.deleteQueue(index)
         if (!status) return
         coroutineScope.launch {
