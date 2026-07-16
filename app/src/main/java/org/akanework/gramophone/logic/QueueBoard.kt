@@ -161,6 +161,7 @@ class QueueBoard(
      *
      */
     fun addQueue(
+        queueId: Long,
         title: String,
         mediaList: List<MediaItem>,
         mediaItemIndex: Int = 0,
@@ -180,15 +181,14 @@ class QueueBoard(
             )
         if (mediaList.isEmpty()) throw IllegalArgumentException("Media list cannot be empty")
 
-        // Title is (effectively) uid
-        masterQueues.removeAll { it.title.trimEnd() == title }
+        masterQueues.removeAll { it.isOriginal && it.title.trimEnd() == title }
 
         // (4) add new queue
         if (QUEUE_DEBUG)
             Log.d(TAG, "Adding: (4) new queue")
 
         val newQueue = MultiQueueObject(
-            id = Random.nextLong(),
+            id = queueId,
             index = -1,
             title = title,
             expiry = MutableStateFlow(if (!shouldPin) System.currentTimeMillis() + QUEUE_EXPIRY_MS else null),
@@ -234,11 +234,11 @@ class QueueBoard(
      * When deleting the active queue, the last inactive queue is loaded. When the active queue is
      * the only queue, playback is stopped.
      *
-     * @param index
+     * @param id
      * @return true if the deletion is successful, otherwise false.
      */
-    fun deleteQueue(title: String): Boolean {
-        val mq = masterQueues.find { it.title == title }
+    fun deleteQueue(id: Long): Boolean {
+        val mq = masterQueues.find { it.id == id }
         val index = mq?.let {
             masterQueues.indexOf(it)
         }

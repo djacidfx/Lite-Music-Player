@@ -41,4 +41,5 @@ object Flags {
 
     // Multiple queues
     const val MQ_PREVIEW = false
+    const val MQ_ALWAYS_SHOW_QUEUE_ID = false
 }

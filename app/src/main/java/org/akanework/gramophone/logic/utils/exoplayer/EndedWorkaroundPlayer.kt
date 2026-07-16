@@ -32,6 +32,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.MultiQueueObject
 import org.akanework.gramophone.logic.QueueBoard
 import org.akanework.gramophone.logic.utils.CircularShuffleOrder
 import org.akanework.gramophone.logic.utils.Flags
@@ -41,6 +42,7 @@ import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
 import uk.akane.libphonograph.items.artistId
 import uk.akane.libphonograph.items.hdArtworkUri
 import java.util.Objects
+import kotlin.random.Random
 
 
 /**
@@ -73,6 +75,7 @@ class EndedWorkaroundPlayer(
     var nextShuffleOrder:
             ((firstIndex: Int, mediaItemCount: Int, EndedWorkaroundPlayer) -> CircularShuffleOrder)? =
         null
+    var currentQueueId: Long? = null
     var currentTitle: String? = null
     var currentIsPinned = false
     var currentIsOriginal = false
@@ -183,7 +186,9 @@ class EndedWorkaroundPlayer(
         shuffleModeEnabled: Boolean?,
         playbackParameters: PlaybackParameters?,
     ) {
-        cloneQueue(title, pinned, original)
+        if (!(title == currentTitle && (currentIsOriginal && original))) {
+            cloneQueue(generateQueueId(), title, pinned, original)
+        }
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was found orphaned")
         if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
@@ -213,7 +218,9 @@ class EndedWorkaroundPlayer(
         if (currentMediaItem?.mediaId == mediaItems[startIndex].mediaId) {
             val index = currentMediaItemIndex
             val isLast = mediaItemCount - index == 1
-            cloneQueue(title, pinned, original)
+            if (!(title == currentTitle && (currentIsOriginal && original))) {
+                cloneQueue(generateQueueId(), title, pinned, original)
+            }
             if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
             if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
             if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
@@ -277,15 +284,17 @@ class EndedWorkaroundPlayer(
         currentIsOriginal = false
         if (fromIndex == 0 && toIndex >= mediaItemCount) { // clearMediaItems() -> delete queue
             currentTitle = null
+            currentQueueId = null
         }
         return super.handleRemoveMediaItems(fromIndex, toIndex)
     }
 
-    fun cloneQueue(newTitle: String, newIsPinned: Boolean, original: Boolean) {
-        if (currentTitle == null && !exoPlayer.currentTimeline.isEmpty)
+    fun cloneQueue(newQueueId: Long, newTitle: String, newIsPinned: Boolean, original: Boolean) {
+        if (currentQueueId == null && !exoPlayer.currentTimeline.isEmpty)
             throw IllegalStateException("have media items but current title is null, logic bug")
-        else if (currentTitle != null && mediaItemCount > 0 && Flags.MQ_PREVIEW) {
+        else if (currentQueueId != null && Flags.MQ_PREVIEW) {
             queueBoard.addQueue(
+                currentQueueId!!,
                 currentTitle!!,
                 ArrayList<MediaItem>(exoPlayer.mediaItemCount).apply {
                     for (i in 0..<exoPlayer.mediaItemCount) {
@@ -307,6 +316,7 @@ class EndedWorkaroundPlayer(
                 exoPlayer.playbackState == STATE_ENDED,
             )
         }
+        currentQueueId = newQueueId
         currentTitle = newTitle
         currentIsPinned = newIsPinned
         currentIsOriginal = original
@@ -334,5 +344,9 @@ class EndedWorkaroundPlayer(
             null, null
         )
         return Futures.immediateVoidFuture()
+    }
+
+    fun generateQueueId(): Long {
+        return (queueBoard.masterQueues.map { it.id } + (currentQueueId ?: 0)).max() + 1
     }
 }

@@ -1106,7 +1106,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
 
                 SERVICE_QB_GET_NUM_QUEUES -> {
                     SessionResult(SessionResult.RESULT_SUCCESS).also { res ->
-                       val numQueues = qb.masterQueues.size + if (endedWorkaroundPlayer!!.currentTitle == null) 0 else 1
+                       val numQueues = qb.masterQueues.size + if (endedWorkaroundPlayer!!.currentQueueId == null) 0 else 1
                         res.extras.putInt("num_queues", numQueues)
                     }
                 }
@@ -1128,7 +1128,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                             val plr = endedWorkaroundPlayer!!
                             listOf(
                                 MultiQueueObject(
-                                    id = -1,
+                                    id = plr.currentQueueId!!,
                                     index = 0,
                                     title = plr.currentTitle ?: getString(R.string.unknown_playlist),
                                     expiry = MutableStateFlow(0),
@@ -1189,12 +1189,12 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                 endedWorkaroundPlayer!!.clearMediaItems()
                                 true
                             } else {
-                                val currentTitle = endedWorkaroundPlayer!!.currentTitle
+                                val currentQueueId = endedWorkaroundPlayer!!.currentQueueId
                                 val nextQueue = qb.getQueue(nextQueueIndex).first()
                                 qb.commitQueue(nextQueueIndex, nextQueue.startIndex)
-                                currentTitle?.let {
+                                currentQueueId?.let {
                                     // TODO: nick plz do delete active queue if this is too cursed
-                                    qb.deleteQueue(it)
+                                    qb.deleteQueue(currentQueueId)
                                 }
                                 true
                             }

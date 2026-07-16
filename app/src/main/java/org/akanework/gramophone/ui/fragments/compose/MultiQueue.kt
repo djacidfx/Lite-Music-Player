@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -187,13 +188,33 @@ fun MqListItem(
                     } else {
                         "${index + 1}. ${mq.getTitleForUi()}"
                     }
+                    val showId = Flags.MQ_ALWAYS_SHOW_QUEUE_ID &&
+                            (mqState.inactiveQueues + mqState.activeQueue)
+                                .filterNotNull()
+                                .any { it.id != mq.id && it.title == mq.title }
 
-                    Text(
-                        text = titleText,
-                        maxLines = 1,
-                        overflow = TextOverflow.MiddleEllipsis,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp)
-                    )
+                    // title line
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 0.dp)
+                    ) {
+                        Text(
+                            text = titleText,
+                            maxLines = 1,
+                            overflow = TextOverflow.MiddleEllipsis,
+                        )
+                        if (showId) {
+                            Text(
+                                text = "(${mq.id})",
+                                color = MaterialTheme.colorScheme.onSurface.copy(0.7f),
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.MiddleEllipsis,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+                    // extras line
                     if (!isPinned) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
