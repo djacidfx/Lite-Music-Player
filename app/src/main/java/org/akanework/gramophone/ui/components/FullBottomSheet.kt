@@ -54,6 +54,8 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.appcompat.widget.TooltipCompat
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.animation.addListener
+import androidx.core.animation.doOnEnd
 import androidx.core.content.edit
 import androidx.core.graphics.Insets
 import androidx.core.graphics.TypefaceCompat
@@ -99,6 +101,7 @@ import com.google.android.material.slider.Slider
 import com.google.android.material.timepicker.MaterialTimePicker
 import com.google.android.material.timepicker.TimeFormat
 import com.google.common.util.concurrent.Futures
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -1330,8 +1333,17 @@ class FullBottomSheet
                 favoriteTransition.start()
             }
 
-            delay(max(BACKGROUND_COLOR_TRANSITION_SEC,
-                FOREGROUND_COLOR_TRANSITION_SEC))
+            surfaceTransition.awaitEnd()
+            primaryTransition.awaitEnd()
+            secondaryContainerTransition.awaitEnd()
+            onSecondaryContainerTransition.awaitEnd()
+            colorContrastFaintedTransition.awaitEnd()
+            colorOnSurfaceTransition.awaitEnd()
+            lyricTextColorTransition.awaitEnd()
+            lyricHighlightTlColorTransition.awaitEnd()
+            loopTransition.awaitEnd()
+            shuffleTransition.awaitEnd()
+            favoriteTransition.awaitEnd()
         }
 
         currentJob = null
@@ -1401,6 +1413,18 @@ class FullBottomSheet
                 colorOnSurfaceVariant
             )
         }
+    }
+
+    private suspend fun ValueAnimator.awaitEnd() {
+        if (!isStarted)
+            return
+        val waiter = CompletableDeferred<Unit>()
+        doOnEnd {
+            waiter.complete(Unit)
+        }
+        if (!isStarted)
+            return
+        waiter.await()
     }
 
     @SuppressLint("NotifyDataSetChanged")
