@@ -105,10 +105,50 @@ object LrcUtils {
         for (i in 0..<metadata.length()) {
             val meta = metadata.get(i)
             if (meta is BinaryFrame && (meta.id == "SYLT" || meta.id == "SLT")) {
-                val syltData = UsltFrameDecoder.decodeSylt(sampleRate, ParsableByteArray(meta.data))
+                val syltData = try {
+                    UsltFrameDecoder.decodeSylt(sampleRate, ParsableByteArray(meta.data))
+                } catch (e: Exception) {
+                    if (parserOptions.errorText == null)
+                        throw e
+                    Log.e(TAG, Log.getThrowableString(e)!!)
+                    Log.e(TAG, "The lyrics are:\n${meta.data.toHexString()}")
+                    out.add(SemanticLyrics.UnsyncedLyrics(
+                        listOf(
+                            parserOptions.errorText + "\n\n${
+                                Log.getThrowableString(
+                                    e
+                                )!!
+                            }" to null
+                        )
+                    ))
+                    continue
+                }
                 if (syltData != null) {
                     if (syltData.contentType == 1 || syltData.contentType == 2) {
-                        out.add(syltData.toSyncedLyrics(parserOptions.trim))
+                        out.add(try {
+                            val ret = syltData.toSyncedLyrics(parserOptions.trim)
+                            if (Flags.HIDE_SAME_TRANSLATIONS)
+                                ret.copy(text = ret.text.filterIndexed { i, it ->
+                                    !it.isTranslated || it.text != ret.text.subList(0, i)
+                                        .last { !it.isTranslated }.text
+                                })
+                            else
+                                ret
+                        } catch (e: Exception) {
+                            if (parserOptions.errorText == null)
+                                throw e
+                            Log.e(TAG, Log.getThrowableString(e)!!)
+                            Log.e(TAG, "The lyrics are:\n$syltData")
+                            SemanticLyrics.UnsyncedLyrics(
+                                listOf(
+                                    parserOptions.errorText + "\n\n${
+                                        Log.getThrowableString(
+                                            e
+                                        )!!
+                                    }\n\n$syltData" to null
+                                )
+                            )
+                        })
                     }
                     continue
                 }

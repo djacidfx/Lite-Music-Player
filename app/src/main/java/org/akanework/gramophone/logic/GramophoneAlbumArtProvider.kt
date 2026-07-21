@@ -155,9 +155,8 @@ class GramophoneAlbumArtProvider : ContentProvider() {
                     // this is the only query parameter other callers may set if they wish so
                     else if (uri.getBooleanQueryParameter("hd", false))
                         it // added by us for current media metadata but not queue/browser items
-                    else it.size {
-                        CoilArtPipeline.getSmallSize(context).run { Size(x, y) }
-                    }
+                    else it.size(
+                        CoilArtPipeline.getSmallSize(context).run { Size(x, y) })
                 }
                 // Memory cache stores Bitmap, not compressed data, so we shouldn't read from
                 // it (otherwise our dummy decoder wouldn't get any data ever, and we would
@@ -204,7 +203,9 @@ class GramophoneAlbumArtProvider : ContentProvider() {
                                     } catch (t: Throwable) {
                                         try {
                                             newFd.close()
-                                        } catch (_: Exception) {}
+                                        } catch (t2: Exception) {
+                                            t.addSuppressed(t2)
+                                        }
                                         throw t
                                     }
                                 } catch (_: ErrnoException) {}

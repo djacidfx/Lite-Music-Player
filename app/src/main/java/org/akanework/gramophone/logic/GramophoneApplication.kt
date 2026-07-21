@@ -44,6 +44,7 @@ import coil3.request.NullRequestDataException
 import coil3.util.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,10 +70,6 @@ class GramophoneApplication : Application(), SingletonImageLoader.Factory,
 
     companion object {
         private const val TAG = "GramophoneApplication"
-
-        // not actually defined in API, but CTS tested
-        // https://cs.android.com/android/platform/superproject/main/+/main:packages/providers/MediaProvider/src/com/android/providers/media/LocalUriMatcher.java;drc=ddf0d00b2b84b205a2ab3581df8184e756462e8d;l=182
-        private const val MEDIA_ALBUM_ART = "albumart"
     }
 
     init {
@@ -90,11 +87,14 @@ class GramophoneApplication : Application(), SingletonImageLoader.Factory,
         }
     }
 
-    val minSongLengthSecondsFlow = MutableSharedFlow<Long>(replay = 1)
-    val blackListSetFlow = MutableSharedFlow<Set<String>>(replay = 1)
-    val whiteListSetFlow = MutableSharedFlow<Set<String>>(replay = 1)
+    val minSongLengthSecondsFlow = MutableSharedFlow<Long>(replay = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val blackListSetFlow = MutableSharedFlow<Set<String>>(replay = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val whiteListSetFlow = MutableSharedFlow<Set<String>>(replay = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val shouldUseEnhancedCoverReadingFlow = if (hasScopedStorageWithMediaTypes()) null else
-        MutableSharedFlow<Boolean?>(replay = 1)
+        MutableSharedFlow<Boolean?>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val recentlyAddedFilterSecondFlow = MutableStateFlow(1_209_600L)
     val extraDisallowedFolders = setOf(
         Environment.DIRECTORY_RINGTONES,

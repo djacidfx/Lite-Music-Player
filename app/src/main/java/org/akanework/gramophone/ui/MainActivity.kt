@@ -18,6 +18,7 @@
 package org.akanework.gramophone.ui
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.app.NotificationManager
 import android.app.SearchManager
 import android.app.assist.AssistContent
@@ -40,6 +41,7 @@ import android.provider.Settings
 import android.view.Choreographer
 import android.view.SearchEvent
 import android.view.ViewGroup
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
@@ -57,6 +59,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentManager.FragmentLifecycleCallbacks
 import androidx.fragment.app.commit
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.Log
@@ -64,16 +67,22 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import coil3.imageLoader
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.dpToPx
 import org.akanework.gramophone.logic.enableEdgeToEdgeProperly
 import org.akanework.gramophone.logic.getBooleanStrict
 import org.akanework.gramophone.logic.gramophoneApplication
@@ -95,6 +104,7 @@ import uk.akane.libphonograph.manipulator.ItemManipulator
 import uk.akane.libphonograph.manipulator.PlaylistSerializer
 import uk.akane.libphonograph.manipulator.PlaylistSerializer.Entry
 import java.io.File
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * MainActivity:
@@ -250,7 +260,7 @@ class MainActivity : BaseActivity() {
             handler.post { maybeReportFullyDrawn() }
     }
 
-    @OptIn(FlowPreview::class)
+    @OptIn(FlowPreview::class, InternalCoroutinesApi::class)
     fun addToPlaylistDialog(item: MediaItem) {
         val song = Entry.ofMediaItem(item)
         if (song == null) {
@@ -261,33 +271,65 @@ class MainActivity : BaseActivity() {
             ).show()
             return
         }
-        val playlists = runBlocking { reader.playlistListFlow.first().filter { it.title != null } }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.add_to_playlist)
-            .setIcon(R.drawable.ic_playlist_play)
-            .setItems((playlists.map {
-                if (it is Favorite) getString(R.string.playlist_favourite) else
-                it.title ?: it.path?.absolutePath ?: it.id.toString()
-            } + getString(R.string.create_playlist)).toTypedArray())
-            { _, item ->
-                if (playlists.size == item) {
-                    PlaylistAdapter.playlistNameDialog(this,
-                        R.string.create_playlist, "",
-                        { ItemManipulator.getDefaultPlaylistFile(it) }) { name ->
-                        addToPlaylist(null, name, listOf(song))
-                    }
-                    return@setItems
-                }
-                val pl = playlists[item]
-                addToPlaylist(
-                    ContentUris.withAppendedId(
-                        @Suppress("deprecation") MediaStore.Audio.Playlists.EXTERNAL_CONTENT_URI,
-                        pl.id!!
-                    ), null, listOf(song)
-                )
+        lifecycleScope.launch(Dispatchers.Default) {
+            val job = async(start = CoroutineStart.UNDISPATCHED) {
+                reader.playlistListFlow.first().filter { it.title != null }
             }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+            val maybeValue = withTimeoutOrNull(300.milliseconds) {
+                job.await()
+            }
+            val playlists = maybeValue ?: run {
+                launch(Dispatchers.Main) {
+                    withContext(NonCancellable) {
+                        val progressBar = ProgressBar(this@MainActivity)
+                        val padding = 20.dpToPx(this@MainActivity)
+                        progressBar.isIndeterminate = true
+                        progressBar.setPadding(0, padding / 2, 0, padding)
+                        val d = MaterialAlertDialogBuilder(this@MainActivity)
+                            .setTitle(R.string.loading_playlists)
+                            .setView(progressBar)
+                            .setCancelable(false)
+                            .show()
+                        job.invokeOnCompletion {
+                            launch(Dispatchers.Main, start = CoroutineStart.ATOMIC) {
+                                withContext(NonCancellable) {
+                                    d.dismiss()
+                                }
+                            }
+                        }
+                    }
+                }
+                job.await()
+            }
+            launch(Dispatchers.Main) {
+                MaterialAlertDialogBuilder(this@MainActivity)
+                    .setTitle(R.string.add_to_playlist)
+                    .setIcon(R.drawable.ic_playlist_play)
+                    .setItems((playlists.map {
+                        if (it is Favorite) getString(R.string.playlist_favourite) else
+                            it.title ?: it.path?.absolutePath ?: it.id.toString()
+                    } + getString(R.string.create_playlist)).toTypedArray())
+                    { _, item ->
+                        if (playlists.size == item) {
+                            PlaylistAdapter.playlistNameDialog(this@MainActivity,
+                                R.string.create_playlist, "",
+                                { ItemManipulator.getDefaultPlaylistFile(it) }) { name ->
+                                addToPlaylist(null, name, listOf(song))
+                            }
+                            return@setItems
+                        }
+                        val pl = playlists[item]
+                        addToPlaylist(
+                            ContentUris.withAppendedId(
+                                @Suppress("deprecation") MediaStore.Audio.Playlists.EXTERNAL_CONTENT_URI,
+                                pl.id!!
+                            ), null, listOf(song)
+                        )
+                    }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> }
+                    .show()
+            }
+        }
     }
 
     fun addToPlaylist(uri: Uri?, name: File?, songs: List<Entry>) {
