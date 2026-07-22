@@ -236,7 +236,7 @@ class StaticLayoutBuilderCompat private constructor(
                 builder.setHyphenationFrequency(hyphenationFrequency)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                builder.setUseLineSpacingFromFallbacks(true)
+                builder.setUseLineSpacingFromFallbacks(false)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                 builder.setUseBoundsForWidth(true)

@@ -61,7 +61,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.properties.Delegates
-import kotlin.time.toDuration
 
 private const val TAG = "NewLyricsView"
 
@@ -72,8 +71,6 @@ class NewLyricsView(context: Context, attrs: AttributeSet?) : ScrollingView2(con
 
     private val scaleInAnimTime
         get() = lyricAnimTime / 2f
-    private val isElegantTextHeight =
-        true // TODO this was causing issues, but target 36 can't turn this off anymore... needs rework
     private val scaleColorInterpolator = PathInterpolator(0.4f, 0.2f, 0f, 1f)
     private val scrollInterpolator = PathInterpolator(0.4f, 0.2f, 0f, 1f)
     private val delayedInInterpolator = PathInterpolator(0.96f, 0.43f, 0.72f, 1f)
@@ -108,15 +105,12 @@ class NewLyricsView(context: Context, attrs: AttributeSet?) : ScrollingView2(con
     private var highlightTlTextColor = 0
     private val defaultTextPaint = TextPaint().apply {
         color = Color.RED
-        isElegantTextHeight = this@NewLyricsView.isElegantTextHeight
     }
     private val translationTextPaint = TextPaint().apply {
         color = Color.GREEN
-        isElegantTextHeight = this@NewLyricsView.isElegantTextHeight
     }
     private val translationBackgroundTextPaint = TextPaint().apply {
         color = Color.BLUE
-        isElegantTextHeight = this@NewLyricsView.isElegantTextHeight
     }
     private var wordActiveSpan = MyForegroundColorSpan(Color.CYAN)
     private var wordActiveTlSpan = MyForegroundColorSpan(Color.CYAN)
