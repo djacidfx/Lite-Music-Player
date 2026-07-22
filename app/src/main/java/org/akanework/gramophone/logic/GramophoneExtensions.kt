@@ -815,21 +815,33 @@ fun queueWithTitle(mediaItems: List<MediaItem>, mqTitle: String?): List<MediaIte
 
 fun ContentResolver.queryWithPending(uri: Uri, projection: Array<String>, selection: String?,
                                      selectionArgs: Array<String>?, sortOrder: String?,
+                                     limit: Int? = null, offset: Int? = null,
                                      cancellationSignal: CancellationSignal? = null): Cursor? {
-    return if (hasImprovedMediaStore()) {
-        query(uri, projection, Bundle().apply {
+    return if (hasScopedStorageV1()) {
+        query(if (hasImprovedMediaStore()) uri else @Suppress("deprecation")
+        MediaStore.setIncludePending(uri), projection, Bundle().apply {
             if (selection != null)
                 putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
             if (selectionArgs != null)
                 putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
             if (sortOrder != null)
                 putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
-            putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_INCLUDE)
+            if (limit != null)
+                putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+            if (offset != null)
+                putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
+            if (hasImprovedMediaStore())
+                putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_INCLUDE)
         }, cancellationSignal)
-    } else if (hasScopedStorageV1()) {
-        query(@Suppress("deprecation") MediaStore.setIncludePending(uri), projection,
-            selection, selectionArgs, sortOrder, cancellationSignal)
     } else {
+        val sortOrder = when {
+            limit != null && sortOrder != null && offset == null -> "$sortOrder LIMIT $limit"
+            limit != null && sortOrder != null -> "$sortOrder LIMIT $limit OFFSET $offset"
+            offset != null && sortOrder != null -> "$sortOrder OFFSET $offset"
+            offset != null -> "OFFSET $offset"
+            limit != null -> "LIMIT $limit"
+            else -> sortOrder
+        }
         query(uri, projection, selection, selectionArgs, sortOrder, cancellationSignal)
     }
 }

@@ -167,7 +167,7 @@ object CoilArtPipeline {
                         .EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.ImageColumns._ID),
                         "${MediaStore.Images.ImageColumns.DATA} LIKE ? ESCAPE '\\' AND" +
                                 " ${MediaStore.Images.ImageColumns.DATA} NOT LIKE ? ESCAPE '\\'",
-                        arrayOf("$escaped/%", "$escaped/%/%"), sortOrder).use {
+                        arrayOf("$escaped/%", "$escaped/%/%"), sortOrder, limit = 1).use {
                         if (it == null || !it.moveToFirst()) {
                             return@Fetcher continueFetchingOrFail(
                                 LoadAudioCoverData(
@@ -410,7 +410,7 @@ object CoilArtPipeline {
                                 " 'image/png') AND ${MediaStore.Images.ImageColumns.DATA} LIKE ?" +
                                 " ESCAPE '\\' AND ${MediaStore.Images.ImageColumns.DATA} NOT LIKE" +
                                 " ? ESCAPE '\\'", arrayOf("$escaped/%",
-                            "$escaped/%/%"), sortOrder).use {
+                            "$escaped/%/%"), sortOrder, limit = 1).use {
                         if (it == null || !it.moveToFirst()) {
                             throw NoAlbumArtException("No album art found")
                         }
