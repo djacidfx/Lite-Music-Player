@@ -73,7 +73,7 @@ class NewLyricsView(context: Context, attrs: AttributeSet?) : ScrollingView2(con
     private val scaleInAnimTime
         get() = lyricAnimTime / 2f
     private val isElegantTextHeight =
-        false // TODO this was causing issues, but target 36 can't turn this off anymore... needs rework
+        true // TODO this was causing issues, but target 36 can't turn this off anymore... needs rework
     private val scaleColorInterpolator = PathInterpolator(0.4f, 0.2f, 0f, 1f)
     private val scrollInterpolator = PathInterpolator(0.4f, 0.2f, 0f, 1f)
     private val delayedInInterpolator = PathInterpolator(0.96f, 0.43f, 0.72f, 1f)
