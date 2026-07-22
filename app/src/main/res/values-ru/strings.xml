@@ -87,8 +87,7 @@
     <string name="settings_default_progress_bar">Полоса прогресса по умолчанию</string>
     <string name="check_for_updates">Следите за обновлениями в нашем канале!</string>
     <string name="settings_content_based_color_summary">Включает генерацию цветов на основе обложки альбома</string>
-    <string name="opensource_info">С открытым исходным кодом под лицензией GPL-3.0
-\nАвторские права %s</string>
+    <string name="opensource_info">С открытым исходным кодом под лицензией GPL-3.0 \nАвторские права %s</string>
     <string name="playlist_favourite">Избранные</string>
     <string name="now_playing">Сейчас играет</string>
     <string name="settings_default_progress_bar_summary">Включает полосу прогресса в стиле Material</string>
@@ -450,7 +449,7 @@
     <string name="settings_cookie_info">Обложка-печенье</string>
     <string name="compact_grid">Сетка (компактная)</string>
     <string name="sort_by_album_year">Год альбома</string>
-    <string name="sort_by_album_artist_year"><![CDATA[Исполнитель альбома -> Год]]></string>
+    <string name="sort_by_album_artist_year"><![CDATA[Исполнитель альбома -&gt; Год]]></string>
     <string name="forbidden_symbol_error">Недопустимый символ в названии</string>
     <string name="translators">Переводчики</string>
     <string name="settings_replaygain_drc_desc">Использовать \"Компрессию динамического диапазона\" для защиты от клиппинга (рекомендуется). Если отключено, громкость будет просто понижена (из-за чего она не будет оставаться на одном уровне, что сведёт на нет эффект нормализации).</string>

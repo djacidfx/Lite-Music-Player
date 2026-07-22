@@ -54,8 +54,7 @@
     <string name="dialog_mime">Tipo de mídia digital (MIME type)</string>
     <string name="dialog_year">Ano</string>
     <string name="dialog_artist">Artista</string>
-    <string name="opensource_info">Open-sourced under GPL-3.0
-\nCopyright %s</string>
+    <string name="opensource_info">Open-sourced under GPL-3.0 \nCopyright %s</string>
     <string name="settings_player_options">Áudio</string>
     <string name="home_menu_settings">Configurações</string>
     <string name="settings_category_links">Links</string>
@@ -439,6 +438,6 @@
     <string name="settings_stop_on_dismiss_summary">Pare a reprodução quando o app for dispensado dos aplicativos recentes</string>
     <string name="compact_grid">Grade (compacta)</string>
     <string name="sort_by_album_year">Ano do álbum</string>
-    <string name="sort_by_album_artist_year"><![CDATA[Album artist ->year]]></string>
+    <string name="sort_by_album_artist_year"><![CDATA[Album artist -&gt;year]]></string>
     <string name="forbidden_symbol_error">Caractere inválido no nome</string>
 </resources>
