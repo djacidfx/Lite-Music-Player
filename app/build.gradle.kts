@@ -107,7 +107,7 @@ android {
         // That said, supporting Android 5.0 costs tolerable amounts of tech debt, and we plan to
         // keep support for it for a while.
         minSdk = 21
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 21 // Skip 22, it was used for gplay-only hotfix.
         versionName = "1.1.0"
         if (releaseType != "Release" || versionNameSuffixOverride != null) {
