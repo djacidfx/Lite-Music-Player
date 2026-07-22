@@ -348,12 +348,6 @@ class FullBottomSheet
             it.strokeWidth = seekBarProgressStrokeWidth
             it.transitionEnabled = true
             it.animate = false
-            it.setTint(
-                MaterialColors.getColor(
-                    bottomSheetFullSeekBar,
-                    androidx.appcompat.R.attr.colorPrimary,
-                )
-            )
         }
 
         bottomSheetFullCover.setOnClickListener {
@@ -631,6 +625,7 @@ class FullBottomSheet
                 backgroundProcessedColor
             ),
         )
+        bottomSheetFullSeekBar.progressTintList = ColorStateList.valueOf(colorPrimary)
     }
 
     override fun onSaveInstanceState(): Parcelable {
