@@ -1,3 +1,0 @@
-- Ispravite neke greške vezane za preuređivanje kartica
-- Fiksna podrška za ekvilajzer
-- Rešite neke probleme sa pristupačnošću (molimo vas da me obavestite ako ih ima još!)

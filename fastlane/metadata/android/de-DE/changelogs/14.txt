@@ -1,1 +1,0 @@
-Hotfix für Absturz wenn die Systemsprache Philippinisch ist

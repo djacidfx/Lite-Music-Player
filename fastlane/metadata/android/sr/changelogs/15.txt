@@ -1,2 +1,0 @@
-- Dozvolite preuređivanje i sakrivanje kartica
-- Ispravljeno više pada

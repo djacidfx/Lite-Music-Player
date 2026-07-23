@@ -1,2 +1,0 @@
-- Povolení změny pořadí a skrývání karet
-- Opraveno několik chyb
