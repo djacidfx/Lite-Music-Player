@@ -183,7 +183,7 @@ class PostAmpAudioSink(
     // These can be created once handler is created and offloadEnabled is loaded, and then never
     // need to be recycled until we get released.
     private fun createEffectsIfNeeded() {
-        val offloadEnabled = offloadEnabled!!
+        val offloadEnabled = Flags.TEST_RG_OFFLOAD || offloadEnabled!!
         val handler = handler!!
         val hasOffloadDpe = isDpeAvailable && isDpeOffloadable && offloadEnabled
         val useDpeForVolume = !isVolumeAvailable && !offloadEnabled && isDpeAvailable
@@ -194,6 +194,10 @@ class PostAmpAudioSink(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
             (hasOffloadDpe || useDpeForVolume)
         ) {
+            if (volumeEffect != null) {
+                volumeEffect?.releaseSafe()
+                volumeEffect = null
+            }
             if (dpeEffect != null)
                 return // we already have what we need
             dpeEffect = DynamicsProcessingEffectWrapper(handler) { audioSessionId ->
@@ -236,6 +240,10 @@ class PostAmpAudioSink(
             dpeEffect!!.audioSessionId = audioSessionId
         } else {
             if (isVolumeAvailable && !offloadEnabled) {
+                if (dpeEffect != null) {
+                    dpeEffect?.releaseSafe()
+                    dpeEffect = null
+                }
                 if (volumeEffect != null)
                     return // we already have what we need
                 volumeEffect = VolumeEffectWrapper(-100000)
@@ -244,6 +252,14 @@ class PostAmpAudioSink(
                 }
                 volumeEffect!!.audioSessionId = audioSessionId
             } else {
+                if (volumeEffect != null) {
+                    volumeEffect?.releaseSafe()
+                    volumeEffect = null
+                }
+                if (dpeEffect != null) {
+                    dpeEffect?.releaseSafe()
+                    dpeEffect = null
+                }
                 if (needToLogWhyNoEffect)
                     Log.i(TAG, "didn't init volume or dpe, e=$isVolumeAvailable " +
                             "E=$isDpeAvailable o=${isDpeAvailable && isDpeOffloadable} O=$offloadEnabled")
@@ -413,6 +429,8 @@ class PostAmpAudioSink(
             boostGainDb = rgAp.boostGain
             reduceGain = rgAp.reduceGain
         }
+        dpeEffect?.created = isDpeAvailable && isDpeOffloadable && offloadEnabled!!
+                || boostGainDb > 0
         val useDpe = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dpeEffect?.hasControl == true
         val isOffload = Flags.TEST_RG_OFFLOAD ||
                 format?.let { it.sampleMimeType != MimeTypes.AUDIO_RAW } == true
