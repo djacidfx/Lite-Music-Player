@@ -28,9 +28,9 @@ android {
 
     val releaseType = resolveProperties("releaseType")!!
     val appIdOverride = resolveProperties("appIdOverride")
-    val versionNameSuffixOverride = resolveProperties("versionNameSuffixOverride")
+    val vnos = resolveProperties("version" + "NameSuffixOverride")
 
-    val myVersionName = "." + (versionNameSuffixOverride ?: "git rev-parse --short=7 HEAD".runCommand(workingDir = rootDir))
+    val myVersionName = "." + (vnos ?: "git rev-parse --short=7 HEAD".runCommand(workingDir = rootDir))
     if (releaseType.contains("\"")) {
         throw IllegalArgumentException("releaseType must not contain \"")
     }
@@ -110,10 +110,10 @@ android {
         targetSdk = 37
         versionCode = 22
         versionName = "1.1.0"
-        if (releaseType != "Release" || versionNameSuffixOverride != null) {
+        if (releaseType != "Release" || vnos != null) {
             // by default the git commit hash is appended for non-release builds, however overrides
             // will apply unconditionally
-            versionNameSuffix = versionNameSuffixOverride ?: myVersionName
+            versionNameSuffix = vnos ?: myVersionName
         }
         buildConfigField(
             "String",
