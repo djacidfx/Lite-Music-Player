@@ -408,15 +408,4 @@ class GramophoneApplication : Application(), SingletonImageLoader.Factory,
             !getSystemProperty(it).isNullOrBlank()
         }
     }
-
-    @SuppressLint("PrivateApi")
-    private fun getSystemProperty(key: String): String? {
-        return try {
-            val clz = Class.forName("android.os.SystemProperties")
-            val get = clz.getMethod("get", String::class.java)
-            get.invoke(null, key) as String
-        } catch (e: Exception) {
-            null
-        }
-    }
 }

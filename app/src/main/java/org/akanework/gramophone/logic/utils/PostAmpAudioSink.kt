@@ -41,6 +41,7 @@ import androidx.media3.common.util.Log
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.ForwardingAudioSink
+import org.akanework.gramophone.logic.getSystemProperty
 import org.akanework.gramophone.logic.utils.AudioFormatDetector.audioDeviceTypeToString
 import org.akanework.gramophone.logic.utils.ReplayGainUtil.Mode
 import org.nift4.gramophone.hificore.AudioSystemHiddenApi
@@ -59,7 +60,10 @@ class PostAmpAudioSink(
         private const val TAG = "PostAmpAudioSink"
         val isVolumeAvailable by lazy {
             try {
-                Volume.isAvailable()
+                if (!getSystemProperty("ro.vivo.os.version").isNullOrBlank())
+                    false /* Volume shouldn't be used on OriginOS for some reason */
+                else
+                    Volume.isAvailable()
             } catch (e: Throwable) {
                 Log.e(TAG, "failed to check if volume is available", e)
                 false

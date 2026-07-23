@@ -845,3 +845,14 @@ fun ContentResolver.queryWithPending(uri: Uri, projection: Array<String>, select
         query(uri, projection, selection, selectionArgs, sortOrder, cancellationSignal)
     }
 }
+
+@SuppressLint("PrivateApi")
+fun getSystemProperty(key: String): String? {
+    return try {
+        val clz = Class.forName("android.os.SystemProperties")
+        val get = clz.getMethod("get", String::class.java)
+        get.invoke(null, key) as String
+    } catch (e: Exception) {
+        null
+    }
+}
