@@ -7,7 +7,7 @@
 
     <style name="Theme.Gramophone" parent="V27.Theme.Gramophone" />
 
-    <style name="V27.Day.Theme.Splash" parent="V23.Day.Theme.Splash">
+    <style name="V27.Day.Theme.Splash" parent="Base.Day.Theme.Splash">
         <item name="android:windowLightNavigationBar">true</item>
     </style>
 
