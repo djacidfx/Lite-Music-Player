@@ -33,6 +33,7 @@ import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.app.ActivityCompat
@@ -45,6 +46,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.Log
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -133,6 +135,7 @@ class AudioPreviewActivity : BaseActivity(), View.OnClickListener {
         }
     }
 
+    @OptIn(ExperimentalApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -194,6 +197,7 @@ class AudioPreviewActivity : BaseActivity(), View.OnClickListener {
                     it.setMp3ExtractorFlags(Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING)
                 })
         )
+            .experimentalSetDynamicSchedulingEnabled(false)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .setAudioAttributes(
                 AudioAttributes
