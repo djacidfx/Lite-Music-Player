@@ -197,7 +197,6 @@ struct track_holder {
     jmethodID onAudioDeviceUpdate = nullptr;
     jobject sharedMemoryBuffer = nullptr;
     void* ats = nullptr;
-    bool died = false;
     JavaVM* vm = nullptr;
     std::map<void*, uint32_t> sequences = {};
 };
@@ -247,44 +246,44 @@ public:
         env->DeleteLocalRef(callbackClass);
     };
     void onUnderrun() override {
-        if (!mCallback || mHolder->died || !mOnUnderrun || !maybeAttachThread(__func__)) return;
+        if (!mCallback || !mOnUnderrun || !maybeAttachThread(__func__)) return;
         mEnv->CallVoidMethod(mCallback, mOnUnderrun);
     }
     void onMarker(uint32_t markerPosition) override {
-        if (!mCallback || mHolder->died || !mOnMarker || !maybeAttachThread(__func__)) return;
+        if (!mCallback || !mOnMarker || !maybeAttachThread(__func__)) return;
         mEnv->CallVoidMethod(mCallback, mOnMarker, (jint) markerPosition);
     }
     void onNewPos(uint32_t newPos) override {
-        if (!mCallback || mHolder->died || !mOnNewPos || !maybeAttachThread(__func__)) return;
+        if (!mCallback || !mOnNewPos || !maybeAttachThread(__func__)) return;
         mEnv->CallVoidMethod(mCallback, mOnNewPos, (jint) newPos);
     }
     // quirk: some ancient (before O) MTK versions don't call this unless track is offload
     void onNewIAudioTrack() override {
-        if (!mCallback || mHolder->died) return;
+        if (!mCallback) return;
         if (mOnNewIAudioTrack && maybeAttachThread(__func__)) {
             mEnv->CallVoidMethod(mCallback, mOnNewIAudioTrack);
         }
     }
     void onStreamEnd() override {
-        if (!mCallback || mHolder->died || !mOnStreamEnd || !maybeAttachThread(__func__)) return;
+        if (!mCallback || !mOnStreamEnd || !maybeAttachThread(__func__)) return;
         mEnv->CallVoidMethod(mCallback, mOnStreamEnd);
     }
     void onNewTimestamp(android::AudioTimestamp timestamp) override {
-        if (!mCallback || mHolder->died || !mOnNewTimestamp || !maybeAttachThread(__func__)) return;
+        if (!mCallback || !mOnNewTimestamp || !maybeAttachThread(__func__)) return;
         mEnv->CallVoidMethod(mCallback, mOnNewTimestamp,
                                      (jint) timestamp.mPosition,
                                      (jlong)((timestamp.mTime.tv_sec * 1000000000LL) + timestamp.mTime.tv_nsec));
     }
     void onLoopEnd(int32_t loopsRemaining) override {
-        if (!mCallback || mHolder->died || !mOnLoopEnd || !maybeAttachThread(__func__)) return;
+        if (!mCallback || !mOnLoopEnd || !maybeAttachThread(__func__)) return;
         mEnv->CallVoidMethod(mCallback, mOnLoopEnd, (jint) loopsRemaining);
     }
     void onBufferEnd() override {
-        if (!mCallback || mHolder->died || !mOnBufferEnd || !maybeAttachThread(__func__)) return;
+        if (!mCallback || !mOnBufferEnd || !maybeAttachThread(__func__)) return;
         mEnv->CallVoidMethod(mCallback, mOnBufferEnd);
     }
     size_t onMoreData(const android::AudioTrack::Buffer &buffer) override {
-        if (!mCallback || mHolder->died || !mOnMoreData || !maybeAttachThread(__func__)) return 0;
+        if (!mCallback || !mOnMoreData || !maybeAttachThread(__func__)) return 0;
         jobject buf = mEnv->NewDirectByteBuffer(buffer.raw, (jlong) (uint64_t) buffer.mSize);
         auto ret = (size_t) mEnv->CallLongMethod(mCallback, mOnMoreData, buf,
                                                      (jlong) (uint64_t) buffer.frameCount);
@@ -292,7 +291,7 @@ public:
         return ret;
     }
     size_t onCanWriteMoreData(const android::AudioTrack::Buffer &buffer) override {
-        if (!mCallback || mHolder->died || !mOnCanWriteMoreData || !maybeAttachThread(__func__)) return 0;
+        if (!mCallback || !mOnCanWriteMoreData || !maybeAttachThread(__func__)) return 0;
         // this method is a bit of a misnomer, we're supposed to never write in the buffer and
         // always return 0. only the available write capacity is of interest.
         uint64_t size = buffer.mSize;
@@ -370,7 +369,7 @@ public:
 };
 
 static void callOnAudioDeviceUpdate(track_holder* holder, int audioIo, const DeviceIdVector& deviceIds) {
-    if (!holder->thiz || holder->died || !holder->onAudioDeviceUpdate) return;
+    if (!holder->thiz || !holder->onAudioDeviceUpdate) return;
     JNIEnv* env;
     int ret = holder->vm->GetEnv((void**)&env, JNI_VERSION_1_6);
     if (ret == JNI_EDETACHED) {
@@ -1143,8 +1142,6 @@ extern "C"
 JNIEXPORT jint JNICALL
 Java_org_nift4_gramophone_hificore_NativeTrack_startInternal(JNIEnv *, jobject, jlong ptr) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return -32; // DEAD_OBJECT
     return ZN7android10AudioTrack5startEv(holder->track);
 }
 
@@ -1311,8 +1308,6 @@ JNIEXPORT jint JNICALL
 Java_org_nift4_gramophone_hificore_NativeTrack_attachAuxEffectInternal(JNIEnv*, jobject,
                                                                        jlong ptr, jint effect_id) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return -32; // DEAD_OBJECT
     return ZN7android10AudioTrack15attachAuxEffectEi(holder->track, effect_id);
 }
 
@@ -1329,8 +1324,6 @@ JNIEXPORT jint JNICALL
 Java_org_nift4_gramophone_hificore_NativeTrack_setParametersInternal(JNIEnv *env, jobject,
                                                                      jlong ptr, jstring params) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return -32; // DEAD_OBJECT
     const char* str = env->GetStringUTFChars(params, nullptr);
     String8 string8 = {};
     ZN7android7String8C1EPKc(&string8, str);
@@ -1345,8 +1338,6 @@ JNIEXPORT jstring JNICALL
 Java_org_nift4_gramophone_hificore_NativeTrack_getParametersInternal(JNIEnv *env, jobject,
                                                                      jlong ptr, jstring params) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return nullptr;
     const char* str = env->GetStringUTFChars(params, nullptr);
     String8 string8 = {};
     ZN7android7String8C1EPKc(&string8, str);
@@ -1363,8 +1354,6 @@ JNIEXPORT jint JNICALL
 Java_org_nift4_gramophone_hificore_NativeTrack_getTimestampInternal(JNIEnv* env, jobject,
                                                                     jlong ptr, jlongArray out) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return -32; // DEAD_OBJECT
     android::AudioTimestamp ts;
     int32_t ret = ZN7android10AudioTrack12getTimestampERNS_14AudioTimestampE(holder->track, ts);
     if (ret == 0) {
@@ -1386,8 +1375,6 @@ Java_org_nift4_gramophone_hificore_NativeTrack_writeInternal__JLjava_nio_ByteBuf
                                                                                          jint size,
                                                                                          jboolean blocking) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return -32; // DEAD_OBJECT
     auto buffer = reinterpret_cast<uintptr_t>(env->GetDirectBufferAddress(buf));
     if (buffer == 0) {
         return INT32_MIN;
@@ -1403,8 +1390,6 @@ Java_org_nift4_gramophone_hificore_NativeTrack_writeInternal__J_3BIIZ(JNIEnv *en
 																	jint offset, jint size,
                                                                     jboolean blocking) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return -32; // DEAD_OBJECT
     jbyte* buffer = env->GetByteArrayElements(buf, nullptr);
     if (buffer == nullptr) {
         return INT32_MIN;
@@ -1422,8 +1407,6 @@ Java_org_nift4_gramophone_hificore_NativeTrack_writeInternal__J_3FIIZ(JNIEnv *en
                                                                       jint offset, jint size,
                                                                       jboolean blocking) {
 	auto holder = (track_holder*) ptr;
-	if (holder->died)
-		return -32; // DEAD_OBJECT
 	jfloat* buffer = env->GetFloatArrayElements(buf, nullptr);
 	if (buffer == nullptr) {
 		return INT32_MIN;
@@ -1441,8 +1424,6 @@ Java_org_nift4_gramophone_hificore_NativeTrack_obtainBufferInternal(JNIEnv *env,
                                                                     jint waitCount, jlongArray nc,
                                                                     jlong requested_frame_count) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return nullptr;
     android::AudioTrack::Buffer temp;
     temp.frameCount = requested_frame_count;
     temp.mSize = requested_frame_count * frame_size; // technically not needed
@@ -1476,8 +1457,6 @@ Java_org_nift4_gramophone_hificore_NativeTrack_releaseBufferInternal(JNIEnv *env
                                                                      jlong ptr, jint frame_size,
                                                                      jobject buf, jint limit) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return;
     android::AudioTrack::Buffer temp;
     temp.raw = env->GetDirectBufferAddress(buf);
     temp.mSize = limit;
@@ -1496,8 +1475,6 @@ extern "C"
 JNIEXPORT jboolean JNICALL
 Java_org_nift4_gramophone_hificore_NativeTrack_pauseAndWaitInternal(JNIEnv *, jobject, jlong ptr, jlong timeout) {
     auto holder = (track_holder*) ptr;
-    if (holder->died)
-        return true;
     std::chrono::milliseconds millis(timeout);
     return ZN7android10AudioTrack12pauseAndWaitERKNSt3__16chrono8durationIxNS1_5ratioILl1ELl1000EEEEE(holder->track, millis);
 }
@@ -1524,8 +1501,6 @@ JNIEXPORT jint JNICALL
 Java_org_nift4_gramophone_hificore_NativeTrack_setSelectedDeviceInternal(JNIEnv*, jobject,
                                                                          jlong ptr, jint id) {
 	auto holder = (track_holder*) ptr;
-	if (holder->died)
-		return -32; // DEAD_OBJECT
 	return ZN7android10AudioTrack15setOutputDeviceEi(holder->track, id);
 }
 
