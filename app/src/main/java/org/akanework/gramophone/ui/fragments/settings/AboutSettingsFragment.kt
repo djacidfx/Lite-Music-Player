@@ -76,9 +76,6 @@ class AboutSettingsFragment : BasePreferenceFragment() {
             val aboutTextView = rootView.findViewById<TextView>(R.id.about_text)!!
             aboutTextView.text = requireContext()
                 .getString(R.string.opensource_info, "© 2023-2026 AkaneTan, nift4 and contributors")
-            // does not render correctly on old versions for mysterious reasons
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M)
-                rootView.findViewById<View>(R.id.iconCard)!!.visibility = View.GONE
         } else if (preference.key == "contributors") {
             startActivity(ContributorsSettingsActivity::class.java)
         } else if (preference.key == "package_type") {

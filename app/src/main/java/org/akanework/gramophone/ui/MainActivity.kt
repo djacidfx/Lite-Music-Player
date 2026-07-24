@@ -741,7 +741,6 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    @RequiresApi(23)
     override fun onProvideAssistContent(outContent: AssistContent?) {
         super.onProvideAssistContent(outContent)
 

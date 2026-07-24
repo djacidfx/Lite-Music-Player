@@ -384,9 +384,9 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     this, rgAp, this::onAudioSinkInputFormatChanged,
                     afFormatTracker::setAudioSink
                 )
-                    .setPcmEncodingRestrictionLifted(true)
+                    .setEnableHighResolutionPcmOutput(true)
                     .setEnableDecoderFallback(true)
-                    .setEnableAudioTrackPlaybackParams(true)
+                    .setEnableAudioOutputPlaybackParameters(true)
                     .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON),
                 GramophoneMediaSourceFactory(
                     DefaultDataSource.Factory(this),

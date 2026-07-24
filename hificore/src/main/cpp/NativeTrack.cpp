@@ -61,9 +61,6 @@ typedef void*(*ZN7android10AudioTrackC1Ev_t)(void* thisptr);
 static ZN7android10AudioTrackC1Ev_t ZN7android10AudioTrackC1Ev = nullptr;
 typedef void(*ZN7android7RefBase12weakref_type7decWeakEPKv_t)(void* thisptr, void* id);
 static ZN7android7RefBase12weakref_type7decWeakEPKv_t ZN7android7RefBase12weakref_type7decWeakEPKv = nullptr;
-typedef int32_t(*ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_tjm20audio_output_flags_tPFviPvS4_ES4_jRKNS_2spINS_7IMemoryEEEbiNS0_13transfer_typeEPK20audio_offload_info_tiiPK18audio_attributes_t_t)
-        (void* thisptr, int32_t streamType, uint32_t sampleRate, uint32_t format, uint32_t channelMask, size_t frameCount /* = 0 */, uint32_t flags /* = 0 */, legacy_callback_t callback /* = nullptr */, void* user /* = nullptr */, int32_t notificationFrames /* = 0 */, fake_sp& sharedMemory /* = nullptr */, bool threadCanCallJava /* = false */, int32_t audioSessionId /* = 0 */, int32_t transferType /* = TRANSFER_DEFAULT */, void* offloadInfo /* = nullptr */, int uid, pid_t pid, void* attributes /* = nullptr */);
-static ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_tjm20audio_output_flags_tPFviPvS4_ES4_jRKNS_2spINS_7IMemoryEEEbiNS0_13transfer_typeEPK20audio_offload_info_tiiPK18audio_attributes_t_t ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_tjm20audio_output_flags_tPFviPvS4_ES4_jRKNS_2spINS_7IMemoryEEEbiNS0_13transfer_typeEPK20audio_offload_info_tiiPK18audio_attributes_t = nullptr;
 typedef int32_t(*ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_t20audio_channel_mask_tm20audio_output_flags_tRKNS_2wpINS0_19IAudioTrackCallbackEEEiRKNS_2spINS_7IMemoryEEEb15audio_session_tNS0_13transfer_typeEPK20audio_offload_info_tRKNS_7content22AttributionSourceStateEPK18audio_attributes_tbfi_t)
         (void* thisptr, int32_t streamType, uint32_t sampleRate, uint32_t format, uint32_t channelMask, size_t frameCount /* = 0 */, uint32_t flags /* = 0 */, fake_wp& callback /* = nullptr */, int32_t notificationFrames /* = 0 */, fake_sp& sharedMemory /* = nullptr */, bool threadCanCallJava /* = false */, int32_t audioSessionId /* = 0 */, int32_t transferType /* = TRANSFER_DEFAULT */, void* offloadInfo /* = nullptr */, int& attributionSource, void* attributes /* = nullptr */, bool doNotReconnect /* = false */, float maxRequiredSpeed /* = 1.0f */, int selectedDeviceId /* = 0 */);
 static ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_t20audio_channel_mask_tm20audio_output_flags_tRKNS_2wpINS0_19IAudioTrackCallbackEEEiRKNS_2spINS_7IMemoryEEEb15audio_session_tNS0_13transfer_typeEPK20audio_offload_info_tRKNS_7content22AttributionSourceStateEPK18audio_attributes_tbfi_t ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_t20audio_channel_mask_tm20audio_output_flags_tRKNS_2wpINS0_19IAudioTrackCallbackEEEiRKNS_2spINS_7IMemoryEEEb15audio_session_tNS0_13transfer_typeEPK20audio_offload_info_tRKNS_7content22AttributionSourceStateEPK18audio_attributes_tbfi = nullptr;
@@ -89,8 +86,6 @@ typedef int32_t(*ZN7android11AudioSystem15getSamplingRateEiPj_t)(int32_t output,
 static ZN7android11AudioSystem15getSamplingRateEiPj_t ZN7android11AudioSystem15getSamplingRateEiPj = nullptr;
 typedef void(*ZN7android11AudioSystem13releaseOutputEi19audio_stream_type_t15audio_session_t_t)(uint32_t output, int32_t stream, int32_t session);
 static ZN7android11AudioSystem13releaseOutputEi19audio_stream_type_t15audio_session_t_t ZN7android11AudioSystem13releaseOutputEi19audio_stream_type_t15audio_session_t = nullptr;
-typedef bool(*ZNK7android10AudioTrack19isOffloadedOrDirectEv_t)(void* thisptr);
-static ZNK7android10AudioTrack19isOffloadedOrDirectEv_t ZNK7android10AudioTrack19isOffloadedOrDirectEv = nullptr;
 typedef int32_t(*ZN7android10AudioTrack15setOutputDeviceEi_t)(void* thisptr, int32_t selectedDeviceId);
 static ZN7android10AudioTrack15setOutputDeviceEi_t ZN7android10AudioTrack15setOutputDeviceEi = nullptr;
 typedef int32_t(*ZN7android10AudioTrack15getOutputDeviceEv_t)(void* thisptr);
@@ -202,7 +197,6 @@ struct track_holder {
     jmethodID onAudioDeviceUpdate = nullptr;
     jobject sharedMemoryBuffer = nullptr;
     void* ats = nullptr;
-    bool deathEmulation = false;
     bool died = false;
     JavaVM* vm = nullptr;
     std::map<void*, uint32_t> sequences = {};
@@ -267,13 +261,6 @@ public:
     // quirk: some ancient (before O) MTK versions don't call this unless track is offload
     void onNewIAudioTrack() override {
         if (!mCallback || mHolder->died) return;
-        if (mHolder->deathEmulation) {
-            // implies android_get_device_api_level() < 23
-            // block any further callbacks, and access to track object other than dtor
-            mHolder->died = true;
-            ZN7android10AudioTrack5pauseEv(mHolder->track);
-            ZN7android10AudioTrack4stopEv(mHolder->track);
-        }
         if (mOnNewIAudioTrack && maybeAttachThread(__func__)) {
             mEnv->CallVoidMethod(mCallback, mOnNewIAudioTrack);
         }
@@ -530,20 +517,16 @@ Java_org_nift4_gramophone_hificore_NativeTrack_00024Companion_initDlsym(JNIEnv* 
         DLSYM_OR_ELSE(libaudioclient, ZN7android10AudioTrack18getRoutedDeviceIdsEv) {
             DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack17getRoutedDeviceIdEv, false)
         }
-    } else if (android_get_device_api_level() >= 23) {
+    } else {
         DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack17getRoutedDeviceIdEv, false)
     }
-    if (android_get_device_api_level() >= 23) {
-	    DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack15setOutputDeviceEi, false)
-	    DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack15getOutputDeviceEv, false)
-        DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack22addAudioDeviceCallbackERKNS_2spINS_11AudioSystem19AudioDeviceCallbackEEE, false)
-        DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack25removeAudioDeviceCallbackERKNS_2spINS_11AudioSystem19AudioDeviceCallbackEEE, false)
-        DLSYM_OR_RETURN(libaudioclient, ZNK7android10AudioTrack21getOriginalSampleRateEv, false)
-	    DLSYM_OR_RETURN(libaudioclient, ZNK7android10AudioTrack15getPlaybackRateEv, false)
-	    DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack15setPlaybackRateERKNS_17AudioPlaybackRateE, false)
-    } else {
-        DLSYM_OR_RETURN(libaudioclient, ZNK7android10AudioTrack19isOffloadedOrDirectEv, false)
-    }
+    DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack15setOutputDeviceEi, false)
+    DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack15getOutputDeviceEv, false)
+    DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack22addAudioDeviceCallbackERKNS_2spINS_11AudioSystem19AudioDeviceCallbackEEE, false)
+    DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack25removeAudioDeviceCallbackERKNS_2spINS_11AudioSystem19AudioDeviceCallbackEEE, false)
+    DLSYM_OR_RETURN(libaudioclient, ZNK7android10AudioTrack21getOriginalSampleRateEv, false)
+    DLSYM_OR_RETURN(libaudioclient, ZNK7android10AudioTrack15getPlaybackRateEv, false)
+    DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack15setPlaybackRateERKNS_17AudioPlaybackRateE, false)
 	if (android_get_device_api_level() >= 24) {
 		DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack21getBufferDurationInUsEPl, false)
 		DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack15pendingDurationEPiNS_17ExtendedTimestamp8LocationE, false)
@@ -565,10 +548,8 @@ Java_org_nift4_gramophone_hificore_NativeTrack_00024Companion_initDlsym(JNIEnv* 
         DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_tjm20audio_output_flags_tPFviPvS4_ES4_iRKNS_2spINS_7IMemoryEEEb15audio_session_tNS0_13transfer_typeEPK20audio_offload_info_tjiPK18audio_attributes_tbf, false)
     } else if (android_get_device_api_level() >= 24) {
         DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_tjm20audio_output_flags_tPFviPvS4_ES4_iRKNS_2spINS_7IMemoryEEEb15audio_session_tNS0_13transfer_typeEPK20audio_offload_info_tiiPK18audio_attributes_tbf, false)
-    } else if (android_get_device_api_level() >= 23) {
-        DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_tjm20audio_output_flags_tPFviPvS4_ES4_jRKNS_2spINS_7IMemoryEEEbiNS0_13transfer_typeEPK20audio_offload_info_tiiPK18audio_attributes_tb, false)
     } else {
-        DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_tjm20audio_output_flags_tPFviPvS4_ES4_jRKNS_2spINS_7IMemoryEEEbiNS0_13transfer_typeEPK20audio_offload_info_tiiPK18audio_attributes_t, false)
+        DLSYM_OR_RETURN(libaudioclient, ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_tjm20audio_output_flags_tPFviPvS4_ES4_jRKNS_2spINS_7IMemoryEEEbiNS0_13transfer_typeEPK20audio_offload_info_tiiPK18audio_attributes_tb, false)
     }
     DLSYM_OR_RETURN(libaudioclient, ZNK7android10AudioTrack9getOutputEv, false)
     if (android_get_device_api_level() >= 32) {
@@ -677,14 +658,6 @@ Java_org_nift4_gramophone_hificore_NativeTrack_set(
         jboolean isStreaming, jint bitWidth, jint offloadBufferSize, jint usage, jint contentType,
         jint attrFlags, jint notificationFrames, jboolean doNotReconnect, jint transferMode,
         jint contentId, jint syncId, jint encapsulationMode, jobject sharedMem) {
-    if (android_get_device_api_level() < 23 && maxRequiredSpeed != 1.0f) {
-        ALOGE("Android 5.x does not support speed adjustment, maxRequiredSpeed != 1f is wrong");
-        return INT32_MIN;
-    }
-    if (android_get_device_api_level() < 23 && selectedDeviceId != 0) {
-        ALOGE("Android 5.x does not support selected devices, selectedDeviceId != 0 is wrong");
-        return INT32_MIN;
-    }
     if (android_get_device_api_level() < 30 && (contentId != 0 || syncId != 0)) {
         ALOGE("Tuner supported since Android 11, (contentId != 0 || syncId != 0) is wrong");
         return INT32_MIN;
@@ -868,7 +841,7 @@ Java_org_nift4_gramophone_hificore_NativeTrack_set(
                 /* doNotReconnect = */ doNotReconnect,
                 /* maxRequiredSpeed = */ maxRequiredSpeed
         );
-    } else if (android_get_device_api_level() >= 23) { // Android 6.0 (SDK 23)
+    } else { // Android 6.0 (SDK 23)
 #ifdef __LP64__
         *(int32_t*)((uintptr_t)holder->track + 0x2e0) = selectedDeviceId; // aarch64, x86_64
 #elif defined(i386)
@@ -956,32 +929,6 @@ Java_org_nift4_gramophone_hificore_NativeTrack_set(
                 /* pAttributes = */ &audioAttributes.newAttrs,
                 /* doNotReconnect = */ doNotReconnect
                 );
-    } else { // Android 5.0 / 5.1 (SDK 21 / 22)
-        ret = ZN7android10AudioTrack3setE19audio_stream_type_tj14audio_format_tjm20audio_output_flags_tPFviPvS4_ES4_jRKNS_2spINS_7IMemoryEEEbiNS0_13transfer_typeEPK20audio_offload_info_tiiPK18audio_attributes_t(
-                holder->track,
-                /* streamType = */ streamType,
-                /* sampleRate = */ sampleRate,
-                /* format = */ format,
-                /* channelMask = */ channelMask,
-                /* frameCount = */ frameCount,
-                /* flags = */ trackFlags,
-                /* callback = */ callbackAdapter,
-                /* user = */ holder->callback,
-                /* notificationFrames = */ notificationFrames,
-                /* sharedBuffer = */ sharedMemory,
-                /* threadCanCallJava = */ true,
-                /* sessionId = */ sessionId,
-                /* transferType = */ transferMode,
-                /* offloadInfo = */ &offloadInfo,
-                /* uid = */ (int32_t)getuid(),
-                /* pid = */ getpid(),
-                /* pAttributes = */ &audioAttributes.newAttrs
-                );
-        if (ret == 0 && doNotReconnect) {
-            // quirk: doNotReconnect will not work on some MTKs for non-offload (ie mixed or direct)
-            // because onNewIAudioTrack is not called (on purpose). such is life.
-            holder->deathEmulation = !ZNK7android10AudioTrack19isOffloadedOrDirectEv(holder->track);
-        }
     }
     return ret;
 }
@@ -1024,30 +971,6 @@ Java_org_nift4_gramophone_hificore_NativeTrack_notificationFramesActFromOffset(
 #else
             return (int32_t)*(uint32_t*)((uintptr_t)holder->track + 0x1c8);
 #endif
-        case 22:
-            extra =
-#ifdef __ARM_ARCH_7A__
-                /* QCOM_DIRECTTRACK (BOARD_USES_LEGACY_ALSA_AUDIO), only for MSM8x60 in CM12.x */
-                dlsym(libaudioclient_handle, "_ZN7android10AudioTrack6notifyEi") ? 0x1c /* 0x1c8 */ :
-#endif
-                (dlsym(libaudioclient_handle, "_ZN7android10AudioTrack28initializeTrackOffloadParamsEv")
-#ifdef __LP64__
-                 ? 0x20 /* 0x20c */ : 0x0);
-            // edge case: couldn't find any CM12.1 x86_64 build
-#elif defined(i386)
-                 ? 0x18 /* 0x1bc */ : 0x0);
-#else
-                 ? 0x14 /* 0x1c0 */ : 0x0);
-#endif
-            break;
-        case 21:
-            extra =
-#ifdef __ARM_ARCH_7A__
-                /* QCOM_DIRECTTRACK (BOARD_USES_LEGACY_ALSA_AUDIO), only for MSM8x60 in CM12.x */
-                dlsym(libaudioclient_handle, "_ZN7android10AudioTrack6notifyEi") ? 0x8 /* 0x1b4 */ :
-#endif
-                (0);
-            break;
         default:
             return INT32_MAX;
     }

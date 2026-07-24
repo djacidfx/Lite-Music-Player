@@ -102,11 +102,7 @@ android {
 
     defaultConfig {
         applicationId = appIdOverride ?: "org.akanework.gramophone"
-        // Reasons to not support KK include me.zhanghai.android.fastscroll, WindowInsets for
-        // bottom sheet padding, ExoPlayer requiring multidex, vector drawables and poor SD support
-        // That said, supporting Android 5.0 costs tolerable amounts of tech debt, and we plan to
-        // keep support for it for a while.
-        minSdk = 21
+        minSdk = 23
         targetSdk = 37
         versionCode = 23
         versionName = "1.1.1"

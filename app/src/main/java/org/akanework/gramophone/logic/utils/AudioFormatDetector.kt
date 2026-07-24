@@ -22,10 +22,10 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.os.Build
 import android.os.Parcelable
-import androidx.annotation.RequiresApi
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.CodecSpecificDataUtil
 import androidx.media3.common.util.Log
 import androidx.media3.common.util.Util
 import kotlinx.parcelize.Parcelize
@@ -168,14 +168,6 @@ object AudioFormatDetector {
             null,
             R.string.spk_encoding_pcm_16bit_big_endian
         ),
-        ENCODING_PCM_20BIT(C.ENCODING_PCM_20BIT, null, null, null, R.string.spk_encoding_pcm_20bit),
-        ENCODING_PCM_20BIT_BIG_ENDIAN(
-            C.ENCODING_PCM_20BIT_BIG_ENDIAN,
-            null,
-            null,
-            null,
-            R.string.spk_encoding_pcm_20bit_big_endian
-        ),
         ENCODING_PCM_24BIT(
             C.ENCODING_PCM_24BIT,
             "AUDIO_FORMAT_PCM_24_BIT_PACKED",
@@ -300,7 +292,7 @@ object AudioFormatDetector {
             "AUDIO_FORMAT_E_AC3_JOC",
             if (Build.VERSION.SDK_INT >= 28)
                 0xA000001U else 0x1E000000U,
-            if (Build.VERSION.SDK_INT >= 23) 28 else 21,
+            28,
             R.string.spk_encoding_e_ac3_joc
         ), // aosp since 28
         ENCODING_AC4(
@@ -313,14 +305,14 @@ object AudioFormatDetector {
         ENCODING_DTS(
             C.ENCODING_DTS,
             "AUDIO_FORMAT_DTS",
-            if (Build.VERSION.SDK_INT >= 23) 0x0B000000U else 0x12000000U,
+            0x0B000000U,
             21,
             R.string.spk_encoding_dts
         ), // aosp since 23
         ENCODING_DTS_HD(
             C.ENCODING_DTS_HD,
             "AUDIO_FORMAT_DTS_HD",
-            if (Build.VERSION.SDK_INT >= 23) 0x0C000000U else 0x18000000U,
+            0x0C000000U,
             21,
             R.string.spk_encoding_dts_hd
         ), // aosp since 23
@@ -366,66 +358,56 @@ object AudioFormatDetector {
         ENCODING_EVRCB(
             null,
             "AUDIO_FORMAT_EVRCB",
-            if (Build.VERSION.SDK_INT >= 26) 0x11000000U else
-                if (Build.VERSION.SDK_INT >= 23) 0x15000000U else 0x16000000U,
+            if (Build.VERSION.SDK_INT >= 26) 0x11000000U else 0x15000000U,
             21,
             R.string.spk_encoding_evrcb
         ), // aosp since 26
         ENCODING_EVRCWB(
             null,
             "AUDIO_FORMAT_EVRCWB",
-            if (Build.VERSION.SDK_INT >= 26) 0x12000000U else
-                if (Build.VERSION.SDK_INT >= 23) 0x16000000U else 0x17000000U,
+            if (Build.VERSION.SDK_INT >= 26) 0x12000000U else 0x16000000U,
             21,
             R.string.spk_encoding_evrcwb
         ), // aosp since 26
         ENCODING_EVRCNW(
             null,
             "AUDIO_FORMAT_EVRCNW",
-            if (Build.VERSION.SDK_INT >= 26) 0x13000000U else
-                if (Build.VERSION.SDK_INT >= 23) 0x19000000U else 0x1B000000U,
+            if (Build.VERSION.SDK_INT >= 26) 0x13000000U else 0x19000000U,
             21,
             R.string.spk_encoding_evrcnw
         ), // aosp since 26
         ENCODING_AAC_ADIF(
-            null, "AUDIO_FORMAT_AAC_ADIF", if (Build.VERSION.SDK_INT >= 23) 0x14000000U else
-                0x15000000U, 21, R.string.spk_encoding_aac_adif
+            null, "AUDIO_FORMAT_AAC_ADIF", 0x14000000U, 21, R.string.spk_encoding_aac_adif
         ), // aosp since 26
         ENCODING_WMA(
             null,
             "AUDIO_FORMAT_WMA",
-            if (Build.VERSION.SDK_INT >= 26) 0x15000000U else
-                if (Build.VERSION.SDK_INT >= 23) 0x12000000U else 0x13000000U,
+            if (Build.VERSION.SDK_INT >= 26) 0x15000000U else 0x12000000U,
             21,
             R.string.spk_encoding_wma
         ),
         ENCODING_WMA_PRO(
             null,
             "AUDIO_FORMAT_WMA_PRO",
-            if (Build.VERSION.SDK_INT >= 26) 0x16000000U else
-                if (Build.VERSION.SDK_INT >= 23) 0x13000000U else 0x14000000U,
+            if (Build.VERSION.SDK_INT >= 26) 0x16000000U else 0x13000000U,
             21,
             R.string.spk_encoding_wma_pro
         ),
         ENCODING_AMR_WB_PLUS(
-            null, "AUDIO_FORMAT_AMR_WB_PLUS", if (Build.VERSION.SDK_INT >= 23) 0x17000000U else
-                0x19000000U, 21, R.string.spk_encoding_amr_wb_plus
+            null, "AUDIO_FORMAT_AMR_WB_PLUS", 0x17000000U, 21, R.string.spk_encoding_amr_wb_plus
         ), // aosp since 26
         ENCODING_MP2(
-            null, "AUDIO_FORMAT_MP2", if (Build.VERSION.SDK_INT >= 23) 0x18000000U else
-                0x1A000000U, 21, R.string.spk_encoding_mp2
+            null, "AUDIO_FORMAT_MP2", 0x18000000U, 21, R.string.spk_encoding_mp2
         ), // aosp since 26
         ENCODING_QCELP(
             null, "AUDIO_FORMAT_QCELP", if (Build.VERSION.SDK_INT >= 26) 0x19000000U else
                 0x11000000U, 26, R.string.spk_encoding_qcelp
         ),
         ENCODING_PCM_16_BIT_OFFLOAD(
-            null, "AUDIO_FORMAT_PCM_16_BIT_OFFLOAD", if (Build.VERSION.SDK_INT >= 23)
-                0x1A000001U else 0x1C000001U, 21..25, R.string.spk_encoding_pcm_16bit_offload
+            null, "AUDIO_FORMAT_PCM_16_BIT_OFFLOAD", 0x1A000001U, 21..25, R.string.spk_encoding_pcm_16bit_offload
         ), // caf
         ENCODING_PCM_8_24_BIT_OFFLOAD(
-            null, "AUDIO_FORMAT_PCM_24_BIT_OFFLOAD", if (Build.VERSION.SDK_INT >= 23)
-                0x1A000004U else 0x1C000004U, 21..25, R.string.spk_encoding_pcm_24bit_offload
+            null, "AUDIO_FORMAT_PCM_24_BIT_OFFLOAD", 0x1A000004U, 21..25, R.string.spk_encoding_pcm_24bit_offload
         ), // caf
         ENCODING_DSD(
             null,
@@ -437,7 +419,7 @@ object AudioFormatDetector {
         ENCODING_FLAC(
             null,
             "AUDIO_FORMAT_FLAC",
-            if (Build.VERSION.SDK_INT >= 23) 0x1B000000U else 0x1D000000U,
+            0x1B000000U,
             21,
             R.string.spk_encoding_flac
         ), // aosp since 26
@@ -887,7 +869,7 @@ object AudioFormatDetector {
                     prettyPrintAfFormatInfo(context, halFormat)
                 append("\n")
                 append("== Playback device ==\n")
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && halFormat != null) {
+                if (halFormat != null) {
                     append("Device name: ${halFormat.routedDeviceName} (ID: ${halFormat.routedDeviceId})\n")
                     append(
                         "Device type: ${
@@ -928,10 +910,16 @@ object AudioFormatDetector {
             }
 
             append("Bit depth: ")
-            val bitDepth = try {
-                Util.getBitDepth(format.pcmEncoding)
-            } catch (_: IllegalArgumentException) {
-                null
+            val bitDepth = if (format.sampleMimeType == MimeTypes.AUDIO_ALAC &&
+                format.initializationData.isNotEmpty()) {
+                // pcmEncoding doesn't support 20-bit, so parse it manually for the only format affected
+                CodecSpecificDataUtil.parseAlacAudioSpecificConfig(format.initializationData[0])[2]
+            } else {
+                try {
+                    Util.getByteDepth(format.pcmEncoding) * 8
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
             }
             if (bitDepth != null) {
                 append(bitDepth)
@@ -1027,10 +1015,16 @@ object AudioFormatDetector {
         if (formats?.size != 1) return null
         val format = formats.first().second.first
         val sampleRate = format.sampleRate.takeIf { it != Format.NO_VALUE }
-        val bitDepth = try {
-            Util.getBitDepth(format.pcmEncoding)
-        } catch (_: IllegalArgumentException) {
-            null
+        val bitDepth = if (format.sampleMimeType == MimeTypes.AUDIO_ALAC &&
+            format.initializationData.isNotEmpty()) {
+            // pcmEncoding doesn't support 20-bit, so parse it manually for the only format affected
+            CodecSpecificDataUtil.parseAlacAudioSpecificConfig(format.initializationData[0])[2]
+        } else {
+            try {
+                Util.getByteDepth(format.pcmEncoding) * 8
+            } catch (_: IllegalArgumentException) {
+                null
+            }
         }
         val isLossless = isLosslessFormat(format.sampleMimeType)
         val bitrate = if (isLossless != true)
@@ -1066,11 +1060,13 @@ object AudioFormatDetector {
         MimeTypes.AUDIO_RAW,
         MimeTypes.AUDIO_TRUEHD,
         MimeTypes.AUDIO_MIDI,
-        MimeTypes.AUDIO_EXOPLAYER_MIDI -> true
+        MimeTypes.AUDIO_EXOPLAYER_MIDI,
+        MimeTypes.AUDIO_DSD,
+        MimeTypes.AUDIO_DTS_HD_MA,
+        MimeTypes.AUDIO_MEDIA3_DTS_HD_MA_CORELESS -> true
 
-        // TODO distinguish lossless DTS-HD MA vs other lossy DTS-HD encoding schemes
-        //  https://github.com/androidx/media/issues/2487
-        MimeTypes.AUDIO_DTS_HD, MimeTypes.AUDIO_DTS_X -> null
+        // TODO distinguish lossless DTS-UHD P2 vs other lossy DTS-UHD encoding schemes
+        MimeTypes.AUDIO_DTS_UHD_P2 -> null
 
         else -> false
     }
@@ -1175,7 +1171,6 @@ object AudioFormatDetector {
         return str.joinToString(", ")
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
     fun audioDeviceTypeToString(context: Context, type: Int?) =
         when (type) {
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> context.getString(R.string.device_type_bluetooth_a2dp)

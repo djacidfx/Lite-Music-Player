@@ -140,7 +140,9 @@
         <item name="postSplashScreenTheme">@style/Theme.Gramophone</item>
     </style>
 
-    <style name="Base.Day.Theme.Splash" parent="Base.Night.Theme.Splash" />
+    <style name="Base.Day.Theme.Splash" parent="Base.Night.Theme.Splash">
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 
     <style name="Impl.Day.Theme.Splash" parent="Base.Day.Theme.Splash" />
 

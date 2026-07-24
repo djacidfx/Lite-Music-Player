@@ -119,8 +119,6 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (Util.getBitDepth(inputAudioFormat.encoding) % 8 != 0)
-            throw IllegalStateException("unsupported pcm encoding ${inputAudioFormat.encoding}")
         if (Flags.TEST_RG_OFFLOAD) {
             return AudioProcessor.AudioFormat.NOT_SET
         }

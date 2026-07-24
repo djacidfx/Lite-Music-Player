@@ -391,8 +391,7 @@ class NativeTrack(
         fun bitsPerSampleForFormat(format: UInt): Int {
             val cafOffloadMain = when {
                 Build.VERSION.SDK_INT >= 25 -> null
-                Build.VERSION.SDK_INT >= 23 -> 0x1A000000U
-                else -> 0x1C000000U
+                else -> 0x1A000000U
             }
             val normalized =
                 if (cafOffloadMain != null && (format and 0xff000000U) == cafOffloadMain) {
@@ -1069,7 +1068,6 @@ class NativeTrack(
 
     private external fun getSampleRateInternal(ptr: Long): Int
 
-    @RequiresApi(Build.VERSION_CODES.M)
     fun getOriginalSampleRate(): UInt {
         if (myState == State.RELEASED)
             throw IllegalStateException("state is $myState")
@@ -1080,7 +1078,6 @@ class NativeTrack(
         }.toUInt()
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
     private external fun getOriginalSampleRateInternal(ptr: Long): Int
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -1098,7 +1095,6 @@ class NativeTrack(
         return AudioTrackHiddenApi.getHalFormat(proxy!!) ?: 0u
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
     fun setPlaybackRate(rate: PlaybackRate) {
         if (myState != State.ALIVE)
             throw IllegalStateException("state is $myState")
@@ -1123,7 +1119,6 @@ class NativeTrack(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
     private external fun setPlaybackRateInternal(
         ptr: Long,
         speed: Float,
@@ -1146,7 +1141,6 @@ class NativeTrack(
         val fallback: StretchFallbackMode
     )
 
-    @RequiresApi(Build.VERSION_CODES.M)
     fun getPlaybackRate(): PlaybackRate {
         if (myState == State.RELEASED)
             throw IllegalStateException("state is $myState")
@@ -1166,7 +1160,6 @@ class NativeTrack(
         )
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
     private external fun getPlaybackRateInternal(ptr: Long, speedPitch: FloatArray): Long
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -1361,7 +1354,6 @@ class NativeTrack(
 
     private external fun getOutputInternal(ptr: Long): Int
 
-    @RequiresApi(Build.VERSION_CODES.M)
     fun setSelectedDevice(audioDeviceInfo: AudioDeviceInfo?): Boolean {
         if (audioDeviceInfo != null && !audioDeviceInfo.isSink)
             return false
@@ -1386,7 +1378,6 @@ class NativeTrack(
 
     private external fun setSelectedDeviceInternal(ptr: Long, id: Int): Int
 
-    @RequiresApi(Build.VERSION_CODES.M)
     fun getSelectedDevice(): AudioDeviceInfo? {
         if (myState == State.RELEASED)
             throw IllegalStateException("state is $myState")
@@ -1396,14 +1387,13 @@ class NativeTrack(
             throw NativeTrackException("failed to set selected device", t)
         }
         if (id == 0) return null
-        // this is somewhat racy, we can loose a device between these two calls, but shrug
+        // this is somewhat racy, we can lose a device between these two calls, but shrug
         val device = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).find { it.id == id }
         return device
     }
 
     private external fun getSelectedDeviceInternal(ptr: Long): Int
 
-    @RequiresApi(Build.VERSION_CODES.M)
     fun getRoutedDevices(): List<AudioDeviceInfo> {
         if (myState != State.ALIVE)
             throw IllegalStateException("state is $myState")
@@ -1412,7 +1402,7 @@ class NativeTrack(
         } catch (t: Throwable) {
             throw NativeTrackException("failed to set selected device", t)
         }
-        // this is somewhat racy, we can loose a device between these two calls, but shrug
+        // this is somewhat racy, we can lose a device between these two calls, but shrug
         val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
         return ids.map { id -> devices.find { it.id == id } }.filterNotNull()
     }

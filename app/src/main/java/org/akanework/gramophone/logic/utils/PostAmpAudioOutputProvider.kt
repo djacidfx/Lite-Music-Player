@@ -30,7 +30,6 @@ import android.media.audiofx.DynamicsProcessing
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.media3.common.C
@@ -38,26 +37,28 @@ import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.audio.AudioManagerCompat
 import androidx.media3.common.util.Log
-import androidx.media3.exoplayer.audio.AudioSink
-import androidx.media3.exoplayer.audio.DefaultAudioSink
-import androidx.media3.exoplayer.audio.ForwardingAudioSink
+import androidx.media3.exoplayer.audio.AudioOutput
+import androidx.media3.exoplayer.audio.AudioOutputProvider
+import androidx.media3.exoplayer.audio.AudioTrackAudioOutput
+import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
+import androidx.media3.exoplayer.audio.ForwardingAudioOutput
+import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
 import org.akanework.gramophone.logic.getSystemProperty
 import org.akanework.gramophone.logic.utils.AudioFormatDetector.audioDeviceTypeToString
 import org.akanework.gramophone.logic.utils.ReplayGainUtil.Mode
 import org.nift4.gramophone.hificore.AudioSystemHiddenApi
 import org.nift4.gramophone.hificore.AudioTrackHiddenApi
 import org.nift4.gramophone.hificore.ReflectionAudioEffect
-import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 
 // TODO: less hacky https://github.com/nift4/media/commit/22d2156bec74542a0764bf0ec27c839cc70874ed
 // TODO: less hacky https://github.com/nift4/media/commit/2988651676987cfd42affc21e1939d6cacbfbe7f
-class PostAmpAudioSink(
-    val sink: DefaultAudioSink, val rgAp: ReplayGainAudioProcessor, val context: Context
-) : ForwardingAudioSink(sink), AudioSystemHiddenApi.VolumeChangeListener {
+class PostAmpAudioOutputProvider(
+    val sink: AudioTrackAudioOutputProvider, val rgAp: ReplayGainAudioProcessor, val context: Context
+) : ForwardingAudioOutputProvider(sink), AudioSystemHiddenApi.VolumeChangeListener {
     companion object {
-        private const val TAG = "PostAmpAudioSink"
+        private const val TAG = "PostAmpAOP"
         val isVolumeAvailable by lazy {
             try {
                 if (!getSystemProperty("ro.vivo.os.version").isNullOrBlank())
@@ -116,6 +117,7 @@ class PostAmpAudioSink(
             false
         }
     }
+    private var currentAudioOutput: InnerAudioOutput? = null
     private var volumeEffect: VolumeEffectWrapper? = null
     private var dpeEffect: DynamicsProcessingEffectWrapper? = null
     private var needToLogWhyNoEffect = true
@@ -123,12 +125,10 @@ class PostAmpAudioSink(
     private var format: Format? = null
     private var tags: ReplayGainUtil.ReplayGainInfo? = null
     private var pendingFormat: Format? = null
-    private var pendingTags: ReplayGainUtil.ReplayGainInfo? = null
     private var lastAppliedGain: Pair<Float, Float?>? = null
     private var deviceType: Int? = null
     private var audioSessionId = 0
     private var lastOutput: Int? = null
-    private var volume = 1f
     private var rgVolume = 1f
 
     init {
@@ -177,6 +177,140 @@ class PostAmpAudioSink(
                     }
                 }
             }
+        }
+    }
+
+    fun getAudioTrack() = currentAudioOutput?.ao?.audioTrack
+
+    override fun getOutputConfig(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.OutputConfig {
+        pendingFormat = formatConfig.format
+        return super.getOutputConfig(formatConfig)
+    }
+
+    override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput {
+        // if we can set session ID before AO creation it might lead to smoother results wrt offload
+        // tracks getting torn down on effect creation being avoided
+        if (config.audioSessionId != C.AUDIO_SESSION_ID_UNSET)
+            mySetAudioSessionId(config.audioSessionId)
+        val ao = super.getAudioOutput(config) as AudioTrackAudioOutput
+        ao.audioSessionId.let {
+            if (it != C.AUDIO_SESSION_ID_UNSET)
+                mySetAudioSessionId(it)
+        }
+        if (pendingFormat != null) {
+            format = pendingFormat
+            tags = ReplayGainUtil.parse(pendingFormat)
+            pendingFormat = null
+        }
+        calculateGain() // parse new tags and apply to DPE/setVolume()
+        return InnerAudioOutput(ao).also { currentAudioOutput = it }
+    }
+
+    private inner class InnerAudioOutput(val ao: AudioTrackAudioOutput) :
+        ForwardingAudioOutput(ao) {
+        var volume = 1f
+            private set
+
+        init {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                ao.audioTrack.addOnRoutingChangedListener(
+                    {
+                        if (ao === currentAudioOutput?.ao)
+                            myOnRoutingChanged((it as AudioTrack).routedDevice)
+                        else
+                            updateVolumeEffect()
+                    }, Handler(Looper.myLooper()!!)
+                )
+            } else {
+                @Suppress("deprecation")
+                ao.audioTrack.addOnRoutingChangedListener(
+                    AudioTrack.OnRoutingChangedListener {
+                        if (ao === currentAudioOutput?.ao)
+                            myOnRoutingChanged(it.routedDevice)
+                        else
+                            updateVolumeEffect()
+                    },
+                    Handler(Looper.myLooper()!!)
+                )
+            }
+
+            ao.addListener(object : AudioOutput.Listener {
+                override fun onPositionAdvancing(playoutStartSystemTimeMs: Long) {
+                    updateVolumeEffect() // TODO: why was this needed again?
+                }
+
+                override fun onOffloadDataRequest() {
+                    // do nothing
+                }
+
+                override fun onOffloadPresentationEnded() {
+                    // do nothing
+                }
+
+                override fun onUnderrun() {
+                    // do nothing
+                }
+
+                override fun onReleased() {
+                    if (ao === currentAudioOutput?.ao)
+                        currentAudioOutput = null
+                }
+            })
+        }
+
+        private fun myOnRoutingChanged(routedDevice: AudioDeviceInfo?) {
+            Log.d(
+                TAG, "routed device is now ${routedDevice?.productName} " +
+                        "(${routedDevice?.type?.let { audioDeviceTypeToString(context, it) }})"
+            )
+            deviceType = routedDevice?.type
+            if (dpeEffect != null) {
+                calculateGain() // device change may have changed available headroom, recalculate boost
+            } else {
+                updateVolumeEffect() // device change reset the Volume effect state, configure it again
+            }
+        }
+
+        override fun play() {
+            updateVolumeEffect() // play() will have reset volume effect state, configure it again
+            super.play()
+        }
+
+        override fun pause() {
+            updateVolumeEffect() // pause() will have reset volume effect state, configure it again
+            super.pause()
+        }
+
+        override fun flush() {
+            updateVolumeEffect() // flush() will have reset volume effect state, configure it again
+            super.flush()
+        }
+
+        override fun stop() {
+            updateVolumeEffect() // stop() will have reset volume effect state, configure it again
+            super.stop()
+        }
+
+        override fun setVolume(volume: Float) {
+            if (this.volume != volume) {
+                // Only call setVolume() if data changed to avoid needlessly resetting Volume effect
+                this.volume = volume
+                setVolumeInternal()
+            }
+        }
+
+        fun setVolumeInternal() {
+            super.setVolume(volume * rgVolume)
+            updateVolumeEffect() // setVolume() will reset volume effect state, so configure it again
+        }
+
+        override fun canReuseAudioOutput(
+            currentConfig: AudioOutputProvider.OutputConfig,
+            newFormat: AudioOutputProvider.FormatConfig,
+            newConfig: AudioOutputProvider.OutputConfig
+        ): Boolean {
+            return super.canReuseAudioOutput(currentConfig, newFormat, newConfig) &&
+                    canReuse(newFormat.format)
         }
     }
 
@@ -268,66 +402,8 @@ class PostAmpAudioSink(
         }
     }
 
-    override fun setListener(listener: AudioSink.Listener) {
-        super.setListener(object : AudioSink.Listener by listener {
-            override fun onPositionAdvancing(playoutStartSystemTimeMs: Long) {
-                updateVolumeEffect() // TODO: why was this needed again?
-                listener.onPositionAdvancing(playoutStartSystemTimeMs)
-            }
-
-            override fun onOffloadBufferEmptying() {
-                listener.onOffloadBufferEmptying()
-            }
-
-            override fun onOffloadBufferFull() {
-                listener.onOffloadBufferFull()
-            }
-
-            override fun onAudioSinkError(audioSinkError: Exception) {
-                listener.onAudioSinkError(audioSinkError)
-            }
-
-            override fun onAudioCapabilitiesChanged() {
-                listener.onAudioCapabilitiesChanged()
-            }
-
-            override fun onAudioTrackInitialized(audioTrackConfig: AudioSink.AudioTrackConfig) {
-                myApplyPendingConfig()
-                listener.onAudioTrackInitialized(audioTrackConfig)
-            }
-
-            override fun onAudioTrackReleased(audioTrackConfig: AudioSink.AudioTrackConfig) {
-                listener.onAudioTrackReleased(audioTrackConfig)
-            }
-
-            override fun onSilenceSkipped() {
-                listener.onSilenceSkipped()
-            }
-
-            override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                mySetAudioSessionId(audioSessionId)
-                listener.onAudioSessionIdChanged(audioSessionId)
-            }
-
-            @RequiresApi(Build.VERSION_CODES.M)
-            override fun onRoutingChanged(router: AudioTrack, routedDevice: AudioDeviceInfo?) {
-                myOnRoutingChanged(routedDevice)
-                listener.onRoutingChanged(router, routedDevice)
-            }
-        })
-    }
-
-    override fun configure(
-        inputFormat: Format,
-        specifiedBufferSize: Int,
-        outputChannels: IntArray?
-    ) {
-        pendingFormat = inputFormat
-        pendingTags = ReplayGainUtil.parse(pendingFormat)
-        super.configure(inputFormat, specifiedBufferSize, outputChannels)
-    }
-
-    fun canReuse(): Boolean {
+    private fun canReuse(reuseFormat: Format): Boolean {
+        val reuseTags = ReplayGainUtil.parse(reuseFormat)
         val mode: Mode
         val rgGain: Int
         val reduceGain: Boolean
@@ -339,11 +415,11 @@ class PostAmpAudioSink(
         // we won't be called if offload state changes, one can't reuse audio track in that case
         val isOffload = Flags.TEST_RG_OFFLOAD ||
                 format?.let { it.sampleMimeType != MimeTypes.AUDIO_RAW } == true ||
-                pendingFormat?.let { it.sampleMimeType != MimeTypes.AUDIO_RAW } == true
+                reuseFormat.sampleMimeType != MimeTypes.AUDIO_RAW
         if (isOffload) {
             val hasDpe = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dpeEffect?.hasControl == true
             val calcGainAfter = ReplayGainUtil.calculateGain(
-                pendingTags, mode, rgGain, reduceGain || !hasDpe,
+                reuseTags, mode, rgGain, reduceGain || !hasDpe,
                 if (hasDpe) ReplayGainUtil.RATIO else null
             )
             // DPE logic relies on flush() when tags change in a way that changes the audio.
@@ -356,23 +432,10 @@ class PostAmpAudioSink(
                 tags, mode, rgGain, reduceGain, ReplayGainUtil.RATIO
             )?.second != null
             val compressorOnAfter = ReplayGainUtil.calculateGain(
-                pendingTags, mode, rgGain, reduceGain, ReplayGainUtil.RATIO
+                reuseTags, mode, rgGain, reduceGain, ReplayGainUtil.RATIO
             )?.second != null
             return compressorOnBefore == compressorOnAfter
         }
-    }
-
-    override fun setVolume(volume: Float) {
-        if (this.volume != volume) {
-            // Only call setVolume() if data changed to avoid needlessly resetting Volume effect
-            this.volume = volume
-            setVolumeInternal()
-        }
-    }
-
-    private fun setVolumeInternal() {
-        super.setVolume(volume * rgVolume)
-        updateVolumeEffect() // setVolume() will reset volume effect state, so configure it again
     }
 
     private fun myOnReceiveBroadcast(intent: Intent) {
@@ -402,16 +465,6 @@ class PostAmpAudioSink(
         } else if (volumeEffect != null) {
             updateVolumeEffect() // external volume change will reset volume effect
         }
-    }
-
-    private fun myApplyPendingConfig() {
-        if (pendingFormat != null && pendingTags != null) {
-            format = pendingFormat
-            tags = pendingTags
-            pendingFormat = null
-            pendingTags = null
-        }
-        calculateGain() // parse new tags and apply to DPE/setVolume()
     }
 
     private fun calculateGain() {
@@ -488,13 +541,8 @@ class PostAmpAudioSink(
         }
         if (lastRgVolume != rgVolume) {
             // Only call setVolume() if data changed to avoid needlessly resetting Volume effect
-            setVolumeInternal()
+            currentAudioOutput?.setVolumeInternal()
         }
-    }
-
-    override fun setAudioSessionId(audioSessionId: Int) {
-        mySetAudioSessionId(audioSessionId)
-        super.setAudioSessionId(audioSessionId)
     }
 
     // null = offload enabled changed
@@ -515,20 +563,6 @@ class PostAmpAudioSink(
         createEffectsIfNeeded()
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
-    private fun myOnRoutingChanged(routedDevice: AudioDeviceInfo?) {
-        Log.d(
-            TAG, "routed device is now ${routedDevice?.productName} " +
-                    "(${routedDevice?.type?.let { audioDeviceTypeToString(context, it) }})"
-        )
-        deviceType = routedDevice?.type
-        if (dpeEffect != null) {
-            calculateGain() // device change may have changed available headroom, recalculate boost
-        } else {
-            updateVolumeEffect() // device change reset the Volume effect state, configure it again
-        }
-    }
-
     private fun updateVolumeEffect() {
         if (volumeEffect == null) return
         val boostGainDb: Int
@@ -547,7 +581,7 @@ class PostAmpAudioSink(
             if (curVolumeDb == null) return
             val theVolume = min(
                 volumeEffect!!.effect!!.maxLevel.toInt().toFloat(),
-                (curVolumeDb + ReplayGainUtil.amplToDb(volume) +
+                (curVolumeDb + ReplayGainUtil.amplToDb(currentAudioOutput?.volume ?: 1f) +
                         boostGainDb) * 100f
             ).toInt().toShort()
             repeat(20) { // yes, this is stupid.
@@ -556,21 +590,6 @@ class PostAmpAudioSink(
         } catch (e: Throwable) {
             Log.e(TAG, "failed to update volume effect state", e)
         }
-    }
-
-    override fun play() {
-        updateVolumeEffect() // play() will have reset volume effect state, configure it again
-        super.play()
-    }
-
-    override fun pause() {
-        updateVolumeEffect() // pause() will have reset volume effect state, configure it again
-        super.pause()
-    }
-
-    override fun flush() {
-        updateVolumeEffect() // flush() will have reset volume effect state, configure it again
-        super.flush()
     }
 
     override fun release() {
@@ -592,37 +611,6 @@ class PostAmpAudioSink(
             }
         }
         super.release()
-    }
-
-    override fun handleBuffer(
-        buffer: ByteBuffer,
-        presentationTimeUs: Long,
-        encodedAccessUnitCount: Int
-    ): Boolean {
-        val prev = sink.isAudioTrackStopped()
-        val ret = super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
-        if (sink.isAudioTrackStopped() != prev) {
-            updateVolumeEffect() // stop() will have reset volume effect state, configure it again
-        }
-        return ret
-    }
-
-    private val audioTrackStoppedField by lazy {
-        DefaultAudioSink::class.java.getDeclaredField("stoppedAudioTrack").apply {
-            isAccessible = true
-        }
-    }
-
-    private fun DefaultAudioSink.isAudioTrackStopped(): Boolean {
-        return audioTrackStoppedField.get(this) as Boolean
-    }
-
-    // TODO why do we have to reflect on app code, there must be a better solution
-    private fun DefaultAudioSink.getAudioTrack(): AudioTrack? {
-        val cls = javaClass
-        val field = cls.getDeclaredField("audioTrack")
-        field.isAccessible = true
-        return field.get(this) as AudioTrack?
     }
 
     private fun getHeadroomDb(): Float {
@@ -667,7 +655,7 @@ class PostAmpAudioSink(
     // force max based on result of isAbsoluteVolume().
     private fun getCurrentMixerVolume(): Float? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) { // until incl 15 QPR0
-            val track = sink.getAudioTrack()
+            val track = currentAudioOutput?.ao?.audioTrack
             var output: Int? = lastOutput
             if (track != null) {
                 output = AudioTrackHiddenApi.getOutput(track)
@@ -678,11 +666,7 @@ class PostAmpAudioSink(
                     AudioManager.STREAM_MUSIC, output
                 )
                 if (streamVolume != null) {
-                    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        streamVolume // streamVolume is -96f..0f dB
-                    } else {
-                        ReplayGainUtil.amplToDb(streamVolume) // streamVolume is 0f..1f
-                    }
+                    return streamVolume // streamVolume is -96f..0f dB
                 }
             }
         }
@@ -729,9 +713,6 @@ class PostAmpAudioSink(
         isA2dpAbsoluteVolumeOff: Boolean = false,
         isHdmiCecVolumeOff: Boolean = false
     ): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            throw IllegalStateException("isAbsoluteVolume($deviceType) before M")
-        }
         // TODO: try detecting absence of bluetooth absolute volume using old AVRCP (oreo era) class
         // LEA having abs vol is a safe assumption, as LEA absolute volume is forced. Same for ASHA.
         return !isA2dpAbsoluteVolumeOff && deviceType == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||

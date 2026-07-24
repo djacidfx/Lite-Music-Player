@@ -183,9 +183,9 @@ class AudioPreviewActivity : BaseActivity(), View.OnClickListener {
             GramophoneRenderFactory(
                 this,
                 rgAp, {}, {})
-                .setPcmEncodingRestrictionLifted(true)
+                .setEnableHighResolutionPcmOutput(true)
                 .setEnableDecoderFallback(true)
-                .setEnableAudioTrackPlaybackParams(true)
+                .setEnableAudioOutputPlaybackParameters(true)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER),
             GramophoneMediaSourceFactory(
                 DefaultDataSource.Factory(this),

@@ -501,9 +501,7 @@ fun Tracks.getFirstSelectedTrackFormatByType(type: @C.TrackType Int): Format? {
 // https://twitter.com/Piwai/status/1529510076196630528
 fun Handler.postAtFrontOfQueueAsync(callback: Runnable) {
     sendMessageAtFrontOfQueue(Message.obtain(this, callback).apply {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-            isAsynchronous = true
-        }
+        isAsynchronous = true
     })
 }
 
@@ -624,32 +622,9 @@ fun ComponentActivity.enableEdgeToEdgeProperly() {
     }
 }
 
-@SuppressLint("DiscouragedPrivateApi")
-private fun WindowInsets.unconsumeIfNeeded() {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-        // Api21Impl of getRootWindowInsets returns already-consumed WindowInsets with correct data
-        // Said consumed insets cannot be dispatched again because well, they are already consumed
-        // Workaround this using some reflection (Api23Impl+ are not affected so this is safe)
-        val mSystemWindowInsetsConsumed = WindowInsets::class.java
-            .getDeclaredField("mSystemWindowInsetsConsumed")
-            .apply { isAccessible = true }
-        val mWindowDecorInsetsConsumed = WindowInsets::class.java
-            .getDeclaredField("mWindowDecorInsetsConsumed")
-            .apply { isAccessible = true }
-        val mStableInsetsConsumed = WindowInsets::class.java
-            .getDeclaredField("mStableInsetsConsumed")
-            .apply { isAccessible = true }
-        mSystemWindowInsetsConsumed.set(this, false)
-        mWindowDecorInsetsConsumed.set(this, false)
-        mStableInsetsConsumed.set(this, false)
-    }
-}
-
 // Pitfall: WindowInsetsCompat.Builder(insets) mutates the platform insets
 fun WindowInsetsCompat.clone(): WindowInsetsCompat =
-    WindowInsetsCompat.toWindowInsetsCompat(WindowInsets(toWindowInsets()).also {
-        it.unconsumeIfNeeded()
-    })
+    WindowInsetsCompat.toWindowInsetsCompat(WindowInsets(toWindowInsets()))
 
 fun Context.supportsWideScreen() : Boolean {
     val config = resources.configuration

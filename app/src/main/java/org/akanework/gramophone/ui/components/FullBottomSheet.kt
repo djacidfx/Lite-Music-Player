@@ -488,9 +488,6 @@ class FullBottomSheet
             }
         }
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            bottomSheetPlaybackSpeedButton.visibility = GONE
-        }
         bottomSheetPlaybackSpeedButton.setOnClickListener {
             ViewCompat.performHapticFeedback(it, HapticFeedbackConstantsCompat.CONTEXT_CLICK)
             if (instance != null)

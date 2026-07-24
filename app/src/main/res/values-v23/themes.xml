@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-
-    <style name="V23.Day.Theme.Splash" parent="Base.Day.Theme.Splash">
-        <item name="android:windowLightStatusBar">true</item>
-    </style>
-
-    <style name="Impl.Day.Theme.Splash" parent="V23.Day.Theme.Splash" />
-</resources>

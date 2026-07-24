@@ -19,8 +19,8 @@ import android.annotation.SuppressLint
 import android.graphics.text.LineBreaker
 import android.os.Build
 import android.text.Layout
+import android.text.Layout.HYPHENATION_FREQUENCY_NORMAL
 import android.text.StaticLayout
-import android.text.TextDirectionHeuristic
 import android.text.TextDirectionHeuristics
 import android.text.TextPaint
 import android.text.TextUtils
@@ -73,7 +73,7 @@ class StaticLayoutBuilderCompat private constructor(
         this.maxLines = Int.MAX_VALUE
         this.lineSpacingAdd = DEFAULT_LINE_SPACING_ADD
         this.lineSpacingMultiplier = DEFAULT_LINE_SPACING_MULTIPLIER
-        this.hyphenationFrequency = DEFAULT_HYPHENATION_FREQUENCY
+        this.hyphenationFrequency = HYPHENATION_FREQUENCY_NORMAL
         this.includePad = true
         this.ellipsize = null
     }
@@ -190,7 +190,6 @@ class StaticLayoutBuilderCompat private constructor(
             source = ""
         }
 
-
         val availableWidth: Int = max(0, width)
         var textToDraw = source
         if (maxLines == 1) {
@@ -204,124 +203,48 @@ class StaticLayoutBuilderCompat private constructor(
             TextDirectionHeuristics.LTR
         else
             TextDirectionHeuristics.FIRSTSTRONG_LTR
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (isRtl == true && maxLines == 1) {
-                alignment = Layout.Alignment.ALIGN_OPPOSITE
-            }
-            // Marshmallow introduced StaticLayout.Builder which allows us not to use
-            // the hidden constructor.
-            val builder =
-                StaticLayout.Builder.obtain(
-                    textToDraw, start, end, paint, availableWidth
-                )
-            builder.setAlignment(alignment)
-            builder.setIncludePad(includePad)
-            builder.setTextDirection(textDirectionHeuristic)
-            if (ellipsize != null) {
-                builder.setEllipsize(ellipsize)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                builder.setBreakStrategy(LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
-            } else {
-                @SuppressLint("WrongConstant")
-                builder.setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY)
-            }
-            builder.setMaxLines(maxLines)
-            if (lineSpacingAdd != DEFAULT_LINE_SPACING_ADD
-                || lineSpacingMultiplier != DEFAULT_LINE_SPACING_MULTIPLIER
-            ) {
-                builder.setLineSpacing(lineSpacingAdd, lineSpacingMultiplier)
-            }
-            if (maxLines > 1) {
-                builder.setHyphenationFrequency(hyphenationFrequency)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                builder.setUseLineSpacingFromFallbacks(false)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                builder.setUseBoundsForWidth(true)
-                builder.setShiftDrawingOffsetForStartOverhang(true)
-            }
-
-            //if (staticLayoutBuilderConfigurer != null) {
-            //	staticLayoutBuilderConfigurer.configure(builder);
-            //}
-            return builder.build()
+        if (isRtl == true && maxLines == 1) {
+            alignment = Layout.Alignment.ALIGN_OPPOSITE
+        }
+        // Marshmallow introduced StaticLayout.Builder which allows us not to use
+        // the hidden constructor.
+        val builder =
+            StaticLayout.Builder.obtain(
+                textToDraw, start, end, paint, availableWidth
+            )
+        builder.setAlignment(alignment)
+        builder.setIncludePad(includePad)
+        builder.setTextDirection(textDirectionHeuristic)
+        if (ellipsize != null) {
+            builder.setEllipsize(ellipsize)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            builder.setBreakStrategy(LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
+        } else {
+            @SuppressLint("WrongConstant")
+            builder.setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY)
+        }
+        builder.setMaxLines(maxLines)
+        if (lineSpacingAdd != DEFAULT_LINE_SPACING_ADD
+            || lineSpacingMultiplier != DEFAULT_LINE_SPACING_MULTIPLIER
+        ) {
+            builder.setLineSpacing(lineSpacingAdd, lineSpacingMultiplier)
+        }
+        if (maxLines > 1) {
+            builder.setHyphenationFrequency(hyphenationFrequency)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            builder.setUseLineSpacingFromFallbacks(false)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            builder.setUseBoundsForWidth(true)
+            builder.setShiftDrawingOffsetForStartOverhang(true)
         }
 
-        createConstructorWithReflection()
-        // Use the hidden constructor on older API levels.
-        try {
-            checkNotNull(constructor)
-            return constructor!!.newInstance(
-                textToDraw,
-                start,
-                end,
-                paint,
-                availableWidth,
-                alignment,
-                textDirectionHeuristic,
-                1.0f,
-                0.0f,
-                includePad,
-                null,
-                availableWidth,
-                maxLines
-            )!!
-        } catch (cause: Exception) {
-            throw StaticLayoutBuilderCompatException(cause)
-        }
-    }
-
-    /**
-     * set constructor to this hidden [constructor.][StaticLayout]
-     *
-     * <pre>`StaticLayout(
-     * CharSequence source,
-     * int bufstart,
-     * int bufend,
-     * TextPaint paint,
-     * int outerwidth,
-     * Alignment align,
-     * TextDirectionHeuristic textDir,
-     * float spacingmult,
-     * float spacingadd,
-     * boolean includepad,
-     * TextUtils.TruncateAt ellipsize,
-     * int ellipsizedWidth,
-     * int maxLines)
-    `</pre> *
-     */
-    @Throws(StaticLayoutBuilderCompatException::class)
-    private fun createConstructorWithReflection() {
-        if (initialized) {
-            return
-        }
-
-        try {
-            val signature: Array<Class<*>?> =
-                arrayOf(
-                    CharSequence::class.java,
-                    Int::class.javaPrimitiveType,
-                    Int::class.javaPrimitiveType,
-                    TextPaint::class.java,
-                    Int::class.javaPrimitiveType,
-                    Layout.Alignment::class.java,
-                    TextDirectionHeuristic::class.java,
-                    Float::class.javaPrimitiveType,
-                    Float::class.javaPrimitiveType,
-                    Boolean::class.javaPrimitiveType,
-                    TextUtils.TruncateAt::class.java,
-                    Int::class.javaPrimitiveType,
-                    Int::class.javaPrimitiveType
-                )
-
-            constructor = StaticLayout::class.java.getDeclaredConstructor(*signature)
-            constructor!!.isAccessible = true
-            initialized = true
-        } catch (cause: Exception) {
-            throw StaticLayoutBuilderCompatException(cause)
-        }
+        //if (staticLayoutBuilderConfigurer != null) {
+        //	staticLayoutBuilderConfigurer.configure(builder);
+        //}
+        return builder.build()
     }
 
     fun setIsRtl(isRtl: Boolean?): StaticLayoutBuilderCompat {
@@ -336,16 +259,9 @@ class StaticLayoutBuilderCompat private constructor(
         Exception("Error thrown initializing StaticLayout " + cause.message, cause)
 
     companion object {
-        val DEFAULT_HYPHENATION_FREQUENCY: Int =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) StaticLayout.HYPHENATION_FREQUENCY_NORMAL else 0
-
         // Default line spacing values to match android.text.Layout constants.
         const val DEFAULT_LINE_SPACING_ADD: Float = 0.0f
         const val DEFAULT_LINE_SPACING_MULTIPLIER: Float = 1.0f
-
-        private var initialized = false
-
-        private var constructor: Constructor<StaticLayout?>? = null
 
         /**
          * Obtain a builder for constructing StaticLayout objects.

@@ -40,9 +40,8 @@ object MediaRoutes {
             val router = MediaRouter2.getInstance(context)
             val route = router.systemController.selectedRoutes.firstOrNull()
             route?.getAudioDeviceForRoute(context)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        } else
             MediaRouter.getInstance(context).selectedRoute.getAudioDeviceForRoute(context)
-        } else null
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -291,7 +290,6 @@ object MediaRoutes {
     // Approximation of audio device based on best effort
     // Inspired by https://github.com/timschneeb/RootlessJamesDSP/blob/593c0dc/app/src/main/java/me/timschneeberger/rootlessjamesdsp/utils/RoutingObserver.kt
     @SuppressLint("DiscouragedApi")
-    @RequiresApi(Build.VERSION_CODES.M)
     fun MediaRouter.RouteInfo.getAudioDeviceForRoute(context: Context): AudioDeviceInfo? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
             throw IllegalStateException("getAudioDeviceForRoute must not be called on R+")
@@ -388,7 +386,6 @@ object MediaRoutes {
         return null
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
     private fun AudioManager.firstOutputDeviceByType(
         vararg type: Int,
         name: CharSequence? = null,
@@ -472,7 +469,6 @@ object MediaRoutes {
         return devicesByType[0]
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
     private fun AudioDeviceInfo.cleanUpProductName(): String = productName.let {
         if (it.startsWith("USB-Audio - "))
             it.substring("USB-Audio - ".length)

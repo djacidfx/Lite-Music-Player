@@ -100,6 +100,8 @@ class MeiZuLyricsMediaNotificationProvider(
         extras: Bundle
     ) = inner.handleCustomCommand(session, action, extras)
 
+    override fun getNotificationChannelInfo() = inner.notificationChannelInfo
+
     private fun MediaNotification.applyNotificationFlags(
         alwaysShowTicker: Boolean,
         onlyUpdateTicker: Boolean

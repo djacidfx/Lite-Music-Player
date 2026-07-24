@@ -28,12 +28,13 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.ForwardingAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.video.VideoRendererEventListener
-import org.akanework.gramophone.logic.utils.PostAmpAudioSink
+import org.akanework.gramophone.logic.utils.PostAmpAudioOutputProvider
 import org.akanework.gramophone.logic.utils.ReplayGainAudioProcessor
 import org.nift4.alacdecoder.AlacRenderer
 
@@ -41,7 +42,7 @@ class GramophoneRenderFactory(
     context: Context,
     private val rgAp: ReplayGainAudioProcessor,
     private val configurationListener: (Format?) -> Unit,
-    private val audioSinkListener: (DefaultAudioSink) -> Unit
+    private val audioSinkListener: (PostAmpAudioOutputProvider) -> Unit
 ) :
     DefaultRenderersFactory(context) {
     override fun buildTextRenderers(
@@ -105,16 +106,15 @@ class GramophoneRenderFactory(
     override fun buildAudioSink(
         context: Context,
         pcmEncodingRestrictionLifted: Boolean,
-        enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
     ): AudioSink {
         val builder = DefaultAudioSink.Builder(context)
-        if (pcmEncodingRestrictionLifted || !enableFloatOutput) {
-            builder.setPcmEncodingRestrictionLifted(pcmEncodingRestrictionLifted)
-        } else {
-            @Suppress("deprecation")
-            builder.setEnableFloatOutput(true)
-        }
+        val aop = PostAmpAudioOutputProvider(
+            AudioTrackAudioOutputProvider.Builder(context)
+                .setMaxPlaybackSpeed(4f).build(), rgAp, context)
+        builder.setAudioOutputProvider(aop)
+        builder.setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
+        builder.setEnableHighResolutionPcmOutput(pcmEncodingRestrictionLifted)
         builder.setAudioProcessorChain(object : AudioProcessorChain {
             override fun getAudioProcessors(inputFormat: Format): Array<out AudioProcessor> {
                 rgAp.setRootFormat(inputFormat)
@@ -137,22 +137,14 @@ class GramophoneRenderFactory(
                 return 0
             }
         })
-        var postAmpAudioSink: PostAmpAudioSink? = null
-        val root = builder.setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-            .setCanReuse { postAmpAudioSink!!.canReuse() }.build()
-        audioSinkListener(root)
-        postAmpAudioSink = PostAmpAudioSink(root, rgAp, context)
-        return MyForwardingAudioSink(postAmpAudioSink)
+        audioSinkListener(aop)
+        return MyForwardingAudioSink(builder.build())
     }
 
     inner class MyForwardingAudioSink(sink: AudioSink) : ForwardingAudioSink(sink) {
-        override fun configure(
-            inputFormat: Format,
-            specifiedBufferSize: Int,
-            outputChannels: IntArray?
-        ) {
-            super.configure(inputFormat, specifiedBufferSize, outputChannels)
-            configurationListener(inputFormat)
+        override fun configure(audioSinkConfig: AudioSink.AudioSinkConfig) {
+            super.configure(audioSinkConfig)
+            configurationListener(audioSinkConfig.format)
         }
 
         override fun reset() {
