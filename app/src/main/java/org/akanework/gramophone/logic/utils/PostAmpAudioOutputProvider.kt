@@ -252,8 +252,7 @@ class PostAmpAudioOutputProvider(
                 }
 
                 override fun onReleased() {
-                    if (ao === currentAudioOutput?.ao)
-                        currentAudioOutput = null
+                    // do nothing
                 }
             })
         }
@@ -289,6 +288,12 @@ class PostAmpAudioOutputProvider(
         override fun stop() {
             updateVolumeEffect() // stop() will have reset volume effect state, configure it again
             super.stop()
+        }
+
+        override fun release() {
+            if (ao === currentAudioOutput?.ao)
+                currentAudioOutput = null
+            super.release()
         }
 
         override fun setVolume(volume: Float) {
