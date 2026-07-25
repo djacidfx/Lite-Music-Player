@@ -433,7 +433,6 @@
     <string name="spk_encoding_pcm_20bit_big_endian">PCM 20-bit (big endian)</string>
     <string name="settings_cookie_summary">Jadikan sampul album berbentuk kue</string>
     <string name="settings_cookie_info">Sampul kue</string>
-    <string name="settings_pure_dark">Tema gelap murni</string>
     <string name="settings_pure_dark_summary">Tema di mana semua permukaan dalam aplikasi berwarna hitam murni (dapat menyebabkan black crush pada layar OLED)</string>
     <string name="settings_stop_on_dismiss">Hentikan saat ditutup</string>
     <string name="settings_stop_on_dismiss_summary">Hentikan pemutaran saat tugas aplikasi ditutup dari daftar terbaru</string>

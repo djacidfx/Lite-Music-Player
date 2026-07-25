@@ -435,7 +435,6 @@
     <string name="spk_encoding_pcm_20bit_big_endian">20-bit PCM (big endian)</string>
     <string name="settings_cookie_summary">Capa do álbum em formato de cookie</string>
     <string name="settings_cookie_info">Capa de cookie</string>
-    <string name="settings_pure_dark">Tema puro escuro</string>
     <string name="settings_pure_dark_summary">Um tema onde todas as superfícies na app são preto puro (pode causar falhas em ecrãs OLED)</string>
     <string name="settings_stop_on_dismiss">Pare ao dispensar</string>
     <string name="settings_stop_on_dismiss_summary">Pare a reprodução quando a app for dispensada das recentes</string>

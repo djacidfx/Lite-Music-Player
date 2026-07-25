@@ -425,7 +425,6 @@
     </plurals>
     <string name="settings_cookie_summary">アルバムカバーをクッキー型にします</string>
     <string name="settings_cookie_info">クッキーカバー</string>
-    <string name="settings_pure_dark">ピュアダークテーマ</string>
     <string name="settings_pure_dark_summary">アプリ内のすべての表面をピュアブラックテーマにします (OLED ディスプレイでは黒つぶれが発生する可能性があります)</string>
     <string name="settings_stop_on_dismiss">閉じて停止</string>
     <string name="settings_stop_on_dismiss_summary">最近使ったアプリからアプリタスクが消去されたときに再生を停止します</string>

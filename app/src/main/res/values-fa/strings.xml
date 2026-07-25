@@ -430,7 +430,6 @@
     <string name="spk_encoding_pcm_20bit">PCM ‫۲۰-بیت</string>
     <string name="settings_cookie_summary">جلد آلبوم کلوچه‌ای شکل شود</string>
     <string name="settings_cookie_info">جلد کلوچه‌ای</string>
-    <string name="settings_pure_dark">زمینۀ تیرۀ خالص</string>
     <string name="settings_pure_dark_summary">زمینه‌ای که در آن تمام سطوح برنامه سیاه خالص هستند (ممکن است باعث ایجاد سیاهی در نمایشگرهای OLED شود)</string>
     <string name="settings_stop_on_dismiss">توقف در هنگام رد کردن</string>
     <string name="settings_stop_on_dismiss_summary">توقف پخش وقتی که برنامه از موارد اخیر برداشته می‌شود</string>

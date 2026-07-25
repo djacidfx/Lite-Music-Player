@@ -437,7 +437,6 @@
     <string name="spk_encoding_pcm_20bit_big_endian">20-bit PCM (big endian)</string>
     <string name="settings_cookie_summary">Stvori omot albuma u obliku kolačića</string>
     <string name="settings_cookie_info">Omot kao kolačić</string>
-    <string name="settings_pure_dark">Potpuno tamna tema</string>
     <string name="settings_pure_dark_summary">Tema u kojoj su sve površine u aplikaciji potpuno crne (što može dovesti do problema na OLED ekranima)</string>
     <string name="settings_stop_on_dismiss">Prekini pri odbacivanju</string>
     <string name="settings_stop_on_dismiss_summary">Prekini reprodukciju kada se zadatak aplikacije odbaci iz nedavnih</string>

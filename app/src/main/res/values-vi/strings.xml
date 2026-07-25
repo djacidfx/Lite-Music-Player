@@ -319,7 +319,6 @@
     <string name="settings_audio_offload">Tách xử lý âm thanh (tiết kiệm pin)</string>
     <string name="settings_cookie_summary">Làm bìa album hình bánh quy</string>
     <string name="settings_cookie_info">Bìa bánh quy</string>
-    <string name="settings_pure_dark">Chủ đề đen</string>
     <string name="settings_pure_dark_summary">Chủ đề làm tất cả các nền trong ứng dụng đều có màu đen (có thể gây hiện tượng mất chi tiết ở vùng tối trên màn hình OLED)</string>
     <string name="settings_stop_on_dismiss">Dừng khi xóa hoạt động</string>
     <string name="settings_stop_on_dismiss_summary">Dừng phát khi tác vụ ứng dụng được xóa trong danh sách ứng dụng gần đây</string>

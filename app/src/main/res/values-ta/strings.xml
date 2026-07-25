@@ -437,7 +437,6 @@
     <string name="spk_encoding_pcm_20bit_big_endian">20-பிட் பிசிஎம் (பெரிய எண்டியன்)</string>
     <string name="settings_cookie_summary">ஆல்பம் கவர் குக்கீ வடிவத்தை உருவாக்கவும்</string>
     <string name="settings_cookie_info">குக்கீ கவர்</string>
-    <string name="settings_pure_dark">தூய இருண்ட கருப்பொருள்</string>
     <string name="settings_pure_dark_summary">பயன்பாட்டில் உள்ள அனைத்து மேற்பரப்புகளும் தூய கருப்பு நிறத்தில் இருக்கும் கருப்பொருள் (OLED டிச்ப்ளேக்களில் கறுப்பு க்ரச் ஏற்படலாம்)</string>
     <string name="settings_stop_on_dismiss">டிச்மிச் செய்வதை நிறுத்துங்கள்</string>
     <string name="settings_stop_on_dismiss_summary">ஆப்ச் டாச்க் சமீபத்தியவற்றிலிருந்து நிராகரிக்கப்படும்போது பிளேபேக்கை நிறுத்தவும்</string>
