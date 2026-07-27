@@ -63,8 +63,8 @@ class LibraryTreeLoader(
             putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_PLAYABLE, MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
         }
         return when (id) {
-            "root" -> createFolderItem("root", "", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
-            "more" -> createFolderItem("more", context.getString(R.string.more), MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+            else if id.startsWith("root_") -> createFolderItem(id, "", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+            else if id.startsWith("more_") -> createFolderItem(id, context.getString(R.string.more), MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
             "songs" -> createFolderItem("songs", context.getString(R.string.category_songs), MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
             "albums" -> createFolderItem("albums", context.getString(R.string.category_albums), MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS, extras = gridExtras)
             "artists" -> createFolderItem("artists", context.getString(R.string.category_artists), MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS, extras = gridExtras)
@@ -180,9 +180,9 @@ class LibraryTreeLoader(
 
     // --- Library Tree Methods ---
 
-    fun getLibraryRoot(): ListenableFuture<LibraryResult<MediaItem>> {
+    fun getLibraryRoot(tabCount: Int): ListenableFuture<LibraryResult<MediaItem>> {
         val outParams = LibraryParams.Builder().setOffline(true).setSuggested(false).setRecent(false).build()
-        val item = getCategoryItem("root")!!
+        val item = getCategoryItem("root_$tabCount")!!
         return Futures.immediateFuture(LibraryResult.ofItem(item, outParams))
     }
 
@@ -194,12 +194,16 @@ class LibraryTreeLoader(
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future(Dispatchers.Default) {
         try {
             val list: List<MediaItem> = when (parentId) {
-                    "root" -> {
+                    else if parentId.startsWith("root_") -> {
+                        val tabCount = parentId.substring("root_".length).toInt()
                         val tabs = getEnabledTabs()
-                        if (tabs.size <= 4) tabs.map { getCategoryItem(mapTabToMediaId(it))!! }
-                        else tabs.take(3).map { getCategoryItem(mapTabToMediaId(it))!! } + getCategoryItem("more")!!
+                        if (tabs.size <= tabCount) tabs.map { getCategoryItem(mapTabToMediaId(it))!! }
+                        else tabs.take(tabCount - 1).map { getCategoryItem(mapTabToMediaId(it))!! } + getCategoryItem("more_$tabCount")!!
                     }
-                    "more" -> getEnabledTabs().drop(3).map { getCategoryItem(mapTabToMediaId(it))!! }
+                    else if parentId.startsWith("more_") -> {
+                        val tabCount = parentId.substring("more_".length).toInt()
+                        getEnabledTabs().drop(tabCount - 1).map { getCategoryItem(mapTabToMediaId(it))!! }
+                    }
                     "albums" -> sortList(app.reader.albumListFlow.first(), LibraryAdapterTypes.ALBUM, Sorter(AlbumAdapter.StoreAlbumHelper, null)).map { mapDomainItemToMediaItem(it)!! }
                     "artists" -> sortList(app.reader.artistListFlow.first(), LibraryAdapterTypes.ARTIST, Sorter(ArtistAdapter.StoreArtistHelper, null)).map { mapDomainItemToMediaItem(it)!! }
                     "songs" -> sortList(app.reader.songListFlow.first(), LibraryAdapterTypes.SONG, Sorter(SongAdapter.MediaItemHelper, null))

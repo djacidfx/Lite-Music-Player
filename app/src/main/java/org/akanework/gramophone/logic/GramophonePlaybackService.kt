@@ -198,7 +198,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         HandlerThread("ExoPlayer:Playback", Process.THREAD_PRIORITY_AUDIO)
     private var mediaSession: MediaLibrarySession? = null
     val endedWorkaroundPlayer
-        get() = mediaSession?.player as? EndedWorkaroundPlayer
+        get() = mediaSession?.player as EndedWorkaroundPlayer?
 
     private lateinit var libraryTreeLoader: LibraryTreeLoader
 
@@ -1720,7 +1720,9 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         browser: MediaSession.ControllerInfo,
         params: LibraryParams?
     ): ListenableFuture<LibraryResult<MediaItem>> {
-        return libraryTreeLoader.getLibraryRoot()
+        val tabCount = params?.extras?.getInt(MediaConstants.EXTRAS_KEY_ROOT_CHILDREN_LIMIT,
+            4) ?: 4
+        return libraryTreeLoader.getLibraryRoot(tabCount)
     }
 
     override fun onGetChildren(
