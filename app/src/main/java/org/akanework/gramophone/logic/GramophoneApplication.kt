@@ -116,6 +116,7 @@ class GramophoneApplication : Application(), SingletonImageLoader.Factory,
         super.onCreate()
         // disk read and write on first launch, but unavoidable as threads would race setDefaultNightMode
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val themeMode = prefs.getString("theme_mode", "0")
         if (BuildConfig.DEBUG && !isColorOS()) {
             // Use StrictMode to find antipattern issues
             StrictMode.setThreadPolicy(
@@ -246,7 +247,7 @@ class GramophoneApplication : Application(), SingletonImageLoader.Factory,
             recentlyAddedFilterSecondFlow
         )
         // Set application theme when launching.
-        when (prefs.getString("theme_mode", "0")) {
+        when (themeMode) {
             "0" -> {
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
             }

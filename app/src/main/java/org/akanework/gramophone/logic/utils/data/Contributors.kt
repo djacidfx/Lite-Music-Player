@@ -9,162 +9,33 @@ import org.akanework.gramophone.R
 object Contributors {
     private fun decode(text: String?) = text?.let { Uri.decode(it) }
     val LIST = listOf(
-        GitHubUser(
-            login = "nift4",
-            name = decode("Nick"),
-            avatar = R.drawable.contributor_nift4,
-            contributed = R.string.contributors_nift4
-        ),
-        GitHubUser(
-            login = "123Duo3",
-            name = decode("123Duo3"),
-            avatar = R.drawable.contributor_123duo3,
-            contributed = R.string.contributors_123duo3
-        ),
-        GitHubUser(
-            login = "AkaneTan",
-            name = decode("%E3%81%82%E3%81%8B%E3%81%AD"),
-            avatar = R.drawable.contributor_akanetan,
-            contributed = R.string.contributors_akanetan
-        ),
-        GitHubUser(
-            login = "mikooomich",
-            name = decode("Michael%20Zh"),
-            avatar = R.drawable.contributor_mikooomich,
-            contributed = R.string.contributors_developer
-        ),
-        GitHubUser(
-            login = "imjyotiraditya",
-            name = decode("Jyotiraditya%20Panda"),
-            avatar = R.drawable.contributor_imjyotiraditya,
-            contributed = R.string.contributors_developer
-        ),
-        GitHubUser(
-            login = "WSTxda",
-            name = decode("WSTxda"),
-            avatar = R.drawable.contributor_wstxda,
-            contributed = R.string.contributors_wstxda
-        ),
-        GitHubUser(
-            login = "pxeemo",
-            name = decode("Shayan"),
-            avatar = R.drawable.contributor_pxeemo,
-            contributed = R.string.contributors_pxeemo
-        ),
-        GitHubUser(
-            login = "saladnoober",
-            name = decode(null),
-            avatar = R.drawable.contributor_saladnoober,
-            contributed = R.string.contributors_saladnoober
-        ),
-        GitHubUser(
-            login = "Lambada10",
-            name = decode(null),
-            avatar = R.drawable.contributor_lambada10,
-            contributed = R.string.contributors_lambada10
-        ),
-        GitHubUser(
-            login = "lightsummer233",
-            name = decode("Light_summer"),
-            avatar = R.drawable.contributor_lightsummer233,
-            contributed = R.string.contributors_developer
-        ),
-        GitHubUser(
-            login = "nicholaswww",
-            name = decode("Nicholas"),
-            avatar = R.drawable.contributor_nicholaswww,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "Yuyuko1024",
-            name = decode("JunkoYuko"),
-            avatar = R.drawable.contributor_yuyuko1024,
-            contributed = R.string.contributors_yuyuko1024
-        ),
-        GitHubUser(
-            login = "ghhccghk",
-            name = decode("%E6%9D%8E%E5%A4%AA%E7%99%BD"),
-            avatar = R.drawable.contributor_ghhccghk,
-            contributed = R.string.contributors_ghhccghk
-        ),
-        GitHubUser(
-            login = "lucaxvi",
-            name = decode(null),
-            avatar = R.drawable.contributor_lucaxvi,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "tungnk123",
-            name = decode(null),
-            avatar = R.drawable.contributor_tungnk123,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "ne-kle",
-            name = decode("NeKle"),
-            avatar = R.drawable.contributor_ne_kle,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "topazrn",
-            name = decode("Topaz%20RN"),
-            avatar = R.drawable.contributor_topazrn,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "strongville",
-            name = decode("Guillermo%20Villafuerte"),
-            avatar = R.drawable.contributor_strongville,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "SurFace81",
-            name = decode(null),
-            avatar = R.drawable.contributor_surface81,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "bggRGjQaUbCoE",
-            name = decode("dom"),
-            avatar = R.drawable.contributor_bggrgjqaubcoe,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "VishnuSanal",
-            name = decode("Vishnu%20Sanal%20T"),
-            avatar = R.drawable.contributor_vishnusanal,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "HotarunIchijou",
-            name = decode("Kaorun"),
-            avatar = R.drawable.contributor_hotarunichijou,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "someone5678",
-            name = decode("someone5678"),
-            avatar = R.drawable.contributor_someone5678,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "PalanixYT",
-            name = decode("Palanix"),
-            avatar = R.drawable.contributor_palanixyt,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "N3Shemmy3",
-            name = decode("Shemmy"),
-            avatar = R.drawable.contributor_n3shemmy3,
-            contributed = R.string.contributors_code_contributions
-        ),
-        GitHubUser(
-            login = "SharnavM",
-            name = decode("Sharnav%20Mahajan"),
-            avatar = R.drawable.contributor_sharnavm,
-            contributed = R.string.contributors_code_contributions
-        ),
+        GitHubUser(login = "nift4", link = true, name = decode("Nick"), avatar = R.drawable.contributor_nift4, contributed = R.string.contributors_nift4),
+        GitHubUser(login = "123Duo3", link = true, name = decode("123Duo3"), avatar = R.drawable.contributor_123duo3, contributed = R.string.contributors_123duo3),
+        GitHubUser(login = "AkaneTan", link = true, name = decode("%E3%81%82%E3%81%8B%E3%81%AD"), avatar = R.drawable.contributor_akanetan, contributed = R.string.contributors_akanetan),
+        GitHubUser(login = "mikooomich", link = true, name = decode("Michael%20Zh"), avatar = R.drawable.contributor_mikooomich, contributed = R.string.contributors_developer),
+        GitHubUser(login = "imjyotiraditya", link = true, name = decode("Jyotiraditya%20Panda"), avatar = R.drawable.contributor_imjyotiraditya, contributed = R.string.contributors_developer),
+        GitHubUser(login = "WSTxda", link = true, name = decode("WSTxda"), avatar = R.drawable.contributor_wstxda, contributed = R.string.contributors_wstxda),
+        GitHubUser(login = "pxeemo", link = true, name = decode("Shayan"), avatar = R.drawable.contributor_pxeemo, contributed = R.string.contributors_pxeemo),
+        GitHubUser(login = "saladnoober", link = true, name = decode(null), avatar = R.drawable.contributor_saladnoober, contributed = R.string.contributors_saladnoober),
+        GitHubUser(login = "Lambada10", link = true, name = decode(null), avatar = R.drawable.contributor_lambada10, contributed = R.string.contributors_lambada10),
+        GitHubUser(login = "lightsummer233", link = true, name = decode("%E6%B7%A1%E3%81%84%E3%81%AA%E3%81%A4"), avatar = R.drawable.contributor_lightsummer233, contributed = R.string.contributors_developer),
+        GitHubUser(login = "nicholaswww", link = true, name = decode("Nicholas"), avatar = R.drawable.contributor_nicholaswww, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "Yuyuko1024", link = true, name = decode("JunkoYuko"), avatar = R.drawable.contributor_yuyuko1024, contributed = R.string.contributors_yuyuko1024),
+        GitHubUser(login = "ghhccghk", link = true, name = decode("%E6%9D%8E%E5%A4%AA%E7%99%BD"), avatar = R.drawable.contributor_ghhccghk, contributed = R.string.contributors_ghhccghk),
+        GitHubUser(login = "banksio", link = true, name = decode("Nathan%20Banks"), avatar = R.drawable.contributor_banksio, contributed = R.string.contributors_banksio),
+        GitHubUser(login = "lucaxvi", link = true, name = decode(null), avatar = R.drawable.contributor_lucaxvi, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "tungnk123", link = true, name = decode(null), avatar = R.drawable.contributor_tungnk123, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "kleidis", link = false, name = decode("kleidis"), avatar = R.drawable.contributor_kleidis, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "topazrn", link = true, name = decode("Topaz%20RN"), avatar = R.drawable.contributor_topazrn, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "strongville", link = true, name = decode("Guillermo%20Villafuerte"), avatar = R.drawable.contributor_strongville, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "SurFace81", link = true, name = decode(null), avatar = R.drawable.contributor_surface81, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "bggRGjQaUbCoE", link = true, name = decode("dom"), avatar = R.drawable.contributor_bggrgjqaubcoe, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "VishnuSanal", link = true, name = decode("Vishnu%20Sanal%20T"), avatar = R.drawable.contributor_vishnusanal, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "HotarunIchijou", link = true, name = decode("Kaorun"), avatar = R.drawable.contributor_hotarunichijou, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "someone5678", link = true, name = decode("someone5678"), avatar = R.drawable.contributor_someone5678, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "PalanixYT", link = true, name = decode("Palanix"), avatar = R.drawable.contributor_palanixyt, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "N3Shemmy3", link = true, name = decode("Shemmy"), avatar = R.drawable.contributor_n3shemmy3, contributed = R.string.contributors_code_contributions),
+        GitHubUser(login = "SharnavM", link = true, name = decode("Sharnav%20Mahajan"), avatar = R.drawable.contributor_sharnavm, contributed = R.string.contributors_code_contributions),
     )
     val TRANSLATORS = listOf(
         decode("Agos%20M"),
@@ -176,6 +47,7 @@ object Contributors {
         decode("Allan%20Nordh%C3%B8y"),
         decode("Ankit%20Shrestha"),
         decode("Annualfire"),
+        decode("Arif%20Budiman"),
         decode("AronnaxM"),
         decode("BNK"),
         decode("Bai"),
@@ -185,18 +57,19 @@ object Contributors {
         decode("Ciuma%20Neagra"),
         decode("Cnv%20Idk"),
         decode("Cristhian%20Zeas"),
-        decode("DRIVER_UTAC"),
         decode("Daniel%20Batista%20Bueno"),
         decode("Deleted%20User"),
         decode("Dorian%20Humeau"),
+        decode("E.%20Ta."),
         decode("Ettore%20Atalan"),
         decode("Fabian%20Maulana"),
         decode("Falli%20Reza%20Aji"),
         decode("Fuan200"),
+        decode("Gagan%20M."),
         decode("Galahad_WPX"),
         decode("Gary%20Wang"),
+        decode("GitHub%20webhook"),
         decode("H%20Tam%C3%A1s"),
-        decode("Hotarun"),
         decode("Hridaya%20Prajapati"),
         decode("H%E1%BB%93%20Nh%E1%BA%A5t%20Duy"),
         decode("Ian%20Perdiansah"),
@@ -207,23 +80,26 @@ object Contributors {
         decode("Jonathan%20Rodriguez"),
         decode("Jonathan%20Soares"),
         decode("Josep%20M.%20Ferrer"),
+        decode("Kaoru%20Ichijou"),
         decode("Kolesteraw"),
         decode("Konstantin"),
         decode("Kry%C5%A1tof%20%E2%80%9CRobin%E2%80%9D%20Svato%C5%88"),
         decode("La%20pri%C3%A8re"),
-        decode("Lacey%20Anaya"),
         decode("Lappland"),
+        decode("Libre"),
         decode("Lieba%20Natur%20Brilian"),
         decode("LordTenebrous"),
         decode("Luna"),
         decode("M%20G"),
         decode("Mahir%20Abrar"),
         decode("Mehrab%20Mahmud%20Udoy"),
+        decode("Micha%C5%82%20Jonko"),
         decode("Mihai%20Pantazi"),
         decode("Milo%20Ivir"),
         decode("Mint"),
         decode("Muhammad%20Bahaa"),
         decode("Mz%20X"),
+        decode("N.%20Hao"),
         decode("Nathan"),
         decode("Nifou"),
         decode("NukeSource"),
@@ -249,10 +125,13 @@ object Contributors {
         decode("Shimon"),
         decode("Sketch6580"),
         decode("Sotski%20Eugene"),
+        decode("Sup%21%200_0"),
         decode("TenchMaviatorius2759"),
         decode("Tenkawa%20Mira"),
         decode("Thual%20LABART--BARNAGAUD"),
         decode("Topaz%20RN"),
+        decode("UTAC99645"),
+        decode("User2068"),
         decode("VertekPlus"),
         decode("Vlad"),
         decode("Waris%20Lappanathiti"),
@@ -262,13 +141,13 @@ object Contributors {
         decode("Yaman%20M.%20Tootoonjy"),
         decode("Yurical"),
         decode("Yurt%20Page"),
-        decode("Zakky%20Firmansyah"),
         decode("Zan%201456"),
         decode("Zanei%20Nguyen"),
         decode("abdelbasset%20jabrane"),
         decode("arth"),
         decode("cachiusa"),
         decode("cas9"),
+        decode("clearstripe"),
         decode("coso"),
         decode("davigamer987"),
         decode("deminearchiver"),
@@ -280,7 +159,6 @@ object Contributors {
         decode("gfbdrgng"),
         decode("idkwhatfor"),
         decode("jos%C3%A9%20m."),
-        decode("krzemyk"),
         decode("lucaxvi"),
         decode("mauri"),
         decode("mittwerk"),
@@ -295,6 +173,7 @@ object Contributors {
         decode("tungnk123"),
         decode("vanapro1"),
         decode("yuwixx"),
+        decode("%C2%AD%C2%ADanotheroom"),
         decode("%C3%96mer%20S%C3%BCsin"),
         decode("%D0%9C%D0%B0%D0%BA%D0%B0%D1%80%20%D0%A0%D0%B0%D0%B7%D0%B8%D0%BD"),
         decode("%D0%9C%D0%B0%D0%BA%D1%81%D0%B8%D0%BC%20%D0%93%D0%BE%D1%80%D0%BF%D0%B8%D0%BD%D1%96%D1%87"),
@@ -304,6 +183,7 @@ object Contributors {
         decode("%E5%8D%97%E5%B1%B1%E5%B0%91%E5%B8%85Felix"),
         decode("%E5%BC%B5%E6%81%A9%E6%84%B7"),
         decode("%E6%9D%8E%E5%A4%AA%E7%99%BD"),
+        decode("%E6%9F%B1%E7%8C%AB%E5%90%83%E5%A5%B6%E9%85%AA"),
         decode("%E6%B7%A1%E3%81%84%E5%A4%8F"),
     )
 }

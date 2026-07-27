@@ -463,7 +463,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             this,
             gramophoneApplication,
             lifecycleScope,
-            androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+            prefs
         )
 
         mediaSession =

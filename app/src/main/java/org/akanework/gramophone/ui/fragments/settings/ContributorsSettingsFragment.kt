@@ -87,7 +87,7 @@ class ContributorsSettingsActivity : BaseComposeActivity() {
 
     @Composable
     fun SimpleCard(
-        shape: Shape, url: String, icon: @Composable () -> Unit,
+        shape: Shape, url: String?, icon: @Composable () -> Unit,
         name: String?, login: String?, subtitle: String
     ) {
         Card(
@@ -97,11 +97,13 @@ class ContributorsSettingsActivity : BaseComposeActivity() {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = shape,
             onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-                try {
-                    startActivity(intent)
-                } catch (_: ActivityNotFoundException) {
-                    Toast.makeText(this, R.string.no_app_found, Toast.LENGTH_LONG).show()
+                if (url != null) {
+                    val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                    try {
+                        startActivity(intent)
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(this, R.string.no_app_found, Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         ) {
@@ -142,7 +144,7 @@ class ContributorsSettingsActivity : BaseComposeActivity() {
     fun ContributorCard(shape: Shape, contributor: GitHubUser) {
         SimpleCard(
             shape,
-            url = "https://github.com/${contributor.login}",
+            url = if (contributor.link) "https://github.com/${contributor.login}" else null,
             icon = {
                 AsyncImage(
                     model = contributor.avatar,

@@ -26,9 +26,10 @@ GITHUB_USERS = [
     ("nicholaswww", "contributors_code_contributions"),
     ("Yuyuko1024", "contributors_yuyuko1024"),
     ("ghhccghk", "contributors_ghhccghk"),
+    ("banksio", "contributors_banksio"),
     ("lucaxvi", "contributors_code_contributions"),
     ("tungnk123", "contributors_code_contributions"),
-    ("ne-kle", "contributors_code_contributions"),
+    (None, "contributors_code_contributions", "kleidis"),
     ("topazrn", "contributors_code_contributions"),
     ("strongville", "contributors_code_contributions"),
     ("SurFace81", "contributors_code_contributions"),
@@ -46,7 +47,8 @@ GITHUB_USERS = [
 DRAWABLE_DIR = "app/src/main/res/drawable"
 OUTPUT_KT = "app/src/main/java/org/akanework/gramophone/logic/utils/data/Contributors.kt"
 API_BASE = "https://api.github.com/users/"
-WEBLATE_CREDITS = "https://hosted.weblate.org/api/projects/gramophone/credits/?start=1970-01-01T00:00:00Z&end=2099-01-01T00:00:00Z"
+WEBLATE_BASE = "https://hosted.weblate.org"
+WEBLATE_REPORTS = WEBLATE_BASE + "/api/reports/"
 
 HEADERS = {
     "Accept": "application/vnd.github+json",
@@ -83,9 +85,54 @@ def fetch_user_data(login: str) -> Optional[dict]:
 
 def fetch_translation_credits() -> Optional[dict]:
     try:
-        response = requests.get(WEBLATE_CREDITS, headers=WEBLATE_HEADERS, timeout=10)
+        # Step 1: Request report generation
+        response = requests.post(
+            WEBLATE_REPORTS,
+            headers=WEBLATE_HEADERS,
+            json={
+                "kind": "credits",
+                "project": "gramophone",
+                "start": "1970-01-01T00:00:00Z",
+                "end": "2099-01-01T00:00:00Z",
+            },
+            timeout=10,
+        )
         response.raise_for_status()
-        return response.json()
+
+        task_url = WEBLATE_BASE + response.json()["task_url"]
+
+        # Step 2: Wait for task completion
+        for _ in range(30):  # ~30 seconds max
+            task = requests.get(
+                task_url,
+                headers=WEBLATE_HEADERS,
+                timeout=10,
+            )
+            task.raise_for_status()
+
+            task_data = task.json()
+
+            if task_data.get("completed"):
+                break
+
+            time.sleep(1)
+        else:
+            print("❌ Timed out waiting for report generation")
+            return None
+
+        # Step 3: Find report URL
+        report_url = WEBLATE_BASE + task_data["result"]["url"]
+
+        # Step 4: Download report JSON
+        report = requests.get(
+            report_url + "json/",
+            headers=WEBLATE_HEADERS,
+            timeout=10,
+        )
+        report.raise_for_status()
+
+        return report.json()
+
     except Exception as e:
         print(f"❌ get credits error: {e}")
         return None
@@ -115,16 +162,23 @@ object Contributors {
 
     for user in GITHUB_USERS:
         login = user[0]
-        print(f"📦 Processing users: {login}")
-        user_data = fetch_user_data(login)
-        if not user_data:
-            return
+        lname = login
+        if not login:
+            lname = user[2]
+        print(f"📦 Processing users: {lname}")
+        filename = f"contributor_{sanitize_login(lname)}"
+        if login:
+            user_data = fetch_user_data(login)
+            if not user_data:
+                return
 
-        filename = f"contributor_{sanitize_login(login)}"
-        avatar_url = user_data.get("avatar_url", "")
-        name = ("\"" + urllib.parse.quote(user_data["name"]) + "\"") if ("name" in user_data and user_data["name"]) else "null"
+            avatar_url = user_data.get("avatar_url", "")
+            name = ("\"" + urllib.parse.quote(user_data["name"]) + "\"") if ("name" in user_data and user_data["name"]) else "null"
+        else:
+            avatar_url = "https://avatars.githubusercontent.com/u/10137?s=460&v=4"
+            name = f"\"{lname}\""
         download_and_save_avatar(avatar_url, filename)
-        result += f"\n        GitHubUser(login = \"{login}\", name = decode({name}), avatar = R.drawable.{filename}, contributed = R.string.{user[1]}),"
+        result += f"\n        GitHubUser(login = \"{lname}\", link = {"true" if login else "false"}, name = decode({name}), avatar = R.drawable.{filename}, contributed = R.string.{user[1]}),"
 
     result += "\n    )\n"
     print("📦 Fetching credits from Weblate")
