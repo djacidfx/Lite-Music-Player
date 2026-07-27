@@ -79,11 +79,9 @@ import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.util.EventLogger
 import androidx.media3.extractor.mp3.Mp3Extractor
-import androidx.media3.session.CacheBitmapLoader
-import androidx.media3.session.CommandButton
-import androidx.media3.session.MediaBrowser
-import androidx.media3.session.MediaConstants
+import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
 import androidx.media3.session.MediaSessionService
@@ -92,6 +90,10 @@ import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import androidx.media3.session.addToCommandQueueThenFlush
 import androidx.preference.PreferenceManager
+import androidx.media3.session.CacheBitmapLoader
+import androidx.media3.session.CommandButton
+import androidx.media3.session.MediaBrowser
+import androidx.media3.session.MediaConstants
 import coil3.BitmapImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
@@ -113,6 +115,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.guava.future
+import kotlinx.coroutines.guava.await
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.ui.MeiZuLyricsMediaNotificationProvider
 import org.akanework.gramophone.logic.ui.isManualNotificationUpdate
@@ -130,6 +135,7 @@ import org.akanework.gramophone.logic.utils.MediaItemList
 import org.akanework.gramophone.logic.utils.ReplayGainAudioProcessor
 import org.akanework.gramophone.logic.utils.ReplayGainUtil
 import org.akanework.gramophone.logic.utils.SemanticLyrics
+
 import org.akanework.gramophone.logic.utils.exoplayer.EndedWorkaroundPlayer
 import org.akanework.gramophone.logic.utils.exoplayer.GramophoneExtractorsFactory
 import org.akanework.gramophone.logic.utils.exoplayer.GramophoneMediaSourceFactory
@@ -153,7 +159,7 @@ import kotlin.random.Random
  * It's using exoplayer2 as its player backend.
  */
 class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Listener,
-    MediaLibraryService.MediaLibrarySession.Callback, Player.Listener, AnalyticsListener,
+    MediaLibrarySession.Callback, Player.Listener, AnalyticsListener,
     SharedPreferences.OnSharedPreferenceChangeListener {
 
     companion object {
@@ -192,7 +198,10 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         HandlerThread("ExoPlayer:Playback", Process.THREAD_PRIORITY_AUDIO)
     private var mediaSession: MediaLibrarySession? = null
     val endedWorkaroundPlayer
-        get() = mediaSession?.player as EndedWorkaroundPlayer?
+        get() = mediaSession?.player as? EndedWorkaroundPlayer
+
+    private lateinit var libraryTreeLoader: LibraryTreeLoader
+
     private var controller: MediaBrowser? = null
     lateinit var qb: QueueBoard
     private val sendLyrics = Runnable { scheduleSendingLyrics(false) }
@@ -243,6 +252,15 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             customCommands[1]
         else
             customCommands[0]
+
+    private fun getFavoriteCommand(): CommandButton {
+        val isFavorite = (controller?.currentMediaItem?.mediaMetadata?.userRating as? HeartRating)?.isHeart == true
+        return if (isFavorite) {
+            customCommands[6]
+        } else {
+            customCommands[5]
+        }
+    }
 
     private val timer: Runnable = Runnable {
         if (timerPauseOnEnd) {
@@ -345,6 +363,14 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     .setDisplayName(getString(R.string.repeat_mode))
                     .setPlayerCommand(Player.COMMAND_SET_REPEAT_MODE, Player.REPEAT_MODE_OFF)
                     .build(),
+                CommandButton.Builder(CommandButton.ICON_HEART_UNFILLED) // not favorite, click will favorite
+                    .setDisplayName(getString(R.string.favorite))
+                    .setSessionCommand(SessionCommand(SessionCommand.COMMAND_CODE_SESSION_SET_RATING), HeartRating(true))
+                    .build(),
+                CommandButton.Builder(CommandButton.ICON_HEART_FILLED) // favorite, click will unfavorite
+                    .setDisplayName(getString(R.string.unfavorite))
+                    .setSessionCommand(SessionCommand(SessionCommand.COMMAND_CODE_SESSION_SET_RATING), HeartRating(false))
+                    .build(),
             )
         afFormatTracker = AfFormatTracker(this, playbackHandler, handler)
         afFormatTracker.formatChangedCallback = { format, period ->
@@ -433,6 +459,12 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         player.exoPlayer.setShuffleOrder(CircularShuffleOrder(player, 0, 0, Random.nextLong()))
         lastPlayedManager = LastPlayedManager(this, player)
         lastPlayedManager.allowSavingState = false
+        libraryTreeLoader = LibraryTreeLoader(
+            this,
+            gramophoneApplication,
+            lifecycleScope,
+            androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        )
 
         mediaSession =
             MediaLibrarySession
@@ -534,6 +566,8 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     )
                 )
                 .setSystemUiPlaybackResumptionOptIn(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                // Workaround for AA bug where content cannot be scrolled (androidx/media#2192)
+                .setPeriodicPositionUpdateEnabled(false)
                 .build()
         addSession(mediaSession!!)
         controller = MediaBrowser.Builder(this, mediaSession!!.token).buildAsync().get()
@@ -814,7 +848,8 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 builder.setMediaButtonPreferences(
                     ImmutableList.of(
                         getRepeatCommand(),
-                        getShufflingCommand()
+                        getShufflingCommand(),
+                        getFavoriteCommand()
                     )
                 )
             }
@@ -824,6 +859,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         ) {
             handler.post { this.controller?.prepare() }
         }
+        availableSessionCommands.add(SessionCommand.COMMAND_CODE_SESSION_SET_RATING)
         availableSessionCommands.add(SessionCommand(SERVICE_SET_TIMER, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QUERY_TIMER, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_GET_LYRICS, Bundle.EMPTY))
@@ -1218,25 +1254,6 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         return settable
     }
 
-    /*override fun onGetLibraryRoot(
-        session: MediaLibrarySession,
-        browser: MediaSession.ControllerInfo,
-        params: LibraryParams?
-    ): ListenableFuture<LibraryResult<MediaItem>> {
-        val outParams = LibraryParams.Builder()
-            .setOffline(true)
-            .setSuggested(false)
-            .setRecent(false)
-            .build()
-        val item = MediaItem.Builder()
-            .setMediaId("root")
-            .setMediaMetadata(MediaMetadata.Builder()
-                .setIsBrowsable(true)
-                .setIsPlayable(false)
-                .build())
-            .build()
-        return Futures.immediateFuture(LibraryResult.ofItem(item, outParams))
-    }*/
 
     override fun onTracksChanged(tracks: Tracks) {
         if (!tracks.isEmpty && !tracks.isTypeSelected(C.TRACK_TYPE_AUDIO)) {
@@ -1410,6 +1427,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             //lyrics = null
             //scheduleSendingLyrics(true)
         }
+        refreshMediaButtonCustomLayout()
 
         // reshuffle queue when shuffle AND repeat all are enabled
         val player = endedWorkaroundPlayer
@@ -1467,33 +1485,6 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         }
     }
 
-    override fun onAddMediaItems(
-        mediaSession: MediaSession,
-        controller: MediaSession.ControllerInfo,
-        mediaItems: List<MediaItem>
-    ): ListenableFuture<List<MediaItem>> {
-        val completion = SettableFuture.create<List<MediaItem>>()
-        lifecycleScope.launch(Dispatchers.Default) {
-            try {
-                val result = mediaItems.flatMap {
-                    if (it.localConfiguration != null)
-                        listOf(it)
-                    else if (it.mediaId != MediaItem.DEFAULT_MEDIA_ID)
-                        gramophoneApplication.reader.songListFlow.first()
-                            .filter { m -> m.mediaId == it.mediaId }
-                    else if (it.requestMetadata.searchQuery != null)
-                        searchForMediaItem(it)
-                    else
-                        throw UnsupportedOperationException("can't do anything with $it")
-                }
-                completion.set(mapMediaItemsForFavorites(result))
-            } catch (e: UnsupportedOperationException) {
-                completion.setException(e)
-            }
-        }
-        return completion
-    }
-
     private suspend fun mapMediaItemsForFavorites(mediaItems: List<MediaItem>): List<MediaItem> {
         val favorites = gramophoneApplication.reader.playlistListFlow.map { it.find { p ->
             p is Favorite } }.first()?.songList?.map { it.mediaId } ?: emptyList()
@@ -1508,25 +1499,6 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             } else item
         }
     }
-
-    private suspend fun searchForMediaItem(item: MediaItem): List<MediaItem> {
-        val text = item.requestMetadata.searchQuery?.trim() ?: ""
-        val list = gramophoneApplication.reader.songListFlow.first()
-        // TODO support focus and sub queries (see MainActivity)
-        return if (text == "") list else list.filter {
-            // TODO sort results by match quality? (using raw=natural order)
-            // TODO this is copied directly from SearchFragment, which should probably call into
-            //  here for its search needs instead in the future
-            val isMatchingTitle =
-                it.mediaMetadata.title?.contains(text, true) == true
-            val isMatchingAlbum =
-                it.mediaMetadata.albumTitle?.contains(text, true) == true
-            val isMatchingArtist =
-                it.mediaMetadata.artist?.contains(text, true) == true
-            isMatchingTitle || isMatchingAlbum || isMatchingArtist
-        }
-    }
-
     override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
         refreshMediaButtonCustomLayout()
         if (needsMissingOnDestroyCallWorkarounds()) {
@@ -1575,7 +1547,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             ) {
                 mediaSession!!.setMediaButtonPreferences(
                     it, if (isEmpty) emptyList() else
-                        ImmutableList.of(getRepeatCommand(), getShufflingCommand())
+                        ImmutableList.of(getRepeatCommand(), getShufflingCommand(), getFavoriteCommand())
                 )
             }
         }
@@ -1739,5 +1711,76 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 throw IllegalStateException("onForegroundServiceStartNotAllowedException shouldn't be called on T+")
             }
         }
+    }
+
+    // --- MediaLibrarySession.Callback Implementation ---
+
+    override fun onGetLibraryRoot(
+        session: MediaLibrarySession,
+        browser: MediaSession.ControllerInfo,
+        params: LibraryParams?
+    ): ListenableFuture<LibraryResult<MediaItem>> {
+        return libraryTreeLoader.getLibraryRoot()
+    }
+
+    override fun onGetChildren(
+        session: MediaLibrarySession,
+        browser: MediaSession.ControllerInfo,
+        parentId: String,
+        page: Int,
+        pageSize: Int,
+        params: LibraryParams?
+    ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+        return libraryTreeLoader.getChildren(parentId, page, pageSize, params)
+    }
+
+    override fun onGetItem(
+        session: MediaLibrarySession,
+        browser: MediaSession.ControllerInfo,
+        mediaId: String
+    ): ListenableFuture<LibraryResult<MediaItem>> {
+        return libraryTreeLoader.getItem(mediaId)
+    }
+
+    override fun onSearch(
+        session: MediaLibrarySession,
+        browser: MediaSession.ControllerInfo,
+        query: String,
+        params: LibraryParams?
+    ): ListenableFuture<LibraryResult<Void>> {
+        session.notifySearchResultChanged(browser, query, 0, params)
+        return Futures.immediateFuture(LibraryResult.ofVoid())
+    }
+
+    override fun onGetSearchResult(
+        session: MediaLibrarySession,
+        browser: MediaSession.ControllerInfo,
+        query: String,
+        page: Int,
+        pageSize: Int,
+        params: LibraryParams?
+    ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+        return libraryTreeLoader.getSearchResult(query, page, pageSize, params)
+    }
+
+    override fun onAddMediaItems(
+        mediaSession: MediaSession,
+        controller: MediaSession.ControllerInfo,
+        mediaItems: List<MediaItem>
+    ): ListenableFuture<List<MediaItem>> = lifecycleScope.future(Dispatchers.Default) {
+        val expanded = libraryTreeLoader.addMediaItems(mediaItems).await()
+        mapMediaItemsForFavorites(expanded.mediaItems)
+    }
+
+    override fun onSetMediaItems(
+        mediaSession: MediaSession,
+        controller: MediaSession.ControllerInfo,
+        mediaItems: List<MediaItem>,
+        startIndex: Int,
+        startPositionMs: Long
+    ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = lifecycleScope.future(Dispatchers.Default) {
+        val expanded = libraryTreeLoader.addMediaItems(mediaItems).await()
+        val mapped = mapMediaItemsForFavorites(expanded.mediaItems)
+        MediaSession.MediaItemsWithStartPosition(mapped, expanded.startIndex ?: startIndex, startPositionMs)
     }
 }
