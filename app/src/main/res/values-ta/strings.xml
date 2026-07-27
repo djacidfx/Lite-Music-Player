@@ -280,7 +280,6 @@
     <string name="oh_no">ஓ!</string>
     <string name="gramophone_crashed_explainer2">கிராமபோன் செயலிழந்தது :( \n\nதயவுசெய்து எனக்கு ஒரு பிழை அறிக்கையை அனுப்புங்கள், எனவே இந்த விபத்துக்கு என்ன வழிவகுக்கும் என்பது போன்ற சிக்கல்களைச் சரிசெய்ய முடியும்! \n\nஒவ்வொரு சூழ்நிலையும் இசையைப் போலத் தனித்துவமானது, உங்கள் உதவி இல்லாமல் இந்தப் பிழை <b>சரி செய்யப்படாது</b>!</string>
     <string name="send_email">மின்னஞ்சல் அனுப்புங்கள்</string>
-    <string name="send_email_manually">தயவுசெய்து பதிவை nift4dev@gmail.com க்கு அனுப்பவும் - அஞ்சல் பயன்பாட்டைக் கண்டுபிடிக்க முடியவில்லை</string>
     <string name="failed_to_parse_lyric">பாடல் வரிகளை அலசத் தவறிவிட்டது</string>
     <string name="audio_signal_chain">ஆடியோ சிக்னல் சங்கிலி</string>
     <string name="audio_not_initialized">ஆடியோ பிளேபேக் அமைப்பு துவக்கப்படவில்லை. ஏதாவது விளையாட முயற்சிக்கவும்!</string>

@@ -287,7 +287,6 @@
     <string name="settings_open_source_licenses">Licenças de código aberto</string>
     <string name="oh_no">Oh não!</string>
     <string name="send_email">Enviar email</string>
-    <string name="send_email_manually">Por favor envie o registo para nift4dev@gmail.com - não é possível encontrar o app de e-mail</string>
     <string name="audio_signal_chain">Cadeia de sinal</string>
     <string name="audio_not_initialized">O sistema de reprodução de áudio não foi inicializado. Tente reproduzir algo!</string>
     <string name="mix_port_flag_none">Nenhum</string>

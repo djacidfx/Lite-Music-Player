@@ -374,5 +374,4 @@
     <string name="settings_open_source_licenses">Nyílt forráskódú licencek</string>
     <string name="oh_no">Jaj ne!</string>
     <string name="send_email">E-mail küldése</string>
-    <string name="send_email_manually">Kérem küldjön egy naplót a nift4dev@gmail.com címre - levelező app nem található</string>
-</resources>
+    </resources>

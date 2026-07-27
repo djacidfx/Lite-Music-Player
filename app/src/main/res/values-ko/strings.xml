@@ -250,7 +250,6 @@
     <string name="open_in_gramophone">Gramophone에서 열기</string>
     <string name="settings_lyrics_no_animation_summary">가사의 줄 이동 애니메이션 모두 끄기</string>
     <string name="dialog_bitrate">비트레이트</string>
-    <string name="send_email_manually">nift4dev@gmail.com 주소로 로그를 보내 주세요. 메일 앱을 찾을 수 없습니다.</string>
     <string name="bitrate_format">%1$d kbps</string>
     <string name="settings_contributors_click">%s(여기를 눌러 더 보기)</string>
     <string name="send_email">이메일 전송</string>

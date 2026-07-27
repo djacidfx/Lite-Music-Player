@@ -228,7 +228,6 @@
     <string name="settings_lyrics_no_animation_summary">تعطيل جميع الرُّسوم المُتحرّكة لانتقال نَص الكلمات</string>
     <string name="oh_no">أوه لا!</string>
     <string name="send_email">إرسال بريد إلكتروني</string>
-    <string name="send_email_manually">يرجى إرسال السجل إلى nift4dev@gmail.com - لا يمكن العثور على تطبيق البريد</string>
     <string name="settings_open_source_licenses">تراخيص مفتوحة المصدر</string>
     <string name="mix_port_flag_unknown">غير معروف</string>
     <string name="refreshing_wait">جارٍ التحميل، يُرجى الانتظار…</string>

@@ -271,7 +271,6 @@
     <string name="bitrate_unknown">不明なビットレート</string>
     <string name="settings_contributors_click">%s (タップで詳細を表示します！)</string>
     <string name="settings_open_source_licenses">オープンソースライセンス</string>
-    <string name="send_email_manually">こちらにログを送信 nift4dev@gmail.com - メールアプリがありません</string>
     <string name="oh_no">オーノー！</string>
     <string name="send_email">メールを送信</string>
     <string name="package_type_explainer">Gramophone はオープンソースです。誰でも Gramophone の APK を作成できます。APK の入手先を残すために Gramophone はパッケージのタイプを提供しています。\n\n最も一般的なタイプは Release で F-Droid、Google Play、GitHub または IzzyOnDroid から取得されます。\nCI パッケージタイプは GitHub のすべてのコミットに対して作成される自動ビルドを指します。これらのビルドは不安定な場合があります。\nOther パッケージタイプの場合、名前から APK の入手先がわかるはずです。</string>

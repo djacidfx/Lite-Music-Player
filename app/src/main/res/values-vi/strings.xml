@@ -254,7 +254,6 @@
     <string name="oh_no">Ôi không!</string>
     <string name="gramophone_crashed_explainer2">Gramophone bị lỗi :(\n\nVui lòng gửi báo cáo lỗi cho chúng tôi để các vấn đề như này có thể được khắc phục!\n\nMỗi trường hợp đều độc đáo như âm nhạc, nếu không có sự giúp đỡ của bạn, lỗi này rất có thể sẽ <b>KHÔNG</b> được sửa chữa!</string>
     <string name="send_email">Gửi email</string>
-    <string name="send_email_manually">Vui lòng gửi log đến nift4dev@gmail.com - không tìm thấy ứng dụng email</string>
     <string name="failed_to_parse_lyric">Không thể phân tích lời bài hát</string>
     <string name="audio_signal_chain">Chuỗi tín hiệu âm thanh</string>
     <string name="audio_not_initialized">Hệ thống phát âm thanh chưa được chạy. Hãy thử phát cái gì đó!</string>

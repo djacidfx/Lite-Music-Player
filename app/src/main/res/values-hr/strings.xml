@@ -298,7 +298,6 @@
     <string name="oh_no">Oh ne!</string>
     <string name="gramophone_crashed_explainer2">Gramophone je prekinuo raditi :(\n\nPošalji mi prijavu greške kako bi se problemi poput onih koji su doveli do ove greške mogli popraviti!\n\nSvaka je situacija jedinstvena poput glazbe – bez tvoje pomoći se ova greška vjerojatno <b>NEĆE</b> popraviti!</string>
     <string name="send_email">Pošalji e-mail</string>
-    <string name="send_email_manually">Pošalji zapis na nift4dev@gmail.com – ne može se pronaći e-mail aplikacija</string>
     <string name="failed_to_parse_lyric">Neuspjela obrada tekstova pjesama</string>
     <string name="audio_signal_chain">Lanac audio signala</string>
     <string name="audio_not_initialized">Sustav za reprodukciju zvuka nije inicijaliziran. Pokušaj nešto reproducirati!</string>

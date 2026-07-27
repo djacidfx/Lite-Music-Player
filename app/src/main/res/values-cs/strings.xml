@@ -285,7 +285,6 @@
     <string name="timer_expiry_end_of_this_song">Časovač spánku zastaví hudbu na konci této skladby</string>
     <string name="settings_open_source_licenses">Open source licence</string>
     <string name="oh_no">Ach ne!</string>
-    <string name="send_email_manually">Prosím pošlete log na nift4dev@gmail.com - nemůžu najít mailovou aplikaci</string>
     <string name="mix_port_flag_none">Žádné</string>
     <string name="mix_port_flag_ultrasound">Ultrasound</string>
     <string name="mix_port_flag_voip_rx">VoIP RX</string>

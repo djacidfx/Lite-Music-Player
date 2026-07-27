@@ -273,7 +273,6 @@
     <string name="oh_no">Oh tidak!</string>
     <string name="gramophone_crashed_explainer2">Gramophone mengalami kerusakan :(\n\nHarap kirimkan laporan bug kepada saya agar masalah seperti yang menyebabkan kerusakan ini dapat diperbaiki!\n\nSetiap situasi seunik musik, tanpa bantuan Anda, bug ini kemungkinan besar <b>TIDAK</b> akan diperbaiki!</string>
     <string name="send_email">Kirim email</string>
-    <string name="send_email_manually">Harap kirim log ke [nift4dev@gmail.com](mailto:nift4dev@gmail.com) - tidak dapat menemukan aplikasi email</string>
     <string name="failed_to_parse_lyric">Gagal menguraikan lirik</string>
     <string name="settings_lyrics_no_animation_summary">Nonaktifkan semua animasi transisi baris lirik</string>
     <string name="package_type_explainer">APK Gramophone dapat dibuat oleh siapa saja, karena Gramophone bersumber terbuka. Untuk membantu mengingat asal suatu APK, Gramophone menyediakan tipe paket.\n\nTipe yang paling umum adalah Rilis, yang diperoleh dari F-Droid, Google Play, GitHub, atau IzzyOnDroid.\nTipe paket CI mengacu pada build otomatis yang dibuat untuk setiap commit di GitHub. Build ini mungkin tidak stabil.\nUntuk tipe paket lainnya, namanya seharusnya memberikan petunjuk yang wajar tentang asal APK tersebut.</string>

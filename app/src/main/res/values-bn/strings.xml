@@ -294,7 +294,6 @@
     <string name="bitrate_format">%1$d kbps</string>
     <string name="gramophone_crashed_explainer2">Gramophone ক্র্যাশ হয়ে গেছে :(\n\nদয়া করে একটি বাগ রিপোর্ট পাঠাও যাতে এই সমস্যা ঠিক করা যায়!\n\nপ্রতিটি পরিস্থিতি আলাদা — তোমার সাহায্য ছাড়া এই বাগ <b>ঠিক নাও হতে পারে</b>!</string>
     <string name="send_email">ইমেইল পাঠাও</string>
-    <string name="send_email_manually">nift4dev@gmail.com-এ লগ পাঠাও — মেইল অ্যাপ পাওয়া যাচ্ছে না</string>
     <string name="spk_encoding_aac_eld">AAC-ELD</string>
     <string name="spk_encoding_aac_xhe">xHE-AAC</string>
     <string name="spk_encoding_mp3">MP3</string>

@@ -273,7 +273,6 @@
     <string name="settings_open_source_licenses">Open Source Lizensen</string>
     <string name="oh_no">Oh nein!</string>
     <string name="send_email">E-Mail senden</string>
-    <string name="send_email_manually">Bitte schick das Protokoll an nift4dev@gmail.com - E-Mail-App wurde nicht gefunden</string>
     <string name="spk_channel_out_top_front_right">Oben Vorne Rechts</string>
     <string name="device_type_ble_broadcast">Bluetooth LE Broadcast</string>
     <string name="spk_channel_out_bottom_front_center">Unten Vorne Center</string>

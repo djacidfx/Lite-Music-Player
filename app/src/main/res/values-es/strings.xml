@@ -356,7 +356,6 @@
     <string name="spk_encoding_alac">ALAC</string>
     <string name="spk_encoding_aac_adts_lc">AAC-LC en ADTS</string>
     <string name="send_email">Enviar un correo</string>
-    <string name="send_email_manually">Por favor, envía el registro a nift4dev@gmail.com - No se encontró una aplicación de correo</string>
     <string name="settings_contributors_click">%s (¡clic para más!)</string>
     <string name="app_name">Gramophone</string>
     <plurals name="folders_plural">
