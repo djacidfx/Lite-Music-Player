@@ -34,7 +34,6 @@ import androidx.media3.common.Player.REPEAT_MODE_OFF
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.akanework.gramophone.logic.utils.CircularShuffleOrder
 import org.akanework.gramophone.logic.utils.MediaItemList
-import kotlin.random.Random
 
 private const val QUEUE_EXPIRY_MS = 10 * 36000000 // 10 hrs
 
@@ -198,7 +197,7 @@ class QueueBoard(
             repeatMode = repeatMode ?: 0,
             shuffleOrder = shuffleOrder,
             ended = ended,
-            isOriginal = isOriginal,
+            setIsOriginal = MutableStateFlow(isOriginal),
         )
 
         masterQueues.bubbleUp(newQueue)
@@ -320,7 +319,10 @@ class QueueBoard(
         if (found) {
             val oldIndex = masterQueues.indexOf(mq)
             if (!dryRun) {
-                masterQueues[oldIndex] = masterQueues[oldIndex].copy(title = newName, isOriginal = true)
+                masterQueues[oldIndex] = masterQueues[oldIndex].copy(
+                    title = newName,
+                    setIsOriginal = MutableStateFlow(true)
+                )
             }
             if (QUEUE_DEBUG)
                 Log.d(TAG, "Successfully renamed queue from \"${mq.title}\" to \"$newName\"")
@@ -389,7 +391,7 @@ data class MultiQueueObject(
 
     var shuffleOrder: CircularShuffleOrder.Persistent? = null,
     var ended: Boolean = false,
-    var isOriginal: Boolean = true,
+    var setIsOriginal: MutableStateFlow<Boolean> = MutableStateFlow(true),
 
     private var fakeQueueSize: Int? = null,
     private var fakeQueueLength: Long? = null
@@ -399,6 +401,9 @@ data class MultiQueueObject(
 
     val shuffleModeEnabled
         get() = shuffleOrder != null
+
+    val isOriginal
+        get() = setIsOriginal.value
 
     /**
      * Retrieve the song at current position in the queue
@@ -429,8 +434,6 @@ data class MultiQueueObject(
             it.mediaMetadata.durationMs ?: 0L
         }
     }
-
-    fun getTitleForUi() = if (isOriginal) title else "$title (+)" // TODO(MQ) i18n
 
     /**
      * Get the length of the queue
@@ -485,7 +488,7 @@ data class MultiQueueObject(
                 startPositionMs = bundle.getLong("startPositionMs", C.TIME_UNSET),
                 repeatMode = bundle.getInt("repeatMode", REPEAT_MODE_OFF),
                 ended = bundle.getBoolean("ended"),
-                isOriginal = bundle.getBoolean("isOriginal"),
+                setIsOriginal = MutableStateFlow(bundle.getBoolean("isOriginal")),
                 shuffleOrder = BundleCompat.getParcelable(bundle, "shuffleOrder",
                     CircularShuffleOrder.Persistent::class.java),
 

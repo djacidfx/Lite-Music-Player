@@ -1138,7 +1138,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                     repeatMode = plr.repeatMode,
                                     shuffleOrder = null,
                                     ended = plr.playbackState == Player.STATE_ENDED,
-                                    isOriginal = plr.currentIsOriginal,
+                                    setIsOriginal = MutableStateFlow(plr.currentIsOriginal),
                                 )
                             )
                         }

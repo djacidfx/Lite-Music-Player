@@ -66,6 +66,7 @@ import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.logic.utils.convertDurationToTimeStamp
 import org.akanework.gramophone.ui.GramophoneTheme
 import org.akanework.gramophone.ui.MainActivity
+import org.akanework.gramophone.ui.fragments.compose.MqState
 import org.akanework.gramophone.ui.fragments.compose.QueueRoot
 import org.akanework.gramophone.ui.fragments.compose.rememberMqState
 import java.util.LinkedList
@@ -85,11 +86,12 @@ class PlaylistQueueSheet(
     private val queueHead: ComposeView
     private val mqEnabled: Boolean
 
+    // TODO: we can probably nuke this workaround
     // depending on the queue state, we may need to modify behaviour of certain UI elements outside
     // the compose queue elements
     private var detachedHead = MutableStateFlow(false)
     private var detachedQueue: Int? = null
-    private var forceInit = MutableStateFlow(false)
+    private lateinit var mqState: MqState
 
     init {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
@@ -190,6 +192,7 @@ class PlaylistQueueSheet(
                                 forceRefresh()
                             },
                         )
+                    this@PlaylistQueueSheet.mqState = mqState
                     val pagerState = rememberPagerState(
                         initialPage = if (Flags.MQ_PREVIEW) 0 else 1,
                         pageCount = { 2 }
@@ -201,22 +204,6 @@ class PlaylistQueueSheet(
                             mqState.resetHead(false)
                             mqState.init()
                             detachedQueue = null
-                        }
-                    }
-                    val forceInitState by forceInit.collectAsState()  // TODO(MQ) there has to be a better way
-                    LaunchedEffect(forceInitState) {
-                        if (forceInitState) {
-                            mqState.init {
-                                // wait for MediaBrowser to update before updating recycler
-                                instance?.addListener(object : Player.Listener {
-                                    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-                                        instance!!.removeListener(this)
-                                        forceUpdate()
-                                        mqState.resetHead(false)
-                                    }
-                                })
-                            }
-                            forceInit.value = false
                         }
                     }
 
@@ -402,6 +389,7 @@ class PlaylistQueueSheet(
                 else if (from > to && to <= currentIndex && currentIndex < from)
                     currentMediaItemIndex = currentIndex + 1
             }
+            mqState.activeQueue?.setIsOriginal?.value = false
             updateTimer() // TODO: this could be more efficient
         }
 
@@ -416,8 +404,7 @@ class PlaylistQueueSheet(
                 if (instance.getNumQueues() == 0) {
                     dismiss()
                 } else {
-                    // force ui refresh
-                    forceInit.value = true
+                    mqState.removeQueue()
                 }
                 return
             }
@@ -433,6 +420,7 @@ class PlaylistQueueSheet(
             } else if (pos < (currentMediaItemIndex ?: -1)) {
                 currentMediaItemIndex = currentMediaItemIndex!! - 1
             }
+            mqState.activeQueue?.setIsOriginal?.value = false
             updateTimer() // TODO: this could be more efficient
         }
 

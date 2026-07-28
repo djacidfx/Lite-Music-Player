@@ -183,12 +183,13 @@ fun MqListItem(
                 Column(
 
                 ) {
+                    val isOriginal by mq.setIsOriginal.collectAsState()
                     val titleText = if (isActiveQueue) {
-                        "0. ${mq.getTitleForUi()}"
+                        mq.title
                     } else {
-                        "${index + 1}. ${mq.getTitleForUi()}"
+                        "${index + 1}. ${mq.title}"
                     }
-                    val showId = Flags.MQ_ALWAYS_SHOW_QUEUE_ID &&
+                    val showId = Flags.MQ_ALWAYS_SHOW_QUEUE_ID ||
                             (mqState.inactiveQueues + mqState.activeQueue)
                                 .filterNotNull()
                                 .any { it.id != mq.id && it.title == mq.title }
@@ -215,35 +216,54 @@ fun MqListItem(
                         }
                     }
                     // extras line
-                    if (!isPinned) {
+                    if (!isPinned || !isOriginal) {
                         Row(
+                            horizontalArrangement = if (!isPinned) Arrangement.SpaceBetween else Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .padding(horizontal = 16.dp)
+                                .fillMaxWidth()
                         ) {
-                            // TODO: why need div by 10 here
-                            val remainingTimeMs = (expiry!! - System.currentTimeMillis()) / 10
-                            Icon(
-                                painter = painterResource(if (!isActiveQueue && remainingTimeMs < 1800000) R.drawable.ic_warning else R.drawable.ic_keep),
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .clickable(onClick = {
-                                        mqState.togglePin(index)
-                                    }),
-                            )
-                            Text(
-                                text = if (isActiveQueue) "∞" else makeTimeString(remainingTimeMs),
-                                color = MaterialTheme.colorScheme.onSurface.copy(0.7f),
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.MiddleEllipsis,
-                                modifier = Modifier
-                                    .padding(horizontal = 4.dp)
-                                    .clickable(onClick = {
-                                        mqState.togglePin(index)
-                                    }),
-                            )
+                            if (!isPinned) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    // TODO: why need div by 10 here
+                                    val remainingTimeMs =
+                                        (expiry!! - System.currentTimeMillis()) / 10
+                                    Icon(
+                                        painter = painterResource(if (!isActiveQueue && remainingTimeMs < 1800000) R.drawable.ic_warning else R.drawable.ic_keep),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .clickable(onClick = {
+                                                mqState.togglePin(index)
+                                            }),
+                                    )
+                                    Text(
+                                        text = if (isActiveQueue) "∞" else makeTimeString(
+                                            remainingTimeMs
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurface.copy(0.7f),
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.MiddleEllipsis,
+                                        modifier = Modifier
+                                            .padding(horizontal = 4.dp)
+                                            .clickable(onClick = {
+                                                mqState.togglePin(index)
+                                            }),
+                                    )
+                                }
+                            }
+
+                            if (!isOriginal) {
+                                Text(
+                                    text = "(+)",
+                                    color = MaterialTheme.colorScheme.onSurface.copy(0.7f),
+                                    fontSize = 10.sp,
+                                )
+                            }
                         }
                     }
                 }
