@@ -19,7 +19,6 @@ package org.akanework.gramophone.logic.utils.exoplayer
 
 import android.content.Context
 import android.os.Bundle
-import androidx.core.os.BundleCompat
 import androidx.media3.common.C
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.ForwardingSimpleBasePlayer
@@ -32,17 +31,15 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
-import org.akanework.gramophone.logic.MultiQueueObject
 import org.akanework.gramophone.logic.QueueBoard
+import org.akanework.gramophone.logic.parseQueueTitle
 import org.akanework.gramophone.logic.utils.CircularShuffleOrder
 import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.logic.utils.SemanticLyrics
 import org.json.JSONObject
 import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
-import uk.akane.libphonograph.items.artistId
 import uk.akane.libphonograph.items.hdArtworkUri
 import java.util.Objects
-import kotlin.random.Random
 
 
 /**
@@ -327,15 +324,12 @@ class EndedWorkaroundPlayer(
         startIndex: Int,
         startPositionMs: Long
     ): ListenableFuture<*> {
-        val title = mediaItems.firstOrNull()?.mediaMetadata?.extras?.getString("mq_title")
+        val idWithTitle = parseQueueTitle(mediaItems.first())
+        val title = idWithTitle.second
         val list = if (title != null) mediaItems.toMutableList().apply {
-            this[0] = this[0].buildUpon().setMediaMetadata(
-                this[0].mediaMetadata.buildUpon()
-                .setExtras(Bundle(this[0].mediaMetadata.extras!!).apply {
-                    // Remove mq_title extra as this is purely for transport to here
-                    remove("mq_title")
-                }).build()
-            ).build()
+            this[0] = this[0].buildUpon()
+                .setMediaId(idWithTitle.first)
+                .build()
         } else mediaItems
         val qt = title ?: context.getString(R.string.unknown_playlist)
         setMediaItems(

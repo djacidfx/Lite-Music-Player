@@ -79,12 +79,12 @@ class LibraryTreeLoader(
     private fun mapDomainItemToMediaItem(item: Any): MediaItem? {
         return when (item) {
             is Album -> createFolderItem(
-                "album_${item.id}", item.title ?: "", MediaMetadata.MEDIA_TYPE_ALBUM,
+                "mq_title:${item.title}:album_${item.id}", item.title ?: "", MediaMetadata.MEDIA_TYPE_ALBUM,
                 subtitle = item.albumArtist ?: item.songList.firstOrNull()?.mediaMetadata?.artist?.toString(),
                 artworkUri = item.cover, isPlayable = item.songList.isNotEmpty(), isBrowsable = false
             )
             is Artist -> createFolderItem(
-                "artist_${item.title}", item.title ?: "", MediaMetadata.MEDIA_TYPE_ARTIST,
+                "mq_title:${item.title}:artist_${item.title}", item.title ?: "", MediaMetadata.MEDIA_TYPE_ARTIST,
                 subtitle = context.resources.getQuantityString(R.plurals.songs, item.songList.size, item.songList.size),
                 artworkUri = item.albumList.firstOrNull()?.cover, isPlayable = item.songList.isNotEmpty(), isBrowsable = false
             )
@@ -104,20 +104,20 @@ class LibraryTreeLoader(
                     is uk.akane.libphonograph.dynamicitem.Favorite -> "playlist_favorite"
                     else -> "playlist_${item.id}"
                 }
-                createFolderItem(id, title, MediaMetadata.MEDIA_TYPE_PLAYLIST, artworkUri = icon, isPlayable = item.songList.isNotEmpty(), isBrowsable = false)
+                createFolderItem("mq_title:${title}:$id", title, MediaMetadata.MEDIA_TYPE_PLAYLIST, artworkUri = icon, isPlayable = item.songList.isNotEmpty(), isBrowsable = false)
             }
             is Genre -> createFolderItem(
-                "genre_${item.id}", item.title ?: context.getString(R.string.unknown_genre), MediaMetadata.MEDIA_TYPE_GENRE,
+                "mq_title:${item.title}:genre_${item.id}", item.title ?: context.getString(R.string.unknown_genre), MediaMetadata.MEDIA_TYPE_GENRE,
                 subtitle = context.resources.getQuantityString(R.plurals.songs, item.songList.size, item.songList.size),
                 isPlayable = item.songList.isNotEmpty(), isBrowsable = false, artworkUri = null
             )
             is Date -> createFolderItem(
-                "date_${item.id}", item.title ?: context.getString(R.string.unknown_year), MediaMetadata.MEDIA_TYPE_YEAR,
+                "mq_title:${item.title}:date_${item.id}", item.title ?: context.getString(R.string.unknown_year), MediaMetadata.MEDIA_TYPE_YEAR,
                 subtitle = context.resources.getQuantityString(R.plurals.songs, item.songList.size, item.songList.size),
                 isPlayable = item.songList.isNotEmpty(), isBrowsable = false, artworkUri = null
             )
             is FileNode -> createFolderItem(
-                "folder_${item.folderName}", item.folderName, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+                "mq_title:${item.folderName}:folder_${item.folderName}", item.folderName, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                 subtitle = context.resources.getQuantityString(R.plurals.items, item.folderList.size + item.songList.size, item.folderList.size + item.songList.size),
                 isPlayable = item.songList.isNotEmpty() || item.folderList.isNotEmpty(), isBrowsable = false
             )
@@ -206,7 +206,7 @@ class LibraryTreeLoader(
                     }
                     "albums" -> sortList(app.reader.albumListFlow.first(), LibraryAdapterTypes.ALBUM, Sorter(AlbumAdapter.StoreAlbumHelper, null)).map { mapDomainItemToMediaItem(it)!! }
                     "artists" -> sortList(app.reader.artistListFlow.first(), LibraryAdapterTypes.ARTIST, Sorter(ArtistAdapter.StoreArtistHelper, null)).map { mapDomainItemToMediaItem(it)!! }
-                    "songs" -> sortList(app.reader.songListFlow.first(), LibraryAdapterTypes.SONG, Sorter(SongAdapter.MediaItemHelper, null))
+                    "songs" -> queueWithTitle(sortList(app.reader.songListFlow.first(), LibraryAdapterTypes.SONG, Sorter(SongAdapter.MediaItemHelper, null)), context.getString(R.string.category_songs))
                     "playlists" -> sortList(app.reader.playlistListFlow.first(), LibraryAdapterTypes.PLAYLIST, Sorter(PlaylistAdapter.StorePlaylistHelper, null)).map { mapDomainItemToMediaItem(it)!! }
                     "genres" -> sortList(app.reader.genreListFlow.first(), LibraryAdapterTypes.GENRE, Sorter(GenreAdapter.StoreGenreHelper, null)).map { mapDomainItemToMediaItem(it)!! }
                     "dates" -> sortList(app.reader.dateListFlow.first(), LibraryAdapterTypes.DATE, Sorter(DateAdapter.StoreDateHelper, null)).map { mapDomainItemToMediaItem(it)!! }
@@ -301,10 +301,11 @@ class LibraryTreeLoader(
         query: String, page: Int, pageSize: Int, params: LibraryParams?
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future(Dispatchers.Default) {
         try {
+            val title = context.getString(R.string.search_query, query)
             val list = searchForMediaItem(query)
             val finalPageSize = pageSize.coerceAtMost(200)
             val pagedList = list.asSequence().drop(page * finalPageSize).take(finalPageSize).toList()
-            LibraryResult.ofItemList(ImmutableList.copyOf(pagedList), params)
+            LibraryResult.ofItemList(ImmutableList.copyOf(queueWithTitle(pagedList, title)), params)
         } catch (e: Exception) {
             Log.w(tag, "getSearchResult failed for $query", e)
             LibraryResult.ofError(androidx.media3.session.SessionError.ERROR_UNKNOWN)
@@ -333,8 +334,12 @@ class LibraryTreeLoader(
     ): ListenableFuture<ExpandedMediaItems> = scope.future(Dispatchers.Default) {
         var startingIndex: Int? = null
         val resultList = mutableListOf<MediaItem>()
+        var title: String? = null
 
         for (item in mediaItems) {
+            val idWithTitle = parseQueueTitle(item)
+            title = idWithTitle.second
+            val item = item.buildUpon().setMediaId(idWithTitle.first).build()
             if (item.localConfiguration != null) {
                 resultList.add(item)
                 continue
@@ -362,8 +367,7 @@ class LibraryTreeLoader(
                 throw UnsupportedOperationException("can't do anything with $item")
             }
         }
-
-        ExpandedMediaItems(resultList, startingIndex)
+        ExpandedMediaItems(queueWithTitle(resultList , title), startingIndex)
     }
 
 

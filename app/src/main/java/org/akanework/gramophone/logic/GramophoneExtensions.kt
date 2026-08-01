@@ -96,7 +96,7 @@ import org.akanework.gramophone.logic.utils.AudioFormatDetector
 import org.akanework.gramophone.logic.utils.AudioTrackInfo
 import org.akanework.gramophone.logic.utils.BtCodecInfo
 import org.akanework.gramophone.logic.utils.CalculationUtils
-import org.akanework.gramophone.logic.utils.CircularShuffleOrder
+import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.logic.utils.MediaItemList
 import org.akanework.gramophone.logic.utils.ReplayGainUtil
 import org.akanework.gramophone.logic.utils.SemanticLyrics
@@ -793,21 +793,36 @@ operator fun PaddingValues.plus(other: PaddingValues): PaddingValues = PaddingVa
     bottom = this.calculateBottomPadding() + other.calculateBottomPadding(),
 )
 
-/*
-TODO: use it with AA
+/**
+ * Assign a title to a queue by embedding it into the first media item's mediaId. For use where
+ * Media Session commands are unavailable. Use SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY where possible.
+ * If no title is given, no changes are made..
+ */
 fun queueWithTitle(mediaItems: List<MediaItem>, mqTitle: String?): List<MediaItem> {
-    if (mediaItems.isEmpty() || mqTitle == null) return mediaItems
+    if (!Flags.MQ_PREVIEW || mediaItems.isEmpty() || mqTitle == null) return mediaItems
     val firstMediaItem = mediaItems.first()
-    val newFirstMediaItem = firstMediaItem.buildUpon().setMediaMetadata(
-        firstMediaItem.mediaMetadata.buildUpon().setExtras(
-            (firstMediaItem.mediaMetadata.extras?.let { Bundle(it) } ?: Bundle()).apply {
-                putString("mq_title", mqTitle)
-            }
-        ).build()
-    ).build()
+//    if (firstMediaItem.mediaId.startsWith("mq_title")) {
+//        Log.d("queueWithTitle", "we have a title already, id: ${firstMediaItem.mediaId}")
+//    }
+    val newFirstMediaItem = firstMediaItem.buildUpon()
+        .setMediaId("mq_title:$mqTitle:"+firstMediaItem.mediaId)
+        .build()
     return listOf(newFirstMediaItem) + mediaItems.drop(1)
 }
+
+/**
+ * Parse the queue title and the media id from a media item.
  */
+fun parseQueueTitle(mediaItem: MediaItem): Pair<String, String?> {
+    return if (mediaItem.mediaId.startsWith("mq_title")) {
+        var title = mediaItem.mediaId.substringAfter("mq_title:")
+        val mediaId = title.substringAfter(":")
+        title = title.substringBefore(":")
+        Pair(mediaId, title)
+    } else {
+        Pair(mediaItem.mediaId, null)
+    }
+}
 
 fun ContentResolver.queryWithPending(uri: Uri, projection: Array<String>, selection: String?,
                                      selectionArgs: Array<String>?, sortOrder: String?,
