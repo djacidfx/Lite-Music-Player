@@ -336,10 +336,13 @@ class LibraryTreeLoader(
         val resultList = mutableListOf<MediaItem>()
         var title: String? = null
 
-        for (item in mediaItems) {
-            val idWithTitle = parseQueueTitle(item)
+        val mediaItems = listOf(mediaItems.first().let {
+            val idWithTitle = parseQueueTitle(it)
             title = idWithTitle.second
-            val item = item.buildUpon().setMediaId(idWithTitle.first).build()
+            it.buildUpon().setMediaId(idWithTitle.first).build()
+        }) + mediaItems.drop(1)
+
+        for (item in mediaItems) {
             if (item.localConfiguration != null) {
                 resultList.add(item)
                 continue

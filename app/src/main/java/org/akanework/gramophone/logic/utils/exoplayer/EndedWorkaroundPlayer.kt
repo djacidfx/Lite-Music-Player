@@ -183,9 +183,7 @@ class EndedWorkaroundPlayer(
         shuffleModeEnabled: Boolean?,
         playbackParameters: PlaybackParameters?,
     ) {
-        if (!(title == currentTitle && (currentIsOriginal && original))) {
-            cloneQueue(generateQueueId(), title, pinned, original)
-        }
+        cloneQueue(generateQueueId(), title, pinned, original)
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was found orphaned")
         if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
@@ -215,9 +213,7 @@ class EndedWorkaroundPlayer(
         if (currentMediaItem?.mediaId == mediaItems[startIndex].mediaId) {
             val index = currentMediaItemIndex
             val isLast = mediaItemCount - index == 1
-            if (!(title == currentTitle && (currentIsOriginal && original))) {
-                cloneQueue(generateQueueId(), title, pinned, original)
-            }
+            cloneQueue(generateQueueId(), title, pinned, original)
             if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
             if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
             if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
@@ -287,6 +283,7 @@ class EndedWorkaroundPlayer(
     }
 
     fun cloneQueue(newQueueId: Long, newTitle: String, newIsPinned: Boolean, original: Boolean) {
+        if (newTitle == currentTitle && (currentIsOriginal && original)) return // active queue update, not for queueboard
         if (currentQueueId == null && !exoPlayer.currentTimeline.isEmpty)
             throw IllegalStateException("have media items but current title is null, logic bug")
         else if (currentQueueId != null && Flags.MQ_PREVIEW) {
