@@ -110,8 +110,8 @@ class GramophoneRenderFactory(
     ): AudioSink {
         val builder = DefaultAudioSink.Builder(context)
         val aop = PostAmpAudioOutputProvider(
-            AudioTrackAudioOutputProvider.Builder(context)
-                .setMaxPlaybackSpeed(4f).build(), rgAp, context)
+            ExtendedAudioOutputProvider(AudioTrackAudioOutputProvider.Builder(context)
+                .setMaxPlaybackSpeed(4f).build()), rgAp, context)
         builder.setAudioOutputProvider(aop)
         builder.setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
         builder.setEnableHighResolutionPcmOutput(pcmEncodingRestrictionLifted)

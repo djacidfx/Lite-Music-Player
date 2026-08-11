@@ -197,7 +197,6 @@ class AudioPreviewActivity : BaseActivity(), View.OnClickListener {
                     it.setMp3ExtractorFlags(Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING)
                 })
         )
-            .experimentalSetDynamicSchedulingEnabled(false)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .setAudioAttributes(
                 AudioAttributes

@@ -60,7 +60,7 @@ object AudioTrackHiddenApi {
     }
 
     @SuppressLint("PrivateApi", "DiscouragedPrivateApi")
-    private fun getAudioTrackPtr(audioTrack: AudioTrack): Long {
+    fun getAudioTrackPtr(audioTrack: AudioTrack): Long {
         if (audioTrack.state == AudioTrack.STATE_UNINITIALIZED)
             throw IllegalArgumentException("cannot get pointer for released AudioTrack")
         val cls = audioTrack.javaClass
@@ -151,7 +151,7 @@ object AudioTrackHiddenApi {
     fun findAfTrackFlags(
         dump: String?,
         latency: Int?,
-        track: AudioTrack,
+        ptr: Long,
         grantedFlags: Int?
     ): Int? {
         if (!libLoaded)
@@ -183,7 +183,6 @@ object AudioTrackHiddenApi {
                 ?: throw NullPointerException("failed parsing afSampleRate in: $theLine")
             val format = match2.groupValues.getOrNull(1)?.toUIntOrNull(radix = 16)?.toInt()
                 ?: throw NullPointerException("failed parsing format in: $theLine2")
-            val ptr = getAudioTrackPtr(track)
             Log.d(TRACE_TAG, "calling native findAfTrackFlagsInternal")
             return findAfTrackFlagsInternal(
                 ptr,
@@ -410,7 +409,7 @@ object AudioTrackHiddenApi {
     }
 
     private val frameCountRegex = Regex(".*\\), frame count \\((.*)\\).*")
-    fun getFrameCountFromDump(dump: String?): Long? {
+    fun getFrameCountFromDump(dump: String?): Int? {
         if (dump == null)
             return null
         val dt = dump.trim().split('\n').map { it.trim() }
@@ -443,7 +442,7 @@ object AudioTrackHiddenApi {
             )
             return null
         }
-        text.toLongOrNull()?.let { return it }
+        text.toIntOrNull()?.let { return it }
         Log.e(
             TAG,
             "getFrameCountFromDump() failure: $text didn't convert to int, DUMP:\n$dump"

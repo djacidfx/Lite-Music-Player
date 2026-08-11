@@ -24,7 +24,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.media.AudioTrack
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.DynamicsProcessing
 import android.os.Build
@@ -39,15 +38,14 @@ import androidx.media3.common.audio.AudioManagerCompat
 import androidx.media3.common.util.Log
 import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
-import androidx.media3.exoplayer.audio.AudioTrackAudioOutput
-import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutput
 import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
 import org.akanework.gramophone.logic.getSystemProperty
 import org.akanework.gramophone.logic.utils.AudioFormatDetector.audioDeviceTypeToString
 import org.akanework.gramophone.logic.utils.ReplayGainUtil.Mode
+import org.akanework.gramophone.logic.utils.exoplayer.ExtendedAudioOutput
+import org.akanework.gramophone.logic.utils.exoplayer.ExtendedAudioOutputProvider
 import org.nift4.gramophone.hificore.AudioSystemHiddenApi
-import org.nift4.gramophone.hificore.AudioTrackHiddenApi
 import org.nift4.gramophone.hificore.ReflectionAudioEffect
 import kotlin.math.max
 import kotlin.math.min
@@ -55,7 +53,7 @@ import kotlin.math.min
 // TODO: less hacky https://github.com/nift4/media/commit/22d2156bec74542a0764bf0ec27c839cc70874ed
 // TODO: less hacky https://github.com/nift4/media/commit/2988651676987cfd42affc21e1939d6cacbfbe7f
 class PostAmpAudioOutputProvider(
-    val sink: AudioTrackAudioOutputProvider, val rgAp: ReplayGainAudioProcessor, val context: Context
+    val sink: ExtendedAudioOutputProvider, val rgAp: ReplayGainAudioProcessor, val context: Context
 ) : ForwardingAudioOutputProvider(sink), AudioSystemHiddenApi.VolumeChangeListener {
     companion object {
         private const val TAG = "PostAmpAOP"
@@ -180,7 +178,7 @@ class PostAmpAudioOutputProvider(
         }
     }
 
-    fun getAudioTrack() = currentAudioOutput?.ao?.audioTrack
+    fun getExtendedAudioOutput() = currentAudioOutput?.ao
 
     override fun getOutputConfig(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.OutputConfig {
         pendingFormat = formatConfig.format
@@ -192,7 +190,7 @@ class PostAmpAudioOutputProvider(
         // tracks getting torn down on effect creation being avoided
         if (config.audioSessionId != C.AUDIO_SESSION_ID_UNSET)
             mySetAudioSessionId(config.audioSessionId)
-        val ao = super.getAudioOutput(config) as AudioTrackAudioOutput
+        val ao = super.getAudioOutput(config) as ExtendedAudioOutput
         ao.audioSessionId.let {
             if (it != C.AUDIO_SESSION_ID_UNSET)
                 mySetAudioSessionId(it)
@@ -206,33 +204,20 @@ class PostAmpAudioOutputProvider(
         return InnerAudioOutput(ao).also { currentAudioOutput = it }
     }
 
-    private inner class InnerAudioOutput(val ao: AudioTrackAudioOutput) :
+    private inner class InnerAudioOutput(val ao: ExtendedAudioOutput) :
         ForwardingAudioOutput(ao) {
         var volume = 1f
             private set
 
         init {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                ao.audioTrack.addOnRoutingChangedListener(
-                    {
-                        if (ao === currentAudioOutput?.ao)
-                            myOnRoutingChanged((it as AudioTrack).routedDevice)
-                        else
-                            updateVolumeEffect()
-                    }, Handler(Looper.myLooper()!!)
-                )
-            } else {
-                @Suppress("deprecation")
-                ao.audioTrack.addOnRoutingChangedListener(
-                    AudioTrack.OnRoutingChangedListener {
-                        if (ao === currentAudioOutput?.ao)
-                            myOnRoutingChanged(it.routedDevice)
-                        else
-                            updateVolumeEffect()
-                    },
-                    Handler(Looper.myLooper()!!)
-                )
-            }
+            ao.addOnRoutingChangedListener(
+                {
+                    if (ao === currentAudioOutput?.ao)
+                        myOnRoutingChanged(it.routedDevice)
+                    else
+                        updateVolumeEffect()
+                }, Handler(Looper.myLooper()!!)
+            )
 
             ao.addListener(object : AudioOutput.Listener {
                 override fun onPositionAdvancing(playoutStartSystemTimeMs: Long) {
@@ -423,9 +408,11 @@ class PostAmpAudioOutputProvider(
                 reuseFormat.sampleMimeType != MimeTypes.AUDIO_RAW
         if (isOffload) {
             val hasDpe = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dpeEffect?.hasControl == true
+            if (!hasDpe)
+                return true
             val calcGainAfter = ReplayGainUtil.calculateGain(
-                reuseTags, mode, rgGain, reduceGain || !hasDpe,
-                if (hasDpe) ReplayGainUtil.RATIO else null
+                reuseTags, mode, rgGain, reduceGain,
+                ReplayGainUtil.RATIO
             )
             // DPE logic relies on flush() when tags change in a way that changes the audio.
             // (Use cached gain as mode may have changed without listener being modified, so a
@@ -660,10 +647,10 @@ class PostAmpAudioOutputProvider(
     // force max based on result of isAbsoluteVolume().
     private fun getCurrentMixerVolume(): Float? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) { // until incl 15 QPR0
-            val track = currentAudioOutput?.ao?.audioTrack
+            val ao = currentAudioOutput?.ao
             var output: Int? = lastOutput
-            if (track != null) {
-                output = AudioTrackHiddenApi.getOutput(track)
+            if (ao != null) {
+                output = ao.getOutputPort()
                 lastOutput = output
             }
             if (output != null) {

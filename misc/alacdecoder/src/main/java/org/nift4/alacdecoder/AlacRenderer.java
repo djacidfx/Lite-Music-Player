@@ -17,6 +17,8 @@
 
 package org.nift4.alacdecoder;
 
+import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.os.Handler;
 
 import androidx.annotation.NonNull;
@@ -49,12 +51,6 @@ public class AlacRenderer extends DecoderAudioRenderer<AlacDecoder> {
                 Util.getPcmFormat(pcmEncoding, format.channelCount, format.sampleRate))) {
             return C.FORMAT_UNSUPPORTED_SUBTYPE;
         }
-        if (format.channelCount == 4) {
-            // TODO: when https://github.com/androidx/media/issues/1471 is done, remove this and
-            //  propagate correct channel mask instead. 4ch uses different channel set to work with
-            //  the default channel mask.
-            return C.FORMAT_UNSUPPORTED_SUBTYPE;
-        }
         return C.FORMAT_HANDLED;
     }
 
@@ -77,7 +73,14 @@ public class AlacRenderer extends DecoderAudioRenderer<AlacDecoder> {
         Format format = decoder.getInputFormat();
         int bitDepth = format.initializationData.get(0)[5];
         int pcmEncoding = bitDepth == 20 ? C.ENCODING_PCM_24BIT : Util.getPcmEncoding(bitDepth);
-        return Util.getPcmFormat(pcmEncoding, format.channelCount, format.sampleRate);
+        Format outFormat = Util.getPcmFormat(pcmEncoding, format.channelCount, format.sampleRate);
+        if (format.channelMask != Format.NO_VALUE) {
+            outFormat = outFormat.buildUpon().setChannelMask(format.channelMask).build();
+        } else if (outFormat.channelCount == 4) {
+            // ALAC defines 4 channels as CHANNEL_OUT_SURROUND, Android as CHANNEL_OUT_QUAD.
+            outFormat = outFormat.buildUpon().setChannelMask(AudioFormat.CHANNEL_OUT_SURROUND).build();
+        }
+        return outFormat;
     }
 
     @NonNull
