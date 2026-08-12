@@ -154,7 +154,8 @@ namespace android {
     class AudioTimestamp {
     public:
         AudioTimestamp() : mPosition(0), mTime({ .tv_sec = 0, .tv_nsec = 0 }) {
-            ALOGE("if you see this, expect a segfault. this class AudioTimestamp never was supposed to be instantiated");
+            // this ctor is actually called by us sometimes, so we have to manually ensure it
+            // matches the real ctor.
         }
         uint32_t mPosition;
         struct timespec mTime;

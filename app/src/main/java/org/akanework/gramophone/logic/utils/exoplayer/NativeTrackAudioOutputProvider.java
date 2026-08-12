@@ -41,6 +41,7 @@ import androidx.media3.common.Format;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.Clock;
 import androidx.media3.common.util.ListenerSet;
+import androidx.media3.common.util.Log;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.common.util.Util;
 import androidx.media3.exoplayer.audio.AudioCapabilities;
@@ -57,7 +58,8 @@ import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.util.Objects;
-import java.util.function.BiConsumer;
+
+import org.akanework.gramophone.logic.utils.AudioFormatDetector;
 import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.RequiresNonNull;
@@ -308,18 +310,27 @@ public final class NativeTrackAudioOutputProvider implements AudioOutputProvider
       }
       android.media.AudioAttributes nativeTrackAttributes =
           getNativeTrackAttributes(config.audioAttributes, config.isTunneling);
-      int format = 0x1; //TODO
+      AudioFormatDetector.Encoding format = AudioFormatDetector.Encoding.get(config.encoding);
+      if (format == null) {
+        throw new IllegalStateException("missing map for media3 format " + config.encoding);
+      }
       int channelMask = 0x3; // TODO
       NativeTrack.Builder nativeTrackBuilder =
-          NativeTrack.Builder.create(contextForNativeTrack, nativeTrackAttributes, format, channelMask);
+          NativeTrack.Builder.create(contextForNativeTrack, nativeTrackAttributes,
+                  format.getNativeOrThrow(), channelMask);
       nativeTrackBuilder.setSampleRate(config.sampleRate);
       nativeTrackBuilder.setBufferSizeInBytes(config.bufferSize);
       nativeTrackBuilder.setSessionId(audioSessionId);
       nativeTrackBuilder.setMaxRequiredSpeed(maxPlaybackSpeed);
+      nativeTrackBuilder.setTrackFlags(NativeTrack.AUDIO_OUTPUT_FLAG_DIRECT);
       //TODO:if (SDK_INT >= 29) {
       //  nativeTrackBuilder.setOffloadedPlayback(config.isOffload);
       //}
       nativeTrack = nativeTrackBuilder.build();
+      if ((nativeTrack.flags() & NativeTrack.AUDIO_OUTPUT_FLAG_DIRECT) == 0) {//TODO
+        nativeTrack.release();
+        throw new IllegalArgumentException("No direct output available");
+      }
     } catch (UnsupportedOperationException | IllegalArgumentException e) {
       throw new InitializationException(e);
     }
@@ -453,29 +464,36 @@ public final class NativeTrackAudioOutputProvider implements AudioOutputProvider
   private @SupportLevel int getFormatSupportLevel(FormatConfig formatConfig) {
     Format format = formatConfig.format;
     if (Objects.equals(format.sampleMimeType, MimeTypes.AUDIO_RAW)) {
-        // TODO
-      if (format.pcmEncoding == C.ENCODING_PCM_16BIT&&format.channelCount==2) {
-        // Always supported.
-        return FORMAT_SUPPORTED_DIRECTLY;
-      }
-      /*if (!formatConfig.enableHighResolutionPcmOutput) {
-        // Other PCM formats explicitly disabled, so claim no support.
+      if (format.channelCount != 2) {
+        // TODO add support for this
         return FORMAT_UNSUPPORTED;
+      }
+      if (format.pcmEncoding != C.ENCODING_PCM_16BIT) {
+        if (!formatConfig.enableHighResolutionPcmOutput) {
+          // Other PCM formats explicitly disabled, so claim no support.
+          return FORMAT_UNSUPPORTED;
+        }
       }
       if (!Util.isEncodingLinearPcm(format.pcmEncoding)) {
         Log.w(TAG, "Invalid PCM encoding: " + format.pcmEncoding);
         return FORMAT_UNSUPPORTED;
       }
-      if (SDK_INT < Util.getApiLevelThatAudioFormatIntroducedAudioEncoding(format.pcmEncoding)) {
-        // Format not yet supported by NativeTrack on this SDK level.*/
+      AudioFormatDetector.Encoding encoding = AudioFormatDetector.Encoding.get(format.pcmEncoding);
+      if (encoding == null) {
+        // Format not yet supported by AudioFormatDetector, this should be fixed...
+        Log.e(TAG, "Missing PCM encoding: " + format.pcmEncoding);
         return FORMAT_UNSUPPORTED;
-      //}
+      }
+      if (!encoding.isSupportedAsNative()) {
+        // Format not yet supported by NativeTrack on this SDK level.
+        return FORMAT_UNSUPPORTED;
+      }
       // NativeTrack can play this PCM format. It may internally resample to other PCM formats, but
       // this is outside of our control and knowledge.
-      //return FORMAT_SUPPORTED_DIRECTLY;
+      return FORMAT_SUPPORTED_DIRECTLY;
     }
     if (audioCapabilities.isPassthroughPlaybackSupported(format, formatConfig.audioAttributes)) {
-      //return FORMAT_SUPPORTED_DIRECTLY;
+      //TODO return FORMAT_SUPPORTED_DIRECTLY;
     }
 
     return FORMAT_UNSUPPORTED;

@@ -25,7 +25,9 @@ import androidx.media3.common.util.Log
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink.AudioTrackConfig
 import kotlinx.parcelize.Parcelize
+import org.akanework.gramophone.logic.utils.exoplayer.AudioTrackExtendedAudioOutput
 import org.akanework.gramophone.logic.utils.exoplayer.ExtendedAudioOutput
+import org.akanework.gramophone.logic.utils.exoplayer.NativeTrackExtendedAudioOutput
 import org.nift4.gramophone.hificore.AudioSystemHiddenApi
 import org.nift4.gramophone.hificore.AudioTrackHiddenApi
 
@@ -37,7 +39,7 @@ data class AfFormatInfo(
     val mixPortFast: Boolean?, val ioHandle: Int?, val sampleRateHz: UInt?,
     val audioFormat: String?, val channelCount: Int?, val channelMask: Int?,
     val grantedFlags: Int?, val policyPortId: Int?, val afTrackFlags: Int?,
-    val isBluetoothOffload: Boolean?
+    val isBluetoothOffload: Boolean?, val backend: String
 ) : Parcelable
 
 @Parcelize
@@ -169,7 +171,12 @@ class AfFormatTracker(
                 grantedFlags,
                 AudioTrackHiddenApi.getPortIdFromDump(dump),
                 AudioTrackHiddenApi.findAfTrackFlags(dump, latency, audioOutput.getPtr(), grantedFlags),
-                isBluetoothOffload
+                isBluetoothOffload,
+                when (audioOutput) {
+                    is NativeTrackExtendedAudioOutput -> "NativeTrack"
+                    is AudioTrackExtendedAudioOutput -> "AudioTrack"
+                    else -> audioOutput.javaClass.name
+                }
             )
         }.let {
             if (LOG_EVENTS)

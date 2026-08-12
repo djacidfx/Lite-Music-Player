@@ -30,6 +30,7 @@ import androidx.media3.common.util.Log
 import androidx.media3.common.util.Util
 import kotlinx.parcelize.Parcelize
 import org.akanework.gramophone.R
+import org.nift4.gramophone.hificore.NativeTrack
 
 object AudioFormatDetector {
     fun channelConfigToString(context: Context, format: Int?): String {
@@ -723,13 +724,19 @@ object AudioFormatDetector {
                 : this(enc, enc2, native, firstSdk..1000, res)
 
         fun getString(context: Context) = context.getString(res)
+        fun getNativeOrThrow() = if (isSupportedAsNative) native!!.toInt() else
+            throw IllegalStateException("format $this is not supported as native format here")
         val isSupportedAsNative
             get() = sdkRange?.contains(Build.VERSION.SDK_INT) == true && native != null
 
         companion object {
+            @JvmStatic
             fun get(enc: Int) = Encoding.entries.find { it.enc == enc }
+            @JvmStatic
             fun get2(enc2: String) = Encoding.entries.find { it.enc2 == enc2 }
+            @JvmStatic
             fun getString(context: Context, enc: Int) = get(enc)?.getString(context)
+            @JvmStatic
             fun getStringFromString(context: Context, enc2: String) = get2(enc2)?.getString(context)
         }
     }
@@ -762,8 +769,8 @@ object AudioFormatDetector {
         DTS_EXPRESS,    // DTS Express
         DTS_HD,         // DTS-HD
         DTS_UHD,        // DTS-UHD Profile 2
+        MPEG_H_3D,      // MPEG-H 3D / Sony 360 Reality Audio
 
-        // TODO: MPEG-H 3D / 360 Reality Audio
         OTHER
     }
 
@@ -859,6 +866,7 @@ object AudioFormatDetector {
                             )
                         }\n"
                     )
+                    append("Backend: ${halFormat.backend}\n")
                 } else
                     append("(some data is not available)\n")
                 append("\n")
@@ -1081,24 +1089,31 @@ object AudioFormatDetector {
             MimeTypes.AUDIO_DTS -> SpatialFormat.DTS
             MimeTypes.AUDIO_DTS_EXPRESS -> SpatialFormat.DTS_EXPRESS
             MimeTypes.AUDIO_DTS_HD -> SpatialFormat.DTS_HD
-            MimeTypes.AUDIO_DTS_X -> SpatialFormat.DTS_UHD
+            MimeTypes.AUDIO_DTS_UHD_P2 -> SpatialFormat.DTS_UHD
+            MimeTypes.AUDIO_MPEGH_MHA1 -> SpatialFormat.MPEG_H_3D
+            MimeTypes.AUDIO_MPEGH_MHM1 -> SpatialFormat.MPEG_H_3D
             else -> null
         }
 
         if (mimeFormat != null) return mimeFormat
 
+        when (format.channelCount) {
+            1 -> return SpatialFormat.NONE
+        }
+
         // Standard multichannel formats
-        // TODO can we just go by channel count? isn't there any way to distinguish QUAD
-        //  from QUAD_SIDE?
-        //  answer: until https://github.com/androidx/media/issues/1471 happens we cannot
-        return when (format.channelCount) {
-            1 -> SpatialFormat.NONE          // Mono
-            2 -> SpatialFormat.STEREO        // Standard stereo
-            4 -> SpatialFormat.QUAD          // Quadraphonic
-            5 -> SpatialFormat.SURROUND_5_0  // 5.0 surround
-            6 -> SpatialFormat.SURROUND_5_1  // 5.1 surround
-            7 -> SpatialFormat.SURROUND_6_1  // 6.1 surround
-            8 -> SpatialFormat.SURROUND_7_1  // 7.1 surround
+        return when (format.channelMask.takeIf { it != Format.NO_VALUE }
+            ?: Util.getAudioTrackChannelConfig(format.channelMask)) {
+            AudioFormat.CHANNEL_OUT_STEREO -> SpatialFormat.STEREO // Standard stereo
+            AudioFormat.CHANNEL_OUT_QUAD -> SpatialFormat.QUAD     // Quadraphonic
+            AudioFormat.CHANNEL_OUT_QUAD or AudioFormat.CHANNEL_OUT_FRONT_CENTER ->
+                SpatialFormat.SURROUND_5_0  // 5.0 surround
+            AudioFormat.CHANNEL_OUT_5POINT1 -> SpatialFormat.SURROUND_5_1  // 5.1 surround
+            AudioFormat.CHANNEL_OUT_STEREO or AudioFormat.CHANNEL_OUT_FRONT_CENTER or
+                    AudioFormat.CHANNEL_OUT_LOW_FREQUENCY or AudioFormat.CHANNEL_OUT_BACK_CENTER
+                    or AudioFormat.CHANNEL_OUT_SIDE_LEFT or AudioFormat.CHANNEL_OUT_SIDE_RIGHT ->
+                        SpatialFormat.SURROUND_6_1  // 6.1 surround
+            AudioFormat.CHANNEL_OUT_7POINT1_SURROUND -> SpatialFormat.SURROUND_7_1  // 7.1 surround
             else -> SpatialFormat.OTHER
         }
     }
@@ -1107,65 +1122,65 @@ object AudioFormatDetector {
         if (flags == null) {
             return context.getString(R.string.mix_port_flag_unknown)
         }
-        if (flags == 0x0) { // AUDIO_OUTPUT_FLAG_NONE
+        if (flags == NativeTrack.AUDIO_OUTPUT_FLAG_NONE) {
             return context.getString(R.string.mix_port_flag_none)
         }
         val str = mutableListOf<String>()
-        if ((flags and 0x1) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_DIRECT) != 0) {
             str += context.getString(R.string.mix_port_flag_direct)
         }
-        if ((flags and 0x2) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_PRIMARY) != 0) {
             str += context.getString(R.string.mix_port_flag_primary)
         }
-        if ((flags and 0x4) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_FAST) != 0) {
             str += context.getString(R.string.mix_port_flag_fast)
         }
-        if ((flags and 0x8) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_DEEP_BUFFER) != 0) {
             str += context.getString(R.string.mix_port_flag_deep_buffer)
         }
-        if ((flags and 0x10) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) != 0) {
             str += context.getString(R.string.mix_port_flag_compress_offload)
         }
-        if ((flags and 0x20) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_NON_BLOCKING) != 0) {
             str += context.getString(R.string.mix_port_flag_non_blocking)
         }
-        if ((flags and 0x40) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_HW_AV_SYNC) != 0) {
             str += context.getString(R.string.mix_port_flag_hw_av_sync)
         }
-        if ((flags and 0x80) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_TTS) != 0) {
             str += context.getString(R.string.mix_port_flag_tts)
         }
-        if ((flags and 0x100) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_RAW) != 0) {
             str += context.getString(R.string.mix_port_flag_raw)
         }
-        if ((flags and 0x200) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_SYNC) != 0) {
             str += context.getString(R.string.mix_port_flag_sync)
         }
-        if ((flags and 0x400) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_IEC958_NONAUDIO) != 0) {
             str += context.getString(R.string.mix_port_flag_iec958_nonaudio)
         }
-        if ((flags and 0x2000) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_DIRECT_PCM) != 0) {
             str += context.getString(R.string.mix_port_flag_direct_pcm)
         }
-        if ((flags and 0x4000) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_MMAP_NOIRQ) != 0) {
             str += context.getString(R.string.mix_port_flag_mmap_noirq)
         }
-        if ((flags and 0x8000) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_VOIP_RX) != 0) {
             str += context.getString(R.string.mix_port_flag_voip_rx)
         }
-        if ((flags and 0x10000) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_INCALL_MUSIC) != 0) {
             str += context.getString(R.string.mix_port_flag_incall_music)
         }
-        if ((flags and 0x20000) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_GAPLESS_OFFLOAD) != 0) {
             str += context.getString(R.string.mix_port_flag_gapless_offload)
         }
-        if ((flags and 0x40000) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_SPATIALIZER) != 0) {
             str += context.getString(R.string.mix_port_flag_spatializer)
         }
-        if ((flags and 0x80000) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_ULTRASOUND) != 0) {
             str += context.getString(R.string.mix_port_flag_ultrasound)
         }
-        if ((flags and 0x100000) != 0) {
+        if ((flags and NativeTrack.AUDIO_OUTPUT_FLAG_BIT_PERFECT) != 0) {
             str += context.getString(R.string.mix_port_flag_bit_perfect)
         }
         return str.joinToString(", ")

@@ -1645,12 +1645,13 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         pendingDownstreamFormat.removeAll { eventTime.mediaPeriodId?.periodUid == it.first }
     }
 
+    var lastKnownPeriodUid: Any? = null // TODO: file upstream bug, maybe? this seems a bit weird
     override fun onPositionDiscontinuity(
         oldPosition: Player.PositionInfo,
         newPosition: Player.PositionInfo,
         reason: Int
     ) {
-        if (oldPosition.periodUid != newPosition.periodUid) {
+        if (lastKnownPeriodUid != newPosition.periodUid || oldPosition.periodUid != newPosition.periodUid) {
             var changed = false
             downstreamFormat.toSet().forEach {
                 if (newPosition.periodUid != it.first) {
@@ -1680,6 +1681,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     Bundle.EMPTY
                 )
             }
+            lastKnownPeriodUid = newPosition.periodUid
         }
         scheduleSendingLyrics(false)
     }

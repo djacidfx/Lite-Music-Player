@@ -148,9 +148,9 @@ typedef int32_t(*ZN7android10AudioTrack17getBufferPositionEPj_t)(void* thisptr, 
 static ZN7android10AudioTrack17getBufferPositionEPj_t ZN7android10AudioTrack17getBufferPositionEPj = nullptr;
 typedef int32_t(*ZN7android10AudioTrack21getBufferDurationInUsEPl_t)(void* thisptr, int64_t* pos);
 static ZN7android10AudioTrack21getBufferDurationInUsEPl_t ZN7android10AudioTrack21getBufferDurationInUsEPl = nullptr;
-typedef audio_playback_rate(*ZN7android10AudioTrack15getPlaybackRateEv_t)(void* thisptr);
+typedef audio_playback_rate&(*ZN7android10AudioTrack15getPlaybackRateEv_t)(void* thisptr);
 static ZN7android10AudioTrack15getPlaybackRateEv_t ZN7android10AudioTrack15getPlaybackRateEv = nullptr;
-typedef audio_playback_rate(*ZNK7android10AudioTrack15getPlaybackRateEv_t)(void* thisptr);
+typedef audio_playback_rate&(*ZNK7android10AudioTrack15getPlaybackRateEv_t)(void* thisptr);
 static ZNK7android10AudioTrack15getPlaybackRateEv_t ZNK7android10AudioTrack15getPlaybackRateEv = nullptr;
 typedef int32_t(*ZN7android10AudioTrack15setPlaybackRateERK19audio_playback_rate_t)(void* thisptr, audio_playback_rate& rate);
 static ZN7android10AudioTrack15setPlaybackRateERK19audio_playback_rate_t ZN7android10AudioTrack15setPlaybackRateERK19audio_playback_rate = nullptr;
@@ -1568,8 +1568,9 @@ JNIEXPORT jintArray JNICALL
 Java_org_nift4_gramophone_hificore_NativeTrack_getRoutedDevicesInternal(JNIEnv *env, jobject,
                                                                         jlong ptr) {
 	auto holder = (track_holder*) ptr;
-	if (android_get_device_api_level() >= 34) {
-		std::vector<int32_t> deviceIds = ZN7android10AudioTrack18getRoutedDeviceIdsEv(holder->track);
+	if (android_get_device_api_level() >= 36 || android_get_device_api_level() >= 35 &&
+    ZN7android10AudioTrack18getRoutedDeviceIdsEv != nullptr) {
+		DeviceIdVector deviceIds = ZN7android10AudioTrack18getRoutedDeviceIdsEv(holder->track);
 		jintArray deviceIdsJni;
 		deviceIdsJni = env->NewIntArray((int32_t)deviceIds.size());
 		if (deviceIdsJni == nullptr) {
@@ -1617,7 +1618,7 @@ Java_org_nift4_gramophone_hificore_NativeTrack_getPlaybackRateInternal(JNIEnv *e
                                                                        jlong ptr,
                                                                        jfloatArray speed_pitch) {
 	auto holder = (track_holder*) ptr;
-	audio_playback_rate rate;
+	audio_playback_rate rate = {};
     if (android_get_device_api_level() >= 30) {
         rate = ZN7android10AudioTrack15getPlaybackRateEv(holder->track);
     } else {

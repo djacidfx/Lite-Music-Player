@@ -40,7 +40,6 @@ import android.util.ArrayMap
 import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
 import androidx.media3.common.util.Log
-import org.nift4.gramophone.hificore.NativeTrack.Builder
 import java.nio.ByteBuffer
 
 
@@ -66,7 +65,37 @@ import java.nio.ByteBuffer
 @Suppress("unused")
 class NativeTrack private constructor(builder: Builder) {
     companion object {
+        const val AUDIO_OUTPUT_FLAG_NONE = 0x0
+        const val AUDIO_OUTPUT_FLAG_DIRECT = 0x1
+        const val AUDIO_OUTPUT_FLAG_PRIMARY = 0x2
+        const val AUDIO_OUTPUT_FLAG_FAST = 0x4
+        const val AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8
+        const val AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD = 0x10
+        const val AUDIO_OUTPUT_FLAG_NON_BLOCKING = 0x20
+        const val AUDIO_OUTPUT_FLAG_HW_AV_SYNC = 0x40
+        const val AUDIO_OUTPUT_FLAG_TTS = 0x80
+        const val AUDIO_OUTPUT_FLAG_RAW = 0x100
+        const val AUDIO_OUTPUT_FLAG_SYNC = 0x200
+        const val AUDIO_OUTPUT_FLAG_IEC958_NONAUDIO = 0x400
+        const val AUDIO_OUTPUT_FLAG_DIRECT_PCM = 0x2000
+        const val AUDIO_OUTPUT_FLAG_MMAP_NOIRQ = 0x4000
+        const val AUDIO_OUTPUT_FLAG_VOIP_RX = 0x8000
+        const val AUDIO_OUTPUT_FLAG_INCALL_MUSIC = 0x10000
+        const val AUDIO_OUTPUT_FLAG_GAPLESS_OFFLOAD = 0x20000
+        const val AUDIO_OUTPUT_FLAG_SPATIALIZER = 0x40000
+        const val AUDIO_OUTPUT_FLAG_ULTRASOUND = 0x80000
+        const val AUDIO_OUTPUT_FLAG_BIT_PERFECT = 0x100000
         private const val TAG = "NativeTrack.kt"
+        private const val WOULD_BLOCK = -11L
+        private const val DEAD_OBJECT = -32
+        private const val NO_INIT = -19L
+        private const val STREAM_TYPE_DEFAULT = -1
+        const val STATE_ACTIVE = 0
+        const val STATE_STOPPED = 1
+        const val STATE_PAUSED = 2
+        const val STATE_PAUSED_STOPPING = 3
+        const val STATE_FLUSHED = 4
+        const val STATE_STOPPING = 5
         const val ENCAPSULATION_MODE_NONE = 0 // AudioTrack.ENCAPSULATION_MODE_NONE
         const val ENCAPSULATION_MODE_ELEMENTARY_STREAM =
             1 // AudioTrack.ENCAPSULATION_MODE_ELEMENTARY_STREAM
@@ -219,6 +248,7 @@ class NativeTrack private constructor(builder: Builder) {
                 bitWidth * Integer.bitCount(channelMask.toInt()) * sampleRate
             } else 128 // arbitrary guess for compressed formats
             val durationUs = 2100L /* 3.5min * 60 */ * 1000 * 1000 // must be >60s
+            val directOffloadFlag = AUDIO_OUTPUT_FLAG_DIRECT or AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD
             if (!(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
                         && Build.VERSION.SDK_INT <= Build.VERSION_CODES.O_MR1)
                 || !formatIsRawPcm(encoding) || bitWidth < 24
@@ -256,7 +286,7 @@ class NativeTrack private constructor(builder: Builder) {
                 try {
                     val track = Builder(context, attributes, encoding, channelMask).apply {
                         this.sampleRate = sampleRate
-                        this.trackFlags = 0x11
+                        this.trackFlags = directOffloadFlag
                         this.sessionId = sessionId
                         this.maxRequiredSpeed = 1.0f
                         this.bitRate = bitrate
@@ -277,10 +307,10 @@ class NativeTrack private constructor(builder: Builder) {
                         )
                         return DirectPlaybackSupport.NONE
                     }
-                    if ((flags and 0x11) == 0x11) {
+                    if ((flags and directOffloadFlag) == directOffloadFlag) {
                         return DirectPlaybackSupport.OFFLOAD
                     }
-                    if ((flags and 0x11) == 0x1) {
+                    if ((flags and directOffloadFlag) == AUDIO_OUTPUT_FLAG_DIRECT) {
                         return DirectPlaybackSupport.DIRECT
                     }
                 } catch (t: Throwable) {
@@ -295,7 +325,7 @@ class NativeTrack private constructor(builder: Builder) {
             try {
                 val track = Builder(context, attributes, encoding, channelMask).apply {
                     this.sampleRate = sampleRate
-                    this.trackFlags = 0x1
+                    this.trackFlags = AUDIO_OUTPUT_FLAG_DIRECT
                     this.sessionId = sessionId
                     this.maxRequiredSpeed = 1.0f
                     this.bitRate = bitrate
@@ -316,10 +346,10 @@ class NativeTrack private constructor(builder: Builder) {
                     )
                     return DirectPlaybackSupport.NONE
                 }
-                if ((flags and 0x11) == 0x11) {
+                if ((flags and directOffloadFlag) == directOffloadFlag) {
                     return DirectPlaybackSupport.OFFLOAD
                 }
-                if ((flags and 0x11) == 0x1) {
+                if ((flags and directOffloadFlag) == AUDIO_OUTPUT_FLAG_DIRECT) {
                     return DirectPlaybackSupport.DIRECT
                 }
             } catch (t: Throwable) {
@@ -356,7 +386,7 @@ class NativeTrack private constructor(builder: Builder) {
         @JvmStatic
         @JvmName("getMinBufferSize")
         fun getMinBufferSize(sampleRateInHz: Int, channelConfig: Int, audioFormat: UInt): Int {
-            val minFrameCount = getMinFrameCount(-1, sampleRateInHz)
+            val minFrameCount = getMinFrameCount(STREAM_TYPE_DEFAULT, sampleRateInHz)
             val bps = bitsPerSampleForFormat(audioFormat)
             if (bps == 0) // compressed
                 return minFrameCount
@@ -462,7 +492,7 @@ class NativeTrack private constructor(builder: Builder) {
     class Builder(val context: Context, val attributes: AudioAttributes,
         val format: UInt, val channelMask: UInt) {
         var sampleRate: Int = 0
-        var streamType: Int = -1
+        var streamType: Int = STREAM_TYPE_DEFAULT
         var frameCount: Int? = null
         var trackFlags: Int = 0
         var sessionId: Int = AudioManager.AUDIO_SESSION_ID_GENERATE
@@ -577,7 +607,7 @@ class NativeTrack private constructor(builder: Builder) {
         else builder.sessionId
         val usage = builder.attributes.usage
         val contentType = builder.attributes.contentType
-        val hasOutputFlagDeepBufferSet = (builder.trackFlags and 0x8) != 0
+        val hasOutputFlagDeepBufferSet = (builder.trackFlags and AUDIO_OUTPUT_FLAG_DEEP_BUFFER) != 0
         val attrFlags = builder.attributes.flags or
                 (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S_V2
                     && builder.attributes.isContentSpatialized
@@ -771,12 +801,13 @@ class NativeTrack private constructor(builder: Builder) {
 
     // simplified to match android.media.AudioTrack
     fun getPlayState(): Int {
+        // TODO: interaction with the simulated offload play state might be wrong here
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
             return proxy!!.playState
         return when (val state = state()) {
-            0, 5 -> AudioTrack.PLAYSTATE_PLAYING
-            1, 4 -> AudioTrack.PLAYSTATE_STOPPED
-            2, 3 -> AudioTrack.PLAYSTATE_PAUSED
+            STATE_ACTIVE, STATE_STOPPING -> AudioTrack.PLAYSTATE_PLAYING
+            STATE_STOPPED, STATE_FLUSHED -> AudioTrack.PLAYSTATE_STOPPED
+            STATE_PAUSED, STATE_PAUSED_STOPPING -> AudioTrack.PLAYSTATE_PAUSED
             else -> throw IllegalStateException("invalid state $state")
         }
     }
@@ -889,7 +920,7 @@ class NativeTrack private constructor(builder: Builder) {
         } catch (t: Throwable) {
             throw NativeTrackException("failed to get buffer duration us", t)
         }
-        if (ret == -32L) {
+        if (ret == DEAD_OBJECT.toLong()) {
             myState = State.DEAD_OBJECT
             throw NativeTrackException("getBufferDurationInUs() failed, track died")
         }
@@ -955,7 +986,7 @@ class NativeTrack private constructor(builder: Builder) {
             } catch (t: Throwable) {
                 throw NativeTrackException("failed to play", t)
             }
-            if (ret == -32) {
+            if (ret == DEAD_OBJECT) {
                 myState = State.DEAD_OBJECT
                 throw NativeTrackException("start() failed, track died")
             }
@@ -1216,8 +1247,6 @@ class NativeTrack private constructor(builder: Builder) {
     fun getPlaybackRate(): PlaybackRate {
         if (myState == State.RELEASED)
             throw IllegalStateException("state is $myState")
-        //TODO
-        if(true)return PlaybackRate(1f, 1f, false, StretchFallbackMode.AUDIO_TIMESTRETCH_FALLBACK_DEFAULT)
         val speedPitch = FloatArray(2)
         val ret = getPlaybackRateInternal(ptr, speedPitch).toULong()
         val stretchForVoice = ((ret and 0xffffffff00000000UL) shr 32).toInt()
@@ -1499,7 +1528,7 @@ class NativeTrack private constructor(builder: Builder) {
         } catch (t: Throwable) {
             throw NativeTrackException("failed to set selected device", t)
         }
-        if (ret == -32) {
+        if (ret == DEAD_OBJECT) {
             myState = State.DEAD_OBJECT
             throw NativeTrackException("setSelectedDevice($id) failed, track died")
         }
@@ -1557,7 +1586,7 @@ class NativeTrack private constructor(builder: Builder) {
         } catch (t: Throwable) {
             throw NativeTrackException("failed to attach aux effect $effectId", t)
         }
-        if (ret == -32) {
+        if (ret == DEAD_OBJECT) {
             myState = State.DEAD_OBJECT
             throw NativeTrackException("attachAuxEffect($effectId) failed, track died")
         }
@@ -1631,7 +1660,7 @@ class NativeTrack private constructor(builder: Builder) {
             return ret
         }
         // TODO replicate blockUntilOffloadDrain()
-        var ret = try {
+        val ret = try {
             writeInternal(
                 ptr, buf, offset ?: buf.position(),
                 size ?: (buf.limit() - (offset ?: buf.position())), blocking
@@ -1639,14 +1668,9 @@ class NativeTrack private constructor(builder: Builder) {
         } catch (t: Throwable) {
             throw NativeTrackException("write($buf / $blocking) failed", t)
         }
-        if (ret == -32L) {
-            myState = State.DEAD_OBJECT
-        }
-        if (ret == -11L) // WOULD_BLOCK
-            ret = 0L // TODO is this right
-        if (ret > 0)
+        if (ret > 0 && offset == null)
             buf.position(buf.position() + ret.toInt())
-        return ret.toInt()
+        return handleWriteRet(ret)
     }
 
     fun write(buf: ByteArray, offset: Int, size: Int?, blocking: Boolean): Int {
@@ -1658,10 +1682,7 @@ class NativeTrack private constructor(builder: Builder) {
         } catch (t: Throwable) {
             throw NativeTrackException("write(${buf.size} / $blocking) failed", t)
         }
-        if (ret == -32L) {
-            myState = State.DEAD_OBJECT
-        }
-        return ret.toInt()
+        return handleWriteRet(ret)
     }
 
     fun write(buf: FloatArray, offset: Int, size: Int?, blocking: Boolean): Int {
@@ -1674,14 +1695,21 @@ class NativeTrack private constructor(builder: Builder) {
         } catch (t: Throwable) {
             throw NativeTrackException("write(${buf.size} / $blocking) failed", t)
         }
-        if (ret == -32L) {
-            myState = State.DEAD_OBJECT
-        }
-        return ret.toInt()
+        return handleWriteRet(ret)
     }
 
     fun write(buf: ByteBuffer, offset: Int?, size: Int?, blocking: Boolean, timestamp: Long): Int {
         TODO("Implement HW_AV_SYNC write API")
+    }
+
+    private fun handleWriteRet(ret: Long): Int {
+        var ret = ret
+        if (ret == DEAD_OBJECT.toLong() || ret == NO_INIT) {
+            myState = State.DEAD_OBJECT
+        }
+        if (ret == WOULD_BLOCK)
+            ret = 0L
+        return ret.toInt()
     }
 
     private external fun writeInternal(
@@ -1747,7 +1775,7 @@ class NativeTrack private constructor(builder: Builder) {
         } catch (t: Throwable) {
             throw NativeTrackException("failed to set parameters $params", t)
         }
-        if (ret == -32) {
+        if (ret == DEAD_OBJECT) {
             myState = State.DEAD_OBJECT
             throw NativeTrackException("setParameters() failed, track died")
         }
@@ -1797,7 +1825,7 @@ class NativeTrack private constructor(builder: Builder) {
         } catch (t: Throwable) {
             throw NativeTrackException("failed to get timestamps", t)
         }
-        if (ret == -32) {
+        if (ret == DEAD_OBJECT) {
             myState = State.DEAD_OBJECT
         }
         if (ret != 0) {
