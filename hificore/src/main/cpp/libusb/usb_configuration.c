@@ -46,6 +46,14 @@ Java_com_jwoolston_libusb_UsbConfiguration_nativeGetInterface(JNIEnv *env, jclas
             libusb_interface)));
 }
 
+JNIEXPORT jobject JNICALL
+Java_com_jwoolston_libusb_UsbConfiguration_nativeGetExtra(JNIEnv *env, jclass type, jobject nativeObject) {
+    struct libusb_config_descriptor *config = (struct libusb_config_descriptor *)
+            (*env)->GetDirectBufferAddress(env, nativeObject);
+
+    return ((*env)->NewDirectByteBuffer(env, (void *) (config->extra), config->extra_length));
+}
+
 JNIEXPORT void JNICALL
 Java_com_jwoolston_libusb_UsbConfiguration_nativeDestroy(JNIEnv *env, jclass type, jobject nativeObject) {
     struct libusb_config_descriptor *config = (struct libusb_config_descriptor *)

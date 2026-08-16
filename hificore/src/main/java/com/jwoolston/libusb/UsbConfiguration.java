@@ -20,13 +20,12 @@ import android.os.Parcelable;
 
 import androidx.annotation.NonNull;
 
-import com.jwoolston.libusb.util.Preconditions;
-
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -53,19 +52,23 @@ public class UsbConfiguration implements Parcelable {
     final int    maxPower;
 
     /**
-     * All interfaces for this config, only null during creation
+     * All interfaces for this config
      */
-    @Nullable
+    @NotNull
     UsbInterface[] interfaces;
+
+    final byte[] extra;
 
     /**
      * UsbConfiguration should only be instantiated by UsbService implementation
      */
-    public UsbConfiguration(int id, @Nullable String name, int attributes, int maxPower) {
+    public UsbConfiguration(int id, @Nullable String name, int attributes, int maxPower, UsbInterface[] interfaces, byte[] extra) {
         this.id = id;
         this.name = name;
         this.attributes = attributes;
         this.maxPower = maxPower;
+        this.interfaces = interfaces;
+        this.extra = extra;
     }
 
     /**
@@ -136,25 +139,21 @@ public class UsbConfiguration implements Parcelable {
         return interfaces[index];
     }
 
-    /**
-     * Only used by UsbService implementation
-     */
-    public void setInterfaces(@NotNull UsbInterface[] interfaces) {
-        this.interfaces = Preconditions.checkArrayElementsNotNull(interfaces, "interfaces");
+    public byte[] getExtra() {
+        return extra;
     }
 
     @NonNull
     @Override
     public String toString() {
-        StringBuilder builder = new StringBuilder("UsbConfiguration[id=" + id +
-                                                  ",name=" + name + ",attributes=" + attributes +
-                                                  ",maxPower=" + maxPower + ",interfaces=[");
-        for (UsbInterface anInterface : interfaces) {
-            builder.append("\n");
-            builder.append(anInterface.toString());
-        }
-        builder.append("]");
-        return builder.toString();
+        return "UsbConfiguration{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", attributes=" + attributes +
+                ", maxPower=" + maxPower +
+                ", interfaces=" + Arrays.toString(interfaces) +
+                ", extra=" + Arrays.toString(extra) +
+                '}';
     }
 
     public static final Parcelable.Creator<UsbConfiguration> CREATOR =
@@ -165,8 +164,8 @@ public class UsbConfiguration implements Parcelable {
                     int attributes = in.readInt();
                     int maxPower = in.readInt();
                     UsbInterface[] interfaces = (UsbInterface[]) in.readParcelableArray(UsbInterface.class.getClassLoader());
-                    UsbConfiguration configuration = new UsbConfiguration(id, name, attributes, maxPower);
-                    configuration.setInterfaces(interfaces);
+                    byte[] extra = in.createByteArray();
+                    UsbConfiguration configuration = new UsbConfiguration(id, name, attributes, maxPower, interfaces, extra);
                     return configuration;
                 }
 
@@ -187,6 +186,7 @@ public class UsbConfiguration implements Parcelable {
         parcel.writeInt(attributes);
         parcel.writeInt(maxPower);
         parcel.writeParcelableArray((Parcelable[]) interfaces, 0);
+        parcel.writeByteArray(extra);
     }
 
     private static final int INDEX_NUMBER_INTERFACES = 4;
@@ -206,7 +206,6 @@ public class UsbConfiguration implements Parcelable {
         final int maxPower = 0xFF & nativeObject.get(INDEX_MAX_POWER);
         final String name = UsbDevice.nativeGetStringDescriptor(device.getNativeObject(), stringIndex);
 
-        final UsbConfiguration usbConfiguration = new UsbConfiguration(id, name, attributes, maxPower);
         final List<UsbInterface> usbInterfaces = new ArrayList<>();
         for (int i = 0; i < numberInterfaces; ++i) {
             // This is of type struct libusb_interface
@@ -214,7 +213,11 @@ public class UsbConfiguration implements Parcelable {
             List<UsbInterface> usbInterface = UsbInterface.fromNativeObject(device, nativeInterface);
             usbInterfaces.addAll(usbInterface);
         }
-        usbConfiguration.setInterfaces(usbInterfaces.toArray(new UsbInterface[0]));
+        ByteBuffer extraTmp = nativeGetExtra(nativeObject);
+        ByteBuffer extra = ByteBuffer.allocate(extraTmp.capacity());
+        extra.put(extraTmp);
+        final UsbConfiguration usbConfiguration = new UsbConfiguration(id, name, attributes,
+                maxPower, usbInterfaces.toArray(new UsbInterface[0]), extra.array());
 
         // Destroy the native configuration object
         nativeDestroy(nativeObject);
@@ -230,6 +233,8 @@ public class UsbConfiguration implements Parcelable {
      * @return
      */
     private static native ByteBuffer nativeGetInterface(@NonNull ByteBuffer nativeObject, int interfaceIndex);
+
+    private static native ByteBuffer nativeGetExtra(@NonNull ByteBuffer nativeObject);
 
     private static native void nativeDestroy(@NonNull ByteBuffer nativeObject);
 }

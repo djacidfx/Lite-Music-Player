@@ -23,6 +23,7 @@ import androidx.annotation.NonNull;
 import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 /**
  * A class representing an endpoint on a {@link UsbInterface}. Endpoints are the channels for sending and receiving
@@ -36,15 +37,21 @@ public class UsbEndpoint implements Parcelable {
     final int attributes;
     final int maxPacketSize;
     final int interval;
+    final byte refresh;
+    final byte synchAddress;
+    final byte[] extra;
 
     /**
      * UsbEndpoint should only be instantiated by UsbService implementation
      */
-    UsbEndpoint(int address, int attributes, int maxPacketSize, int interval) {
+    UsbEndpoint(int address, int attributes, int maxPacketSize, int interval, byte refresh, byte synchAddress, byte[] extra) {
         this.address = address;
         this.attributes = attributes;
         this.maxPacketSize = maxPacketSize;
         this.interval = interval;
+        this.refresh = refresh;
+        this.synchAddress = synchAddress;
+        this.extra = extra;
     }
 
     /**
@@ -121,17 +128,41 @@ public class UsbEndpoint implements Parcelable {
         return interval;
     }
 
+    /** For audio devices only: the rate at which synchronization feedback
+     * is provided. */
+    public byte getRefresh() {
+        return refresh;
+    }
+
+    /** For audio devices only: the address of the synch endpoint */
+    public byte getSynchAddress() {
+        return synchAddress;
+    }
+
+    public byte[] getExtra() {
+        return extra;
+    }
+
     @NonNull
     @Override
     public String toString() {
-        return "UsbEndpoint[address=" + address + ",attributes=" + attributes +
-               ",maxPacketSize=" + maxPacketSize + ",interval=" + interval + "]";
+        return "UsbEndpoint{" +
+                "address=" + address +
+                ", attributes=" + attributes +
+                ", maxPacketSize=" + maxPacketSize +
+                ", interval=" + interval +
+                ", refresh=" + refresh +
+                ", synchAddress=" + synchAddress +
+                ", extra=" + Arrays.toString(extra) +
+                '}';
     }
 
     private static final int INDEX_ADDRESS = 2;
     private static final int INDEX_ATTRIBUTES = 3;
     private static final int INDEX_MAX_PACKET_SIZE = 4;
     private static final int INDEX_INTERVAL = 6;
+    private static final int REFRESH_INTERVAL = 7;
+    private static final int SYNCHADDRESS_INTERVAL = 8;
 
     static UsbEndpoint fromNativeObject(@NotNull ByteBuffer nativeObject) {
         final int address = 0xFF & nativeObject.get(INDEX_ADDRESS);
@@ -139,7 +170,13 @@ public class UsbEndpoint implements Parcelable {
         final int maxPacketSize = (0xFF & nativeObject.get(INDEX_MAX_PACKET_SIZE))
                 | ((0xFF & nativeObject.get(INDEX_MAX_PACKET_SIZE + 1)) << 8);
         final int interval = 0xFF & nativeObject.get(INDEX_INTERVAL);
-        return new UsbEndpoint(address, attributes, maxPacketSize, interval);
+        final byte refresh = nativeObject.get(REFRESH_INTERVAL);
+        final byte synchAddress = nativeObject.get(SYNCHADDRESS_INTERVAL);
+        ByteBuffer extraTmp = nativeGetExtra(nativeObject);
+        ByteBuffer extra = ByteBuffer.allocate(extraTmp.capacity());
+        extra.put(extraTmp);
+        return new UsbEndpoint(address, attributes, maxPacketSize, interval, refresh, synchAddress,
+                extra.array());
     }
 
     public static final Parcelable.Creator<UsbEndpoint> CREATOR =
@@ -149,7 +186,10 @@ public class UsbEndpoint implements Parcelable {
                     int attributes = in.readInt();
                     int maxPacketSize = in.readInt();
                     int interval = in.readInt();
-                    return new UsbEndpoint(address, attributes, maxPacketSize, interval);
+                    byte refresh = in.readByte();
+                    byte synchAddress = in.readByte();
+                    byte[] extra = in.createByteArray();
+                    return new UsbEndpoint(address, attributes, maxPacketSize, interval, refresh, synchAddress, extra);
                 }
 
                 public UsbEndpoint[] newArray(int size) {
@@ -168,5 +208,10 @@ public class UsbEndpoint implements Parcelable {
         parcel.writeInt(attributes);
         parcel.writeInt(maxPacketSize);
         parcel.writeInt(interval);
+        parcel.writeByte(refresh);
+        parcel.writeByte(synchAddress);
+        parcel.writeByteArray(extra);
     }
+
+    private static native ByteBuffer nativeGetExtra(@NonNull ByteBuffer nativeObject);
 }

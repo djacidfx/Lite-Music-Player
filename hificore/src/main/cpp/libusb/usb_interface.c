@@ -46,3 +46,21 @@ Java_com_jwoolston_libusb_UsbInterface_nativeGetEndpoint(JNIEnv *env, jclass typ
     return ((*env)->NewDirectByteBuffer(env, (void *) (descriptor->endpoint + index), sizeof(struct
             libusb_endpoint_descriptor)));
 }
+
+JNIEXPORT jobject JNICALL
+Java_com_jwoolston_libusb_UsbInterface_nativeGetExtra(JNIEnv *env, jclass clazz,
+                                                      jobject native_descriptor) {
+    struct libusb_interface_descriptor *descriptor = (struct libusb_interface_descriptor *)
+            (*env)->GetDirectBufferAddress(env, native_descriptor);
+
+    return ((*env)->NewDirectByteBuffer(env, (void *) (descriptor->extra), descriptor->extra_length));
+}
+
+JNIEXPORT jobject JNICALL
+Java_com_jwoolston_libusb_UsbEndpoint_nativeGetExtra(JNIEnv *env, jclass clazz,
+                                                     jobject native_object) {
+    struct libusb_endpoint_descriptor *descriptor = (struct libusb_endpoint_descriptor *)
+            (*env)->GetDirectBufferAddress(env, native_object);
+
+    return ((*env)->NewDirectByteBuffer(env, (void *) (descriptor->extra), descriptor->extra_length));
+}
