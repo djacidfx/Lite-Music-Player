@@ -1,0 +1,15 @@
+{
+  "uniqueId": "com.jwoolston.libusb:libusb-android",
+  "developers": [{
+	"name": "Jared Woolston",
+	"organisationUrl": "https://github.com/jwoolston"
+  }],
+  "artifactVersion": "6627aed03a1237a1427e9a3bd435f4843e394cf8",
+  "description": "Java wrapper for libusb library following Android USB Host API",
+  "name": "Android-Libusb-Wrapper",
+  "tag": "custom",
+  "website": "https://github.com/jwoolston/Java-Libusb-Wrapper",
+  "licenses": [
+	"Apache-2.0"
+  ]
+}

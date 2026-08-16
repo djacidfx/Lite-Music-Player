@@ -1,0 +1,15 @@
+{
+  "uniqueId": "info.libusb:libusb",
+  "developers": [{
+	"name": "libusb maintainers",
+	"organisationUrl": "https://github.com/libusb"
+  }],
+  "artifactVersion": "v1.0.30",
+  "description": "A cross-platform library to access USB devices",
+  "name": "libusb",
+  "tag": "custom",
+  "website": "https://github.com/libusb/libusb",
+  "licenses": [
+	"LGPL-2.1-or-later"
+  ]
+}

@@ -1,0 +1,144 @@
+/*
+ * Copyright (C) 2017 Jared Woolston
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+//
+// Created by Jared Woolston (Jared.Woolston@gmail.com)
+//
+
+#include "common.h"
+
+#define  LOG_TAG    "AsyncTransfer-Native"
+
+JNIEXPORT jlong JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeAllocate(JNIEnv *env, jobject thiz,
+                                                             jint iso_slots) {
+    return (jlong)libusb_alloc_transfer(iso_slots);
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeDestroy(JNIEnv *env, jobject instance,
+                                                                    jlong nativeObject) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) nativeObject;
+    libusb_free_transfer(transfer);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeIsInFlight(JNIEnv *env, jobject thiz,
+                                                               jlong native_object) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    // Why this works: user_data is cleared by our callback when the transfer is received.
+    return transfer->user_data != NULL;
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillControlTransfer(JNIEnv *env,
+                                                                        jobject thiz,
+                                                                        jlong native_object,
+                                                                        jint timeout) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    transfer->endpoint = 0;
+    transfer->type = LIBUSB_TRANSFER_TYPE_CONTROL;
+    transfer->timeout = timeout;
+    transfer->num_iso_packets = 0;
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeSetupControlTransfer(JNIEnv *env, jobject thiz,
+                                                                         jobject buffer,
+                                                                         jint request_type,
+                                                                         jint request, jint value,
+                                                                         jint index, jint length,
+                                                                         jint offset) {
+    void* userData = (*env)->GetDirectBufferAddress(env, buffer) + offset;
+    libusb_fill_control_setup(userData, (uint8_t) (0xFF & request_type),
+                              (uint8_t) (0xFF & request),
+                              (uint16_t) (0xFFFF & value),
+                              (uint16_t) (0xFFFF & index),
+                              (uint16_t) (0xFFFF & length));
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillBulkTransfer(JNIEnv *env, jobject thiz,
+                                                                     jlong native_object,
+                                                                     jint address, jint timeout) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    transfer->endpoint = address;
+    transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
+    transfer->timeout = timeout;
+    transfer->num_iso_packets = 0;
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillBulkStreamTransfer(JNIEnv *env, jobject thiz,
+                                                                     jlong native_object,
+                                                                     jint address, jint timeout,
+                                                                     jint stream_id) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    transfer->endpoint = address;
+    transfer->type = LIBUSB_TRANSFER_TYPE_BULK_STREAM;
+    transfer->timeout = timeout;
+    transfer->num_iso_packets = 0;
+    libusb_transfer_set_stream_id(transfer, stream_id);
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillInterruptTransfer(JNIEnv *env, jobject thiz,
+                                                                          jlong native_object,
+                                                                          jint address,
+                                                                          jint timeout) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    transfer->endpoint = address;
+    transfer->type = LIBUSB_TRANSFER_TYPE_INTERRUPT;
+    transfer->timeout = timeout;
+    transfer->num_iso_packets = 0;
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillIsochronousTransfer(JNIEnv *env,
+                                                                            jobject thiz,
+                                                                            jlong native_object,
+                                                                            jint address,
+                                                                            jint timeout,
+                                                                            jint num_packets) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    transfer->endpoint = address;
+    transfer->type = LIBUSB_TRANSFER_TYPE_ISOCHRONOUS;
+    transfer->timeout = timeout;
+    transfer->num_iso_packets = num_packets;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeSetIsochronousPacket(JNIEnv *env, jobject thiz,
+                                                                         jlong native_object,
+                                                                         jint packet_number,
+                                                                         jint size) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    if (packet_number >= transfer->num_iso_packets)
+        return -transfer->num_iso_packets;
+    if (packet_number >= 0) {
+        transfer->iso_packet_desc[packet_number].length = size;
+    } else {
+        libusb_set_iso_packet_lengths(transfer, size);
+    }
+    return 0;
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeSetFlags(JNIEnv *env, jobject thiz,
+                                                             jlong native_object, jint flags,
+                                                             jint mask) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    transfer->flags = (transfer->flags & ~mask) | (flags & mask);
+}

@@ -17,18 +17,23 @@
 
 package org.nift4.gramophone.hificore
 
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Build
+import androidx.core.app.PendingIntentCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.core.content.getSystemService
 import androidx.media3.common.util.Log
+import org.nift4.gramophone.hificore.UacManager.Companion.UAC_PERMISSION_ACTION
+import com.jwoolston.libusb.UsbDevice as LibUsbDevice
+import com.jwoolston.libusb.UsbManager as LibUsbManager
 
 class UacManager(private val context: Context) {
     companion object {
@@ -37,60 +42,79 @@ class UacManager(private val context: Context) {
             "org.nift4.gramophone.action.UAC_PERMISSION_GRANTED"
     }
 
-    private val usbManager = context.getSystemService<UsbManager>()
-    private val openDevices = mutableSetOf<Pair<UsbDevice, UsbDeviceConnection>>()
+    private val usbManager = context.getSystemService<UsbManager>()!!
+    private val libUsbManager = LibUsbManager(context)
+    private val openDevices = mutableListOf<LibUsbDevice>()
     private val attachDetachReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val isAttach = intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED
-            if (isAttach || intent.action == UsbManager.ACTION_USB_DEVICE_DETACHED) {
+            val isDetach = intent.action == UsbManager.ACTION_USB_DEVICE_DETACHED
+            val isPermState = intent.action == UAC_PERMISSION_ACTION
+            if (isAttach || isDetach || isPermState) {
                 val device = IntentCompat.getParcelableExtra(
                     intent,
                     UsbManager.EXTRA_DEVICE, UsbDevice::class.java
                 )
                 if (device == null) return
-                if (isAttach)
+                val isPermGranted = isPermState && intent.getBooleanExtra(
+                    UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                if (isAttach || isPermGranted)
                     dispatchDeviceAddedCallbackIfNeeded(device)
-                else
+                else if (isDetach)
                     dispatchDeviceDetachedCallbackIfNeeded(device)
             }
         }
     }
 
     init {
-        context.registerReceiver(attachDetachReceiver, IntentFilter().apply {
+        ContextCompat.registerReceiver(context, attachDetachReceiver, IntentFilter().apply {
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-        })
+            addAction(UAC_PERMISSION_ACTION)
+        }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        enumerateSoundcards()
     }
 
     private fun dispatchDeviceAddedCallbackIfNeeded(device: UsbDevice) {
         if (!isDeviceAudioEligible(device, true))
             return
+        if (!usbManager.hasPermission(device))
+            return
+        enumerateSoundcards()
         // TODO: do something.
     }
 
     private fun dispatchDeviceDetachedCallbackIfNeeded(device: UsbDevice) {
         if (!isDeviceAudioEligible(device, false))
             return
+        openDevices.removeAll { it.androidDevice == device }
+        //enumerateSoundcards()
         // TODO: do something.
     }
 
     fun enumerateSoundcards() {
-        /*eligibleDevices.forEach {
-            if (!usbManager.hasPermission(it)) {
-                val i = Intent(UAC_PERMISSION_ACTION)
-                i.setPackage(context.packageName)
-                val pi = PendingIntentCompat.getBroadcast(context, 0x4ac2, i,
-                    PendingIntent.FLAG_ONE_SHOT, false)
-                usbManager.requestPermission(it, pi)
-            }
-            val deviceHandle = usbManager.openDevice(it)
-            if (deviceHandle == null) {
-                Log.e(TAG, "failed to open $it")
-                return@forEach
-            }
-
-        }*/
+        /*usbManager.deviceList.values.filter { isDeviceAudioEligible(it, false) }
+            .forEach {
+                if (!usbManager.hasPermission(it)) {
+                    val i = Intent(UAC_PERMISSION_ACTION)
+                    i.setPackage(context.packageName)
+                    val pi = PendingIntentCompat.getBroadcast(
+                        context, 0x4ac2, i,
+                        PendingIntent.FLAG_ONE_SHOT, false
+                    )
+                    usbManager.requestPermission(it, pi)
+                    return@forEach
+                }
+                if (openDevices.find { it.androidDevice == it } != null)
+                    return@forEach
+                val deviceHandle = try {
+                    libUsbManager.openDevice(it)
+                } catch (e: Exception) {
+                    Log.e(TAG, "failed to open $it", e)
+                    return@forEach
+                }
+                openDevices.add(deviceHandle)
+            }*/
     }
 
     private fun isDeviceAudioEligible(device: UsbDevice, allowLog: Boolean): Boolean {
@@ -99,7 +123,8 @@ class UacManager(private val context: Context) {
         for (configurationIndex in 0..<device.configurationCount) {
             val configuration = device.getConfiguration(configurationIndex)
             var hasAudioControl = false
-            var hasAudioStreaming = false
+            var hasAudioStreamingSink = false
+            var hasAudioStreamingSource = false
             var hasMidiStreaming = false
             for (interfaceIndex in 0..<configuration.interfaceCount) {
                 val iface = configuration.getInterface(interfaceIndex)
@@ -116,7 +141,17 @@ class UacManager(private val context: Context) {
                 }
                 when (iface.interfaceSubclass) {
                     0x01 /* AUDIOCONTROL */ -> hasAudioControl = true
-                    0x02 /* AUDIOSTREAMING */ -> hasAudioStreaming = true
+                    0x02 /* AUDIOSTREAMING */ -> {
+                        for (epIndex in 0..<iface.endpointCount) {
+                            val ep = iface.getEndpoint(epIndex)
+                            if (ep.attributes.shl(4).and(3) == 0) { // data EP
+                                when (ep.direction) {
+                                    UsbConstants.USB_DIR_IN -> hasAudioStreamingSource = true
+                                    UsbConstants.USB_DIR_OUT -> hasAudioStreamingSink = true
+                                }
+                            }
+                        }
+                    }
                     0x03 /* MIDISTREAMING */ -> hasMidiStreaming = true
                     else -> {
                         if (allowLog)
@@ -130,13 +165,16 @@ class UacManager(private val context: Context) {
             if (!hasAudioControl) {
                 continue
             }
-            if (!hasAudioStreaming) {
+            if (!hasAudioStreamingSink) {
                 if (allowLog) {
                     if (hasMidiStreaming) {
                         Log.i(
                             TAG, "$device/$configuration has no audio streaming " +
                                     "class, is MIDI device"
                         )
+                    } else if (hasAudioStreamingSource) {
+                        Log.i(TAG, "$device/$configuration has no audio streaming " +
+                                "sink but has source, is microphone (not headset)")
                     } else {
                         Log.w(TAG, "$device/$configuration has no streaming class")
                     }
@@ -157,9 +195,6 @@ class UacManager(private val context: Context) {
             )
             return false
         }
-        // TODO: check that there is at least 1 audio sink streaming interface declared.
         return true
     }
-
-    private external fun getDetailsForUsbDevice(fd: Int)
 }

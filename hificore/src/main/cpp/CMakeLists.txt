@@ -32,11 +32,20 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
         gramophone.cpp
 		android_linker_ns.cpp
 		NativeTrack.cpp
-		compressor/dynamic_range_compression.cpp)
-		# uac/uac.cpp)
+		compressor/dynamic_range_compression.cpp
+		libusb/async_transfer.c
+		libusb/async_usb_thread.c
+		libusb/libusb_device_descriptor.c
+		libusb/libusb_error_enum.c
+		libusb/logging.c
+		libusb/usb_configuration.c
+		libusb/usb_device.c
+		libusb/usb_interface.c
+		libusb/usb_manager.c)
 
 find_package(dlfunc)
-#add_subdirectory(libusb-cmake)
+set(LIBUSB_INSTALL_TARGETS OFF)
+add_subdirectory(libusb-cmake)
 
 # Specifies libraries CMake should link to your target library. You
 # can link libraries from various origins, such as libraries defined in this
@@ -44,8 +53,8 @@ find_package(dlfunc)
 target_link_libraries(${CMAKE_PROJECT_NAME}
         # List libraries link to the target library
         log
-        dlfunc::dlfunc)
-		#usb-1.0)
+        dlfunc::dlfunc
+		usb-1.0)
 
 target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE -fvisibility=hidden -fomit-frame-pointer -fno-unroll-loops -Xclang -fmerge-functions)
 
