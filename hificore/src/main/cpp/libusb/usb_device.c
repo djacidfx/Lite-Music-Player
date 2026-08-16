@@ -215,7 +215,7 @@ static void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfe
     }
     if (result >= 0) {
         jobject useless = (*env)->CallObjectMethod(
-                env, holder->buffer, byteBufferLimit, transfer->actual_length);
+                env, holder->buffer, byteBufferLimit, transferred);
         (*env)->DeleteLocalRef(env, useless);
     }
     callback = (*env)->CallObjectMethod(env, holder->transfer, getTransferCallback);
