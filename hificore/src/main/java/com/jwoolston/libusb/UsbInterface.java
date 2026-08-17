@@ -51,7 +51,7 @@ public class UsbInterface implements Parcelable {
     /**
      * UsbInterface should only be instantiated by UsbManager implementation
      */
-    UsbInterface(int id, int alternateSetting, @Nullable String name, int interfaceClass, int subClass, int protocol, UsbEndpoint[] endpoints, byte[] extra) {
+    private UsbInterface(int id, int alternateSetting, @Nullable String name, int interfaceClass, int subClass, int protocol, UsbEndpoint[] endpoints, byte[] extra) {
         this.id = id;
         this.alternateSetting = alternateSetting;
         this.name = name;
@@ -74,7 +74,7 @@ public class UsbInterface implements Parcelable {
 
     /**
      * Returns the interface's bAlternateSetting field. This is an integer that along with the ID uniquely identifies
-     * the interface on the device. {@link UsbDeviceConnection#setInterface} can be used to switch between
+     * the interface on the device. {@link UsbDevice#setInterface} can be used to switch between
      * two interfaces with the same ID but different alternate setting.
      *
      * @return the interface's alternate setting
@@ -240,7 +240,7 @@ public class UsbInterface implements Parcelable {
                                                 i + " Expected total: " + numEndpoints);
             }
         }
-        ByteBuffer extraTmp = nativeGetExtra(nativeObject);
+        ByteBuffer extraTmp = nativeGetExtra(nativeDescriptor);
         ByteBuffer extra = ByteBuffer.allocate(extraTmp.capacity());
         extra.put(extraTmp);
         return new UsbInterface(id, alternateSetting, name,

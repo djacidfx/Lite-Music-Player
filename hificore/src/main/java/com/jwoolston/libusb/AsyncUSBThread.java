@@ -36,7 +36,7 @@ public class AsyncUSBThread extends Thread {
     }
 
     void shutdown() {
-        nativeShutdown(context.getNativeObject());
+        nativeShutdown();
     }
 
     @Override
@@ -44,6 +44,6 @@ public class AsyncUSBThread extends Thread {
         nativeHandleEvents(context.getNativeObject());
     }
 
-    private static native void nativeShutdown(long context);
+    private static native void nativeShutdown();
     private static native void nativeHandleEvents(long context);
 }

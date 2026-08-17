@@ -23,8 +23,23 @@ import java.nio.ByteBuffer
 class AdaptiveDynamicRangeCompression {
     companion object {
         private const val TAG = "AdaptiveDRCSw"
+        @JvmStatic
         var libLoaded = false
             private set
+        init {
+            if (!AudioTrackHiddenApi.libLoaded) {
+                try {
+                    Log.d(TAG, "Loading libhificore.so")
+                    System.loadLibrary("hificore")
+                    Log.d(TAG, "Done loading libhificore.so")
+                } catch (e: Throwable) {
+                    throw IllegalStateException("can't load lib for AdaptiveDRC", e)
+                }
+            }
+            // don't set the hidden api one to true, .so is shared for simplicity but hidden api
+            // may not wish or be allowed to load/use the library.
+            libLoaded = true
+        }
     }
 
     private var ptr: Long
@@ -35,18 +50,6 @@ class AdaptiveDynamicRangeCompression {
     private var compressionRatio: Float? = null
 
     init {
-        if (!AudioTrackHiddenApi.libLoaded) {
-            try {
-                Log.d(TAG, "Loading libhificore.so")
-                System.loadLibrary("hificore")
-                Log.d(TAG, "Done loading libhificore.so")
-            } catch (e: Throwable) {
-                throw IllegalStateException("can't load lib for AdaptiveDRC", e)
-            }
-        }
-        // don't set the hidden api one to true, .so is shared for simplicity but hidden api
-        // may not wish or be allowed to load/use the library.
-        libLoaded = true
         try {
             ptr = create()
         } catch (e: Throwable) {

@@ -304,27 +304,6 @@ JNIEXPORT void JNICALL
 Java_com_jwoolston_libusb_UsbDevice_nativeClose(JNIEnv *env, jobject instance, jlong device) {
     struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
     libusb_close(deviceHandle);
-    if (deviceHandle != NULL) {
-        free(deviceHandle);
-    }
-}
-
-JNIEXPORT jbyteArray JNICALL
-Java_com_jwoolston_libusb_UsbDevice_nativeGetRawDescriptor(JNIEnv *env, jobject instance, jint fd) {
-    char buffer[16384];
-    if (fd < 0) return NULL;
-    lseek(fd, 0, SEEK_SET);
-    int length = read(fd, buffer, sizeof(buffer));
-    if (length < 0) return NULL;
-    jbyteArray ret = (*env)->NewByteArray(env, length);
-    if (ret) {
-        jbyte *bytes = (jbyte *) (*env)->GetPrimitiveArrayCritical(env, ret, 0);
-        if (bytes) {
-            memcpy(bytes, buffer, (size_t) length);
-            (*env)->ReleasePrimitiveArrayCritical(env, ret, bytes, 0);
-        }
-    }
-    return ret;
 }
 
 JNIEXPORT jint JNICALL
@@ -336,27 +315,37 @@ Java_com_jwoolston_libusb_UsbDevice_nativeClearStall(JNIEnv *env, jobject instan
 
 JNIEXPORT jint JNICALL
 Java_com_jwoolston_libusb_UsbDevice_nativeClaimInterface(JNIEnv *env, jobject instance,
-                                                                   jlong device, jint interfaceID,
-                                                                   jboolean force) {
+                                                                   jlong device, jint interfaceID) {
     struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
-    jint ret = libusb_claim_interface(deviceHandle, interfaceID);
-    if (ret == LIBUSB_ERROR_BUSY && force) {
-        libusb_detach_kernel_driver(deviceHandle, interfaceID);
-        ret = libusb_claim_interface(deviceHandle, interfaceID);
-    }
-    return ret;
+    return libusb_claim_interface(deviceHandle, interfaceID);
 }
 
 JNIEXPORT jint JNICALL
 Java_com_jwoolston_libusb_UsbDevice_nativeReleaseInterface(JNIEnv *env, jobject instance,
-                                                                     jlong device, jint interfaceID,
-                                                                     jboolean force) {
+                                                                     jlong device, jint interfaceID) {
     struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
-    int ret = libusb_release_interface(deviceHandle, interfaceID);
-    if ((ret == LIBUSB_SUCCESS || ret == LIBUSB_ERROR_NOT_FOUND) && force) {
-        ret = libusb_attach_kernel_driver(deviceHandle, interfaceID);
-    }
-    return ret;
+    return libusb_release_interface(deviceHandle, interfaceID);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_jwoolston_libusb_UsbDevice_nativeHasKernelDriver(JNIEnv *env, jobject thiz,
+                                                             jlong device, jint interface_id) {
+    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
+    return libusb_kernel_driver_active(deviceHandle, interface_id);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_jwoolston_libusb_UsbDevice_nativeAttachKernelDriver(JNIEnv *env, jobject thiz,
+                                                             jlong device, jint interface_id) {
+    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
+    return libusb_attach_kernel_driver(deviceHandle, interface_id);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_jwoolston_libusb_UsbDevice_nativeDetachKernelDriver(JNIEnv *env, jobject thiz,
+                                                             jlong device, jint interface_id) {
+    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
+    return libusb_detach_kernel_driver(deviceHandle, interface_id);
 }
 
 JNIEXPORT jint JNICALL
@@ -364,6 +353,18 @@ Java_com_jwoolston_libusb_UsbDevice_nativeSetInterface(JNIEnv *env, jobject inst
                                                                  jint interfaceID, jint alternateSetting) {
     struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
     return libusb_set_interface_alt_setting(deviceHandle, interfaceID, alternateSetting);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_jwoolston_libusb_UsbDevice_nativeGetConfiguration(JNIEnv *env, jobject instance,
+                                                           jlong device) {
+    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
+    int config;
+    int ret = libusb_get_configuration(deviceHandle, &config);
+    if (ret < 0) {
+        return ret;
+    }
+    return config;
 }
 
 JNIEXPORT jint JNICALL

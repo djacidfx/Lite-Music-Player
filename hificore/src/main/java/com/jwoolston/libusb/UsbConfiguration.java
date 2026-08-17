@@ -57,17 +57,24 @@ public class UsbConfiguration implements Parcelable {
     @NotNull
     UsbInterface[] interfaces;
 
+    /**
+     * All interface associations for this config
+     */
+    @NotNull
+    UsbInterfaceAssociation[] interfaceAssociations;
+
     final byte[] extra;
 
     /**
      * UsbConfiguration should only be instantiated by UsbService implementation
      */
-    public UsbConfiguration(int id, @Nullable String name, int attributes, int maxPower, UsbInterface[] interfaces, byte[] extra) {
+    private UsbConfiguration(int id, @Nullable String name, int attributes, int maxPower, UsbInterface[] interfaces, UsbInterfaceAssociation[] interfaceAssociations, byte[] extra) {
         this.id = id;
         this.name = name;
         this.attributes = attributes;
         this.maxPower = maxPower;
         this.interfaces = interfaces;
+        this.interfaceAssociations = interfaceAssociations;
         this.extra = extra;
     }
 
@@ -139,6 +146,25 @@ public class UsbConfiguration implements Parcelable {
         return interfaces[index];
     }
 
+    /**
+     * Returns the number of {@link UsbInterfaceAssociation}s this configuration contains.
+     *
+     * @return the number of endpoints
+     */
+    public int getInterfaceAssociationCount() {
+        return interfaceAssociations.length;
+    }
+
+    /**
+     * Returns the {@link UsbInterface} at the given index.
+     *
+     * @return the interface
+     */
+    public @NotNull
+    UsbInterfaceAssociation getInterfaceAssociation(int index) {
+        return interfaceAssociations[index];
+    }
+
     public byte[] getExtra() {
         return extra;
     }
@@ -152,6 +178,7 @@ public class UsbConfiguration implements Parcelable {
                 ", attributes=" + attributes +
                 ", maxPower=" + maxPower +
                 ", interfaces=" + Arrays.toString(interfaces) +
+                ", interfaceAssociations=" + Arrays.toString(interfaceAssociations) +
                 ", extra=" + Arrays.toString(extra) +
                 '}';
     }
@@ -164,8 +191,9 @@ public class UsbConfiguration implements Parcelable {
                     int attributes = in.readInt();
                     int maxPower = in.readInt();
                     UsbInterface[] interfaces = (UsbInterface[]) in.readParcelableArray(UsbInterface.class.getClassLoader());
+                    UsbInterfaceAssociation[] interfaceAssociations = (UsbInterfaceAssociation[]) in.readParcelableArray(UsbInterfaceAssociation.class.getClassLoader());
                     byte[] extra = in.createByteArray();
-                    UsbConfiguration configuration = new UsbConfiguration(id, name, attributes, maxPower, interfaces, extra);
+                    UsbConfiguration configuration = new UsbConfiguration(id, name, attributes, maxPower, interfaces, interfaceAssociations, extra);
                     return configuration;
                 }
 
@@ -186,6 +214,7 @@ public class UsbConfiguration implements Parcelable {
         parcel.writeInt(attributes);
         parcel.writeInt(maxPower);
         parcel.writeParcelableArray((Parcelable[]) interfaces, 0);
+        parcel.writeParcelableArray((Parcelable[]) interfaceAssociations, 0);
         parcel.writeByteArray(extra);
     }
 
@@ -213,11 +242,26 @@ public class UsbConfiguration implements Parcelable {
             List<UsbInterface> usbInterface = UsbInterface.fromNativeObject(device, nativeInterface);
             usbInterfaces.addAll(usbInterface);
         }
+        final List<UsbInterfaceAssociation> usbInterfaceAssociations = new ArrayList<>();
+        // Get the native IAD array. Make sure you free it!
+        final ByteBuffer associationArray = nativeGetInterfaceAssociationArray(device.getNativeObject(), configuration);
+        if (associationArray == null) {
+            nativeDestroy(nativeObject);
+            throw new IllegalStateException("Failed to get Interface Association Descriptor Array");
+        }
+        // using ByteBuffer's length / capacity here is a bit hacky, but native plays along
+        for (int i = 0; i < associationArray.capacity(); ++i) {
+            ByteBuffer nativeInterface = nativeGetInterfaceAssociation(associationArray, i);
+            UsbInterfaceAssociation usbInterface = UsbInterfaceAssociation.fromNativeDescriptor(device, nativeInterface);
+            usbInterfaceAssociations.add(usbInterface);
+        }
+        nativeDestroyInterfaceAssociationArray(associationArray);
         ByteBuffer extraTmp = nativeGetExtra(nativeObject);
         ByteBuffer extra = ByteBuffer.allocate(extraTmp.capacity());
         extra.put(extraTmp);
         final UsbConfiguration usbConfiguration = new UsbConfiguration(id, name, attributes,
-                maxPower, usbInterfaces.toArray(new UsbInterface[0]), extra.array());
+                maxPower, usbInterfaces.toArray(new UsbInterface[0]),
+                usbInterfaceAssociations.toArray(new UsbInterfaceAssociation[0]), extra.array());
 
         // Destroy the native configuration object
         nativeDestroy(nativeObject);
@@ -233,6 +277,13 @@ public class UsbConfiguration implements Parcelable {
      * @return
      */
     private static native ByteBuffer nativeGetInterface(@NonNull ByteBuffer nativeObject, int interfaceIndex);
+
+    @Nullable
+    private static native ByteBuffer nativeGetInterfaceAssociationArray(long device, int interfaceIndex);
+
+    private static native ByteBuffer nativeGetInterfaceAssociation(@NonNull ByteBuffer nativeObject, int interfaceIndex);
+
+    private static native void nativeDestroyInterfaceAssociationArray(@NonNull ByteBuffer nativeObject);
 
     private static native ByteBuffer nativeGetExtra(@NonNull ByteBuffer nativeObject);
 

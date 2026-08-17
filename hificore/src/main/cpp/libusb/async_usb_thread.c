@@ -32,9 +32,6 @@ Java_com_jwoolston_libusb_AsyncUSBThread_nativeHandleEvents(JNIEnv *env, jclass 
 }
 
 JNIEXPORT void JNICALL
-Java_com_jwoolston_libusb_AsyncUSBThread_nativeShutdown(JNIEnv *env, jclass clazz, jlong context) {
-    struct libusb_context *ctx = (libusb_context *) context;
-    libusb_lock_events(ctx);
+Java_com_jwoolston_libusb_AsyncUSBThread_nativeShutdown(JNIEnv *env, jclass clazz) {
     completed = 1;
-    libusb_unlock_events(ctx);
 }

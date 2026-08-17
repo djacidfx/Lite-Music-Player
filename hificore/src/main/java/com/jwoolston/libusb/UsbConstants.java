@@ -66,7 +66,7 @@ public final class UsbConstants {
      */
     public static final int USB_ENDPOINT_XFER_CONTROL = 0;
     /**
-     * Isochronous endpoint type (currently not supported)
+     * Isochronous endpoint type
      *
      * @see UsbEndpoint#getType
      */
@@ -179,4 +179,74 @@ public final class UsbConstants {
      * Vendor specific USB subclass.
      */
     public static final int USB_SUBCLASS_VENDOR_SPEC = 0xff;
+
+    /** Synchronization type for isochronous endpoints. Values for bits 2:3 of the
+     * "bmAttributes" field in an endpoint descriptor.<p>
+     *
+     * No synchronization */
+    public static final int USB_ISO_SYNC_TYPE_NONE = 0x0;
+
+    /** Synchronization type for isochronous endpoints. Values for bits 2:3 of the
+     * "bmAttributes" field in an endpoint descriptor.<p>
+     *
+     * Asynchronous */
+    public static final int USB_ISO_SYNC_TYPE_ASYNC = 0x1;
+
+    /** Synchronization type for isochronous endpoints. Values for bits 2:3 of the
+     * "bmAttributes" field in an endpoint descriptor.<p>
+     *
+     * Adaptive */
+    public static final int USB_ISO_SYNC_TYPE_ADAPTIVE = 0x2;
+
+    /** Synchronization type for isochronous endpoints. Values for bits 2:3 of the
+     * "bmAttributes" field in an endpoint descriptor.<p>
+     *
+     * Synchronous */
+    public static final int USB_ISO_SYNC_TYPE_SYNC = 0x3;
+
+    /** Usage type for isochronous endpoints. Values for bits 4:5 of the
+     * "bmAttributes" field in an endpoint descriptor.<p>
+     *
+     * Data endpoint */
+    public static final int USB_ISO_USAGE_TYPE_DATA = 0x0;
+
+    /** Usage type for isochronous endpoints. Values for bits 4:5 of the
+     * "bmAttributes" field in an endpoint descriptor.<p>
+     *
+     * Feedback endpoint */
+    public static final int USB_ISO_USAGE_TYPE_FEEDBACK = 0x1;
+
+    /** Usage type for isochronous endpoints. Values for bits 4:5 of the
+     * "bmAttributes" field in an endpoint descriptor.<p>
+     *
+     * Implicit feedback Data endpoint */
+    public static final int USB_ISO_USAGE_TYPE_IMPLICIT = 0x2;
+
+    /** Request status of the specific recipient */
+    public static final int USB_REQUEST_GET_STATUS = 0x00;
+
+    /** Clear or disable a specific feature */
+    public static final int USB_REQUEST_CLEAR_FEATURE = 0x01;
+
+    /** Set or enable a specific feature */
+    public static final int USB_REQUEST_SET_FEATURE = 0x03;
+
+    /** Set device address for all future accesses */
+    public static final int USB_REQUEST_SET_ADDRESS = 0x05;
+
+    /** Used to update existing descriptors or add new descriptors */
+    public static final int USB_REQUEST_SET_DESCRIPTOR = 0x07;
+
+    /** Return the selected alternate setting for the specified interface */
+    public static final int USB_REQUEST_GET_INTERFACE = 0x0a;
+
+    /** Set then report an endpoint's synchronization frame */
+    public static final int USB_REQUEST_SYNCH_FRAME = 0x0c;
+
+    /** Sets both the U1 and U2 Exit Latency */
+    public static final int USB_REQUEST_SET_SEL = 0x30;
+
+    /** Delay from the time a host transmits a packet to the time it is
+     * received by the device. */
+    public static final int USB_SET_ISOCH_DELAY = 0x31;
 }

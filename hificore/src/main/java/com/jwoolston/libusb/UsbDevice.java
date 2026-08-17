@@ -87,6 +87,9 @@ public class UsbDevice {
         return device.getDeviceId();
     }
 
+    /**
+     * UsbDevice should only be instantiated by UsbManager implementation
+     */
     UsbDevice(@NonNull UsbManager manager, @NonNull android.hardware.usb.UsbDevice device, @NonNull UsbDeviceConnection connection) {
         this.connection = connection;
         this.nativeObject = wrapDevice(manager.getNativeObject(), connection.getFileDescriptor());
@@ -124,7 +127,7 @@ public class UsbDevice {
 
     static void initialize() {
         if (!nativeInitialize()) {
-            throw new RuntimeException("Failed to initialize native layer for UsbDeviceConnection.");
+            throw new RuntimeException("Failed to initialize native layer for UsbDevice.");
         }
     }
 
@@ -474,15 +477,19 @@ public class UsbDevice {
      *
      * @return raw USB descriptors
      */
-    @Nullable
     public byte[] getRawDescriptors() {
         if (nativeObject == 0) {
             throw new IllegalStateException("This UsbDevice was already closed");
         }
-        return nativeGetRawDescriptor(connection.getFileDescriptor());
+        return connection.getRawDescriptors();
     }
 
     // ====== CONNECTION API ======
+
+    // TODO: libusb_get_port_numbers
+    // TODO: libusb_get_container_id_descriptor
+    // TODO: libusb_get_bos_descriptor
+    // TODO: libusb_alloc/free_streams with libusb_ss_endpoint_companion_descriptor
 
     /**
      * Clears the stall condition on the provided {@link UsbEndpoint}.
@@ -495,8 +502,43 @@ public class UsbDevice {
     }
 
     /**
-     * Claims exclusive access to a {@link UsbInterface}. This must be done before sending or receiving data on any
-     * {@link UsbEndpoint}s belonging to the interface.
+     * Claims exclusive access to a {@link UsbInterface}. This must be done before sending or
+     * receiving data on any {@link UsbEndpoint}s belonging to the interface.<p>
+     *
+     * The alt setting of the provided interface will NOT be applied.
+     *
+     * @param intf  the interface to claim
+     *
+     * @return {@link LibusbError} The libusb result.
+     */
+    public LibusbError claimInterfaceWithoutAltSetting(UsbInterface intf) {
+        return LibusbError.fromNative(nativeClaimInterface(getNativeObject(), intf.getId()));
+    }
+
+    /**
+     * Claims exclusive access to a {@link UsbInterface}. This must be done before sending or
+     * receiving data on any {@link UsbEndpoint}s belonging to the interface.<p>
+     *
+     * The alt setting of the provided interface will be applied.
+     *
+     * @param intf  the interface to claim
+     *
+     * @return {@link LibusbError} The libusb result.
+     */
+    public LibusbError claimInterface(UsbInterface intf) {
+        LibusbError ret = claimInterfaceWithoutAltSetting(intf);
+        if (ret != LibusbError.LIBUSB_SUCCESS) {
+            return ret;
+        }
+        // Ensure the correct alt setting is set
+        return setInterface(intf);
+    }
+
+    /**
+     * Claims exclusive access to a {@link UsbInterface}. This must be done before sending or
+     * receiving data on any {@link UsbEndpoint}s belonging to the interface.<p>
+     *
+     * The alt setting of the provided interface will be applied.
      *
      * @param intf  the interface to claim
      * @param force true to disconnect kernel driver if necessary
@@ -504,7 +546,72 @@ public class UsbDevice {
      * @return {@link LibusbError} The libusb result.
      */
     public LibusbError claimInterface(UsbInterface intf, boolean force) {
-        return LibusbError.fromNative(nativeClaimInterface(getNativeObject(), intf.getId(), force));
+        LibusbError ret = claimInterface(intf);
+        if (ret == LibusbError.LIBUSB_ERROR_BUSY && force) {
+            detachKernelDriver(intf);
+            return claimInterface(intf);
+        }
+        return ret;
+    }
+
+    /**
+     * Claims exclusive access to a {@link UsbInterface}. This must be done before sending or
+     * receiving data on any {@link UsbEndpoint}s belonging to the interface.<p>
+     *
+     * The alt setting of the provided interface will be applied.<p>
+     *
+     * This function also ensures to set the USB device's configuration in a race-free way. Setting
+     * the configuration to the current one will perform a light reset, which is usually undesired,
+     * but reading the configuration and then comparing it has time-of-check time-of-use issues,
+     * because another program might have changed the configuration in the meantime. The race-free
+     * way is to double-check the configuration after claiming the interface and releasing it if
+     * the configuration is the wrong one. This function implements this pattern, so after it
+     * returns with {@link LibusbError#LIBUSB_SUCCESS}, the configuration is set correctly and the
+     * interface is claimed.
+     *
+     * @param config the configuration to enable
+     * @param intf   the interface to claim
+     * @param force  true to disconnect kernel driver if necessary
+     *
+     * @return {@link LibusbError} The libusb result.
+     */
+    public LibusbError claimInterfaceOnConfiguration(UsbConfiguration config, UsbInterface intf, boolean force) {
+        while (true) {
+            int curConfig = getConfiguration();
+            if (curConfig < 0) {
+                return LibusbError.fromNative(curConfig);
+            }
+            if (config.getId() != curConfig) {
+                LibusbError ret = setConfiguration(config);
+                if (ret != LibusbError.LIBUSB_SUCCESS) {
+                    return ret;
+                }
+            }
+            LibusbError ret = claimInterface(intf, force);
+            if (ret != LibusbError.LIBUSB_SUCCESS) {
+                return ret;
+            }
+            curConfig = getConfiguration();
+            if (curConfig < 0) {
+                return LibusbError.fromNative(curConfig);
+            }
+            if (curConfig == config.getId()) {
+                return LibusbError.LIBUSB_SUCCESS;
+            }
+            ret = releaseInterface(intf, false);
+            if (ret != LibusbError.LIBUSB_SUCCESS) {
+                return ret;
+            }
+        }
+    }
+
+    /**
+     * Releases exclusive access to a {@link UsbInterface}.
+     *
+     * @return {@link LibusbError} The libusb result.
+     */
+    public LibusbError releaseInterface(UsbInterface intf) {
+        return LibusbError.fromNative(nativeReleaseInterface(getNativeObject(), intf.getId()));
     }
 
     /**
@@ -514,18 +621,66 @@ public class UsbDevice {
      * @return {@link LibusbError} The libusb result.
      */
     public LibusbError releaseInterface(UsbInterface intf, boolean force) {
-        return LibusbError.fromNative(nativeReleaseInterface(getNativeObject(), intf.getId(), force));
+        LibusbError ret = releaseInterface(intf);
+        if ((ret == LibusbError.LIBUSB_SUCCESS || ret == LibusbError.LIBUSB_ERROR_NOT_FOUND) && force) {
+            return attachKernelDriver(intf);
+        }
+        return ret;
+    }
+
+    /**
+     * Attaches a kernel driver to {@link UsbInterface}. Interface must not be claimed.
+     *
+     * @return {@link LibusbError} The libusb result.
+     */
+    public LibusbError attachKernelDriver(UsbInterface intf) {
+        return LibusbError.fromNative(nativeAttachKernelDriver(getNativeObject(), intf.getId()));
+    }
+
+    /**
+     * Detaches a kernel driver to {@link UsbInterface}.
+     *
+     * @return {@link LibusbError} The libusb result.
+     */
+    public LibusbError detachKernelDriver(UsbInterface intf) {
+        return LibusbError.fromNative(nativeDetachKernelDriver(getNativeObject(), intf.getId()));
+    }
+
+    /**
+     * Returns whether a kernel driver is attached to this interface.<p>
+     *
+     * Note that this function should not be used when claiming an interface as it is prone to
+     * time-to-check time-to-use races. The kernel driver might attach/detach immediately after the
+     * function returned. If trying to claim an interface, simply try to detach the kernel driver
+     * after {@link LibusbError#LIBUSB_ERROR_BUSY} is returned from {@link
+     * #claimInterface(UsbInterface)}, or use {@link #claimInterface(UsbInterface, boolean)} which
+     * implements this pattern in a simple wrapper.
+     *
+     * @return 0 if no kernel driver is attached, 1 if kernel driver is attached, or negative {@link
+     * LibusbError} on error.
+     */
+    public int hasAttachedKernelDriver(UsbInterface intf) {
+        return nativeHasKernelDriver(getNativeObject(), intf.getId());
     }
 
     /**
      * Sets the current {@link UsbInterface}. Used to select between two interfaces with the same ID but different
-     * alternate setting.
+     * alternate setting. The interface should be claimed before changing the alternate setting.
      *
      * @return {@link LibusbError} The libusb result.
      */
     public LibusbError setInterface(UsbInterface intf) {
         return LibusbError.fromNative(nativeSetInterface(getNativeObject(), intf.getId(),
                 intf.getAlternateSetting()));
+    }
+
+    /**
+     * Gets the device's current {@link UsbConfiguration}'s ID.
+     *
+     * @return If positive or zero, the configuration number. If negative, an {@link LibusbError}.
+     */
+    public int getConfiguration() {
+        return nativeGetConfiguration(getNativeObject());
     }
 
     /**
@@ -713,16 +868,21 @@ public class UsbDevice {
 
     private native void nativeClose(long device);
 
-    @Nullable
-    private native byte[] nativeGetRawDescriptor(int fd);
-
     private native int nativeClearStall(long device, int address);
 
-    private native int nativeClaimInterface(long device, int interfaceID, boolean force);
+    private native int nativeClaimInterface(long device, int interfaceID);
 
-    private native int nativeReleaseInterface(long device, int interfaceID, boolean force);
+    private native int nativeReleaseInterface(long device, int interfaceID);
+
+    private native int nativeHasKernelDriver(long device, int interfaceID);
+
+    private native int nativeAttachKernelDriver(long device, int interfaceID);
+
+    private native int nativeDetachKernelDriver(long device, int interfaceID);
 
     private native int nativeSetInterface(long device, int interfaceID, int alternateSetting);
+
+    private native int nativeGetConfiguration(long device);
 
     private native int nativeSetConfiguration(long device, int configurationID);
 

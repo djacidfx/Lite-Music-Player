@@ -47,6 +47,39 @@ Java_com_jwoolston_libusb_UsbConfiguration_nativeGetInterface(JNIEnv *env, jclas
 }
 
 JNIEXPORT jobject JNICALL
+Java_com_jwoolston_libusb_UsbConfiguration_nativeGetInterfaceAssociationArray(JNIEnv *env, jclass type, jlong device,
+                                                                         jint configuration) {
+    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
+
+    struct libusb_interface_association_descriptor_array* out = NULL;
+    int ret = libusb_get_interface_association_descriptors(libusb_get_device(deviceHandle),
+                                                 configuration, &out);
+    if (ret != LIBUSB_SUCCESS) {
+        LOGE("Failed to get IAD: %d", ret);
+        return NULL;
+    }
+
+    return ((*env)->NewDirectByteBuffer(env, (void *) (out), out->length));
+}
+
+JNIEXPORT jobject JNICALL
+Java_com_jwoolston_libusb_UsbConfiguration_nativeGetInterfaceAssociation(JNIEnv *env, jclass type, jobject array,
+                                                                              jint index) {
+    struct libusb_interface_association_descriptor_array* arrayPtr =
+            (*env)->GetDirectBufferAddress(env, array);
+
+    return ((*env)->NewDirectByteBuffer(env, (void *) (&arrayPtr->iad[index]),
+                                        sizeof(struct libusb_interface_association_descriptor)));
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_UsbConfiguration_nativeDestroyInterfaceAssociationArray(JNIEnv *env, jclass type, jobject array) {
+    struct libusb_interface_association_descriptor_array* arrayPtr =
+            (*env)->GetDirectBufferAddress(env, array);
+    libusb_free_interface_association_descriptors(arrayPtr);
+}
+
+JNIEXPORT jobject JNICALL
 Java_com_jwoolston_libusb_UsbConfiguration_nativeGetExtra(JNIEnv *env, jclass type, jobject nativeObject) {
     struct libusb_config_descriptor *config = (struct libusb_config_descriptor *)
             (*env)->GetDirectBufferAddress(env, nativeObject);

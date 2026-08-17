@@ -44,7 +44,7 @@ public class UsbEndpoint implements Parcelable {
     /**
      * UsbEndpoint should only be instantiated by UsbService implementation
      */
-    UsbEndpoint(int address, int attributes, int maxPacketSize, int interval, byte refresh, byte synchAddress, byte[] extra) {
+    private UsbEndpoint(int address, int attributes, int maxPacketSize, int interval, byte refresh, byte synchAddress, byte[] extra) {
         this.address = address;
         this.attributes = attributes;
         this.maxPacketSize = maxPacketSize;

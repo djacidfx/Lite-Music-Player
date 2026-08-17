@@ -36,7 +36,7 @@ import org.nift4.gramophone.hificore.AdaptiveDynamicRangeCompression;
 public class UsbManager {
 
     static {
-        if (!AdaptiveDynamicRangeCompression.Companion.getLibLoaded()) {
+        if (!AdaptiveDynamicRangeCompression.getLibLoaded()) {
             throw new IllegalStateException("can't load usb jni lib");
         }
     }
@@ -60,6 +60,7 @@ public class UsbManager {
 
     public UsbManager(@NotNull Context context) {
         nativeObject = nativeInitialize();
+        setNativeLogLevel(LoggingLevel.WARNING); // logging uses JNI, it's expensive, so be careful
         UsbDevice.initialize();
         androidUsbManager = (android.hardware.usb.UsbManager) context.getSystemService(Context.USB_SERVICE);
     }

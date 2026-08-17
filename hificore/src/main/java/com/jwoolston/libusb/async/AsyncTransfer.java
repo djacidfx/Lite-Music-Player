@@ -31,8 +31,8 @@ public class AsyncTransfer {
 
     private final int isoSlots;
     protected final UsbDevice device;
-    private final long nativeObject;
-    private ByteBuffer buffer;
+    private long nativeObject;
+    private ByteBuffer buffer; // TODO: DMA support (libusb_dev_mem_alloc/free)
     private TransferCallback callback;
 
     public AsyncTransfer(@NonNull UsbDevice device, int isoSlots) {
@@ -42,10 +42,13 @@ public class AsyncTransfer {
     }
 
     public boolean isInFlight() {
-        return nativeIsInFlight(nativeObject);
+        return nativeIsInFlight(getNativeObject());
     }
 
     public long getNativeObject() {
+        if (nativeObject == 0) {
+            throw new IllegalStateException("This transfer was already released");
+        }
         return nativeObject;
     }
 
@@ -134,6 +137,9 @@ public class AsyncTransfer {
      * @param timeout milliseconds or 0 for infinite
      */
     public void fillControlTransfer(int timeout) {
+        if (isInFlight()) {
+            throw new IllegalStateException("Transfer is in flight, can't change transfer anymore");
+        }
         nativeFillControlTransfer(getNativeObject(), timeout);
     }
 
@@ -191,6 +197,9 @@ public class AsyncTransfer {
      * @param timeout milliseconds or 0 for infinite
      */
     public void fillBulkTransfer(UsbEndpoint endpoint, int timeout) {
+        if (isInFlight()) {
+            throw new IllegalStateException("Transfer is in flight, can't change transfer anymore");
+        }
         nativeFillBulkTransfer(getNativeObject(), endpoint.getAddress(), timeout);
     }
 
@@ -223,6 +232,9 @@ public class AsyncTransfer {
      * @param streamId
      */
     public void fillBulkStreamTransfer(UsbEndpoint endpoint, int timeout, int streamId) {
+        if (isInFlight()) {
+            throw new IllegalStateException("Transfer is in flight, can't change transfer anymore");
+        }
         nativeFillBulkStreamTransfer(getNativeObject(), endpoint.getAddress(), timeout, streamId);
     }
 
@@ -246,7 +258,6 @@ public class AsyncTransfer {
         buffer1.position(0);
     }
 
-    // TODO: bulk stream api only makes sense if also libusb_alloc_streams / free_streams is exposed
     private native void nativeFillBulkStreamTransfer(long nativeObject, int address, int timeout, int streamId);
 
     /**
@@ -257,6 +268,9 @@ public class AsyncTransfer {
      * @param timeout milliseconds or 0 for infinite
      */
     public void fillInterruptTransfer(UsbEndpoint endpoint, int timeout) {
+        if (isInFlight()) {
+            throw new IllegalStateException("Transfer is in flight, can't change transfer anymore");
+        }
         nativeFillInterruptTransfer(getNativeObject(), endpoint.getAddress(), timeout);
     }
 
@@ -294,11 +308,17 @@ public class AsyncTransfer {
             throw new IllegalArgumentException("Transfer was allocated with maximum of " + isoSlots
                     + " packets but tried to set packet count to " + numPackets);
         }
+        if (isInFlight()) {
+            throw new IllegalStateException("Transfer is in flight, can't change transfer anymore");
+        }
         nativeFillIsochronousTransfer(getNativeObject(), endpoint.getAddress(), timeout, numPackets);
     }
 
     /** Set the packet size of a specific isochronous packet (or -1 for all packets). */
     public void setIsochronousPacketSize(int packetNumber, int size) {
+        if (isInFlight()) {
+            throw new IllegalStateException("Transfer is in flight, can't change transfer anymore");
+        }
         int ret = nativeSetIsochronousPacket(getNativeObject(), packetNumber, size);
         if (ret < 0) {
             throw new IllegalArgumentException("Transfer is set to " + -ret +
@@ -310,16 +330,26 @@ public class AsyncTransfer {
     private native int nativeSetIsochronousPacket(long nativeObject, int packetNumber, int size);
 
     public void setFlags(int flags, int mask) {
+        if (isInFlight()) {
+            throw new IllegalStateException("Transfer is in flight, can't change transfer anymore");
+        }
         nativeSetFlags(getNativeObject(), flags, mask);
     }
     private native void nativeSetFlags(long nativeObject, int flags, int mask);
 
     @Override
     protected void finalize() throws Throwable {
-        if (isInFlight())
-            throw new IllegalStateException("JNI should have had a reference on this in-progress transfer");
-        nativeDestroy(nativeObject);
+        release();
         super.finalize();
+    }
+
+    public void release() {
+        if (nativeObject == 0)
+            return;
+        if (isInFlight())
+            throw new IllegalStateException("Can't release in-progress transfer");
+        nativeDestroy(getNativeObject());
+        nativeObject = 0;
     }
 
     private native long nativeAllocate(int isoSlots);

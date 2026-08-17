@@ -41,7 +41,7 @@ void uacLog(jmethodID method, const char *tag, const char *fmt, va_list args) {
     vsnprintf(&message[0], sizeof(message), fmt, args);
     jstring messageString = (*jniEnv)->NewStringUTF(jniEnv, message);
 
-    jobject branch = (*jniEnv)->CallStaticObjectMethod(jniEnv, uac_logClass, method, tagString, messageString);
+    (*jniEnv)->CallStaticVoidMethod(jniEnv, uac_logClass, method, tagString, messageString);
     if ((*jniEnv)->ExceptionOccurred(jniEnv)) {
 #ifdef __ANDROID__
         __android_log_print(ANDROID_LOG_ERROR, "Native Log", "Native logging failed");
