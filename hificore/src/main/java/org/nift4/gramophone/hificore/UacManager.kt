@@ -47,7 +47,7 @@ class UacManager(private val context: Context) {
         private const val MIDISTREAMING = 0x03
         private const val UAC_PERMISSION_ACTION =
             "org.nift4.gramophone.action.UAC_PERMISSION_GRANTED"
-        private const val ENABLE_UAC = true
+        private const val ENABLE_UAC = false
     }
 
     private val usbManager = context.getSystemService<UsbManager>()!!
