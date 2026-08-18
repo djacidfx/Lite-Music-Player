@@ -96,7 +96,7 @@ class EndedWorkaroundPlayer(
     }
 
     fun updateLyricNow() {
-        if (BuildConfig.APPLICATION_ID == "com.tencent.qqmusic") {
+        if (context.packageName == "com.tencent.qqmusic") {
             invalidateState()
         }
     }
@@ -118,8 +118,9 @@ class EndedWorkaroundPlayer(
                 )
                 .build()
         }
-        if (BuildConfig.APPLICATION_ID == "com.tencent.qqmusic") {
+        if (context.packageName == "com.tencent.qqmusic") {
             // Oplus uses package name whitelist for their lockscreen lyric feature
+            // (don't use BuildConfig in order to allow late patching of package name, after build)
             val lyric = getLyric()
             if (lyric != null && lyric is SemanticLyrics.SyncedLyrics) {
                 superState = superState.buildUpon()
