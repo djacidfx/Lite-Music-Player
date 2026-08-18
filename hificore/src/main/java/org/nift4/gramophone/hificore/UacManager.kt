@@ -54,7 +54,7 @@ class UacManager(private val context: Context) {
 
     private val usbManager = context.getSystemService<UsbManager>()!!
     private val libUsbManager = CoroutineScope(Dispatchers.Default).async { LibUsbManager(context) }
-    private val openDevices = mutableListOf<LibUsbDevice>()
+    /*private*/ val openDevices = mutableListOf<LibUsbDevice>()
     private val attachDetachReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val isAttach = intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED
@@ -81,6 +81,8 @@ class UacManager(private val context: Context) {
             }
         }
     }
+
+    var interfaces: Pair<UsbInterface, UsbInterface>? = null
 
     init {
         ContextCompat.registerReceiver(context, attachDetachReceiver, IntentFilter().apply {
@@ -116,6 +118,7 @@ class UacManager(private val context: Context) {
             val match = it.androidDevice == device
             if (match) {
                 Log.i(TAG, "closing $it because disconnected")
+                interfaces = null
                 it.close()
             }
             match
@@ -172,31 +175,12 @@ class UacManager(private val context: Context) {
         val ret = device.claimInterfaceOnConfiguration(selectedInterface.first,
             selectedInterface.second.first, true)
         Log.i("hi", "claim AC $ret")
+        // claim on idle alt setting
         val ret2 = device.claimInterfaceOnConfiguration(selectedInterface.first,
-            selectedInterface.second.second, true)
+            selectedInterface.first.getInterface(selectedInterface.second.second.id,
+                0), true)
         Log.i("hi", "claim AS $ret2")
-
-        val rate = byteArrayOf(
-            0x44.toByte(),
-            0xAC.toByte(),
-            0x00,
-            0x00
-        )
-
-        // TODO: watch Active Alternate Setting Control
-        // TODO: honor Valid Alternate Settings Control
-        // TODO: Terminal Connector Control Interrupt support for jack detection
-        //https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/usb-2-0-audio-drivers#class-requests-and-interrupt-data-messages
-        val r: Int = device.controlTransfer(
-            0x21,
-            0x01,
-            0x0100,
-            0x2900,
-            rate,
-            0,
-            rate.size,
-            1000
-        )
+        this.interfaces = selectedInterface.second
 
         // to find the endpoint, according to USB 2.0 specification chapter 9.6.6, the feedback EP
         // for a data EP is the first opposite-direction EP with the same _or lower_ number.
@@ -304,8 +288,10 @@ class UacManager(private val context: Context) {
                     Log.e(TAG, "failed to open $it", e)
                     return@forEach
                 }
-                openDevices.add(deviceHandle)
-                handleDeviceOpened(deviceHandle)
+                synchronized(openDevices) {
+                    openDevices.add(deviceHandle)
+                    handleDeviceOpened(deviceHandle)
+                }
             }
     }
 

@@ -60,13 +60,9 @@ public class UsbDevice {
     private long nativeObject;
 
     /**
-     * All configurations for this device, only null during creation
+     * All configurations for this device
      */
-    @Nullable UsbConfiguration[] configurations;
-    /**
-     * All interfaces on the device. Initialized on first call to getInterfaceList
-     */
-    @Nullable UsbInterface[]     interfaces;
+    @NonNull UsbConfiguration[] configurations;
 
     @NonNull
     private final android.hardware.usb.UsbDevice device;
@@ -255,51 +251,6 @@ public class UsbDevice {
     @NotNull
     public UsbConfiguration getConfiguration(int index) {
         return configurations[index];
-    }
-
-    @NotNull
-    private UsbInterface[] getInterfaceList() {
-        if (interfaces == null) {
-            int configurationCount = configurations.length;
-            int interfaceCount = 0;
-            for (UsbConfiguration configuration : configurations) {
-                interfaceCount += configuration.getInterfaceCount();
-            }
-            interfaces = new UsbInterface[interfaceCount];
-            int offset = 0;
-            for (int i = 0; i < configurationCount; i++) {
-                UsbConfiguration configuration = configurations[i];
-                interfaceCount = configuration.getInterfaceCount();
-                for (int j = 0; j < interfaceCount; j++) {
-                    int altSettingsCount = configuration.getAltSettingCount(j);
-                    for (int k = 0; k < altSettingsCount; k++) {
-                        interfaces[offset++] = configuration.getInterface(j, k);
-                    }
-                }
-            }
-        }
-        return interfaces;
-    }
-
-    /**
-     * Returns the number of {@link UsbInterface}s this device contains. For devices with multiple configurations,
-     * you will probably want to use {@link UsbConfiguration#getInterfaceCount} instead.
-     *
-     * @return the number of interfaces
-     */
-    public int getInterfaceCount() {
-        return getInterfaceList().length;
-    }
-
-    /**
-     * Returns the {@link UsbInterface} at the given index. For devices with multiple configurations, you will
-     * probably want to use {@link UsbConfiguration#getInterface} instead.
-     *
-     * @return the interface
-     */
-    @NotNull
-    public UsbInterface getInterface(int index) {
-        return getInterfaceList()[index];
     }
 
     public int getMaxPacketSizeForMicroFrame(UsbInterface iface, UsbEndpoint ep) {
@@ -684,6 +635,26 @@ public class UsbDevice {
      */
     public int getConfiguration() {
         return nativeGetConfiguration(getNativeObject());
+    }
+
+    /**
+     * Gets the device's current {@link UsbConfiguration}.<p>
+     *
+     * Throws if the configuration can't be retrieved, e.g. because the device was unplugged.
+     *
+     * @return The current {@link UsbConfiguration}, or null if device is unconfigured.
+     */
+    public @Nullable UsbConfiguration getConfigurationOrThrow() {
+        int config = getConfiguration();
+        if (config < 0) {
+            throw new IllegalStateException("Failed to get configuration: " + config);
+        }
+        for (UsbConfiguration configuration : configurations) {
+            if (configuration.getId() == config) {
+                return configuration;
+            }
+        }
+        return null;
     }
 
     /**

@@ -287,11 +287,12 @@ Java_com_jwoolston_libusb_UsbDevice_nativeInitialize(JNIEnv *env, jclass type) {
         return JNI_FALSE;
     }
 
-    errorClass = (*env)->FindClass(env, "com/jwoolston/libusb/LibusbError");
-    if (errorClass == NULL) {
+    clazz = (*env)->FindClass(env, "com/jwoolston/libusb/LibusbError");
+    if (clazz == NULL) {
         LOGE("Failed to find class com.jwoolston.libusb.LibusbError");
         return JNI_FALSE;
     }
+    errorClass = (*env)->NewGlobalRef(env, clazz);
     getError = (*env)->GetStaticMethodID(env, errorClass, "fromNative", "(I)Lcom/jwoolston/libusb/LibusbError;");
     if (getError == NULL) {
         LOGE("Failed to find fromNative(int) method.");
@@ -475,8 +476,9 @@ Java_com_jwoolston_libusb_UsbDevice_nativeRequestAsync(JNIEnv *env, jobject inst
     // Ensure that, in case of isochronous transfer, the buffer is big enough.
     if (_transfer->type == LIBUSB_TRANSFER_TYPE_ISOCHRONOUS && _transfer->num_iso_packets > 0) {
         int isoLength = libusb_get_iso_packet_buffer(_transfer, _transfer->
-            num_iso_packets - 1) - _transfer->buffer;
-        if (isoLength != length) {
+            num_iso_packets - 1) - _transfer->buffer + (int)_transfer->iso_packet_desc[_transfer->
+                num_iso_packets - 1].length;
+        if (isoLength != length || length < 1 || isoLength < 1) {
             LOGE("Bad isochronous length set: %d vs %d", isoLength, length);
             return LIBUSB_ERROR_INVALID_PARAM;
         }

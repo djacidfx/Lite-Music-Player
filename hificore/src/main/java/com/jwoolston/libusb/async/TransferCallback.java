@@ -16,6 +16,8 @@
 
 package com.jwoolston.libusb.async;
 
+import androidx.annotation.NonNull;
+
 import com.jwoolston.libusb.LibusbError;
 
 import org.jetbrains.annotations.Nullable;
@@ -28,6 +30,6 @@ import java.nio.ByteBuffer;
  */
 public interface TransferCallback {
 
-    void onTransferComplete(AsyncTransfer transfer, int bytesTransferred) throws IOException;
-    void onTransferFailed(AsyncTransfer transfer, LibusbError result, int bytesTransferred) throws IOException;
+    void onTransferComplete(@NonNull AsyncTransfer transfer, int bytesTransferred) throws IOException;
+    void onTransferFailed(@NonNull AsyncTransfer transfer, @NonNull LibusbError result, int bytesTransferred) throws IOException;
 }

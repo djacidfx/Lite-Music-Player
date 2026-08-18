@@ -23,6 +23,7 @@ import com.jwoolston.libusb.UsbDevice;
 import com.jwoolston.libusb.UsbEndpoint;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  * @author Jared Woolston (Jared.Woolston@gmail.com)
@@ -33,7 +34,7 @@ public class AsyncTransfer {
     public static final int OFFSET_ISO_PACKET_SIZE = 0;
     public static final int OFFSET_ISO_PACKET_ACTUAL_SIZE = 4;
     public static final int OFFSET_ISO_PACKET_STATUS = 8;
-    private final int isoSlots;
+    public final int isoSlots;
     protected final UsbDevice device;
     private long nativeObject;
     private ByteBuffer buffer; // TODO: DMA support (libusb_dev_mem_alloc/free)
@@ -45,6 +46,9 @@ public class AsyncTransfer {
         this.device = device;
         this.nativeObject = nativeAllocate(isoSlots);
         this.isoSizeBuffer = isoSlots > 0 ? nativeGetIsoBuffer(nativeObject, isoSlots) : null;
+        if (isoSizeBuffer != null) {
+            isoSizeBuffer.order(ByteOrder.nativeOrder());
+        }
     }
 
     public boolean isInFlight() {
@@ -56,6 +60,11 @@ public class AsyncTransfer {
             throw new IllegalStateException("This transfer was already released");
         }
         return nativeObject;
+    }
+
+    /** Calls {@link UsbDevice#asyncTransfer(AsyncTransfer)}. */
+    public LibusbError submit() {
+        return device.asyncTransfer(this);
     }
 
     /** Calls {@link UsbDevice#cancelAsyncTransfer(AsyncTransfer)}. */
@@ -100,7 +109,7 @@ public class AsyncTransfer {
                 return buffer;
             }
         }
-        ByteBuffer buffer = ByteBuffer.allocateDirect(size);
+        ByteBuffer buffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder());
         setBuffer(buffer);
         return buffer;
     }
