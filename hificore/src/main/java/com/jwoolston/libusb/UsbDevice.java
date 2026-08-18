@@ -271,7 +271,10 @@ public class UsbDevice {
                 UsbConfiguration configuration = configurations[i];
                 interfaceCount = configuration.getInterfaceCount();
                 for (int j = 0; j < interfaceCount; j++) {
-                    interfaces[offset++] = configuration.getInterface(j);
+                    int altSettingsCount = configuration.getAltSettingCount(j);
+                    for (int k = 0; k < altSettingsCount; k++) {
+                        interfaces[offset++] = configuration.getInterface(j, k);
+                    }
                 }
             }
         }
@@ -819,11 +822,17 @@ public class UsbDevice {
 
     /**
      * Performs an asynchronous transaction. The direction of the transfer is determined differently
-     * depending on the type of the transfer:
+     * depending on the type of the transfer:<p>
      * - control transfer: the direction is read from the request type in the setup packet that is
-     *                     in the first 8 bytes of the buffer
+     *                     in the first 8 bytes of the buffer<p>
      * - interrupt / bulk / isochronous transfer: the direction is determined by the endpoint's
-     *                                            direction.
+     *                                            direction.<p>
+     *
+     * In order to continuously transfer data, for example to an isochronous endpoint, make sure to
+     * queue multiple transfers on the endpoint at the same time, and re-queue a transfer in the
+     * completion callback. This prevents scheduling delays from causing transfer interruptions.
+     * For multiple queued transfers on one endpoint, you are guaranteed to receive callbacks in the
+     * same order as the transfers were submitted, except if a transfer is manually canceled.
      *
      * @param transfer the transfer, including type, endpoint, timeout, buffer and callback. this
      *                 metadata can  later be used to cancel the transfer using {@link
@@ -831,6 +840,8 @@ public class UsbDevice {
      *
      * @return error code or {@link LibusbError#LIBUSB_SUCCESS} if success
      */
+    // wrt order: https://github.com/libusb/libusb/issues/1077 - Linux backend is OK because it uses
+    // reap urb ioctl which reads from an ordered list in kernel.
     public LibusbError asyncTransfer(@NotNull AsyncTransfer transfer) {
         if (transfer.getCallback() == null) {
             throw new IllegalArgumentException("Transfer callback should be set");

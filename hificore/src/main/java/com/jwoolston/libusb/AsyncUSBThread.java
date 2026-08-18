@@ -32,6 +32,7 @@ public class AsyncUSBThread extends Thread {
 
     AsyncUSBThread(@NotNull UsbManager context) {
         super(THREAD_NAME);
+        setPriority(9);
         this.context = context;
     }
 

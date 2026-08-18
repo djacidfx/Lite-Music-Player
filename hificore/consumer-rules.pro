@@ -10,3 +10,16 @@
 -dontwarn android.media.INativeAudioVolumeGroupCallback
 -dontwarn android.media.INativeAudioVolumeGroupCallback$Stub
 -dontwarn android.media.audio.common.AudioVolumeGroupChangeEvent
+
+# JNI
+-keep class com.jwoolston.libusb.async.TransferCallback {
+    public void onTransferComplete(com.jwoolston.libusb.async.AsyncTransfer, int);
+    public void onTransferFailed(com.jwoolston.libusb.async.AsyncTransfer, com.jwoolston.libusb.LibusbError, int);
+}
+-keep class com.jwoolston.libusb.async.AsyncTransfer {
+    public long getNativeObject();
+    public com.jwoolston.libusb.async.TransferCallback getCallback();
+}
+-keep class com.jwoolston.libusb.LibusbError {
+    public static com.jwoolston.libusb.LibusbError fromNative(int);
+}

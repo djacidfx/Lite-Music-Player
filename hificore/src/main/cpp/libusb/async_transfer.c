@@ -27,6 +27,14 @@ Java_com_jwoolston_libusb_async_AsyncTransfer_nativeAllocate(JNIEnv *env, jobjec
     return (jlong)libusb_alloc_transfer(iso_slots);
 }
 
+JNIEXPORT jobject JNICALL
+Java_com_jwoolston_libusb_async_AsyncTransfer_nativeGetIsoBuffer(JNIEnv *env, jobject thiz,
+                                                                 jlong nativeObject, jint iso_slots) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) nativeObject;
+    return (*env)->NewDirectByteBuffer(env, (void*)(&transfer->iso_packet_desc[0]),
+                                       sizeof(struct libusb_iso_packet_descriptor)*iso_slots);
+}
+
 JNIEXPORT void JNICALL
 Java_com_jwoolston_libusb_async_AsyncTransfer_nativeDestroy(JNIEnv *env, jobject instance,
                                                                     jlong nativeObject) {
@@ -117,22 +125,6 @@ Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillIsochronousTransfer(JNIE
     transfer->type = LIBUSB_TRANSFER_TYPE_ISOCHRONOUS;
     transfer->timeout = timeout;
     transfer->num_iso_packets = num_packets;
-}
-
-JNIEXPORT jint JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeSetIsochronousPacket(JNIEnv *env, jobject thiz,
-                                                                         jlong native_object,
-                                                                         jint packet_number,
-                                                                         jint size) {
-    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
-    if (packet_number >= transfer->num_iso_packets)
-        return -transfer->num_iso_packets;
-    if (packet_number >= 0) {
-        transfer->iso_packet_desc[packet_number].length = size;
-    } else {
-        libusb_set_iso_packet_lengths(transfer, size);
-    }
-    return 0;
 }
 
 JNIEXPORT void JNICALL

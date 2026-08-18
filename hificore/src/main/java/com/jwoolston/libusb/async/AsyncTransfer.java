@@ -29,16 +29,22 @@ import java.nio.ByteBuffer;
  */
 public class AsyncTransfer {
 
+    public static final int SIZEOF_ISO_PACKET_DESCRIPTOR = 12;
+    public static final int OFFSET_ISO_PACKET_SIZE = 0;
+    public static final int OFFSET_ISO_PACKET_ACTUAL_SIZE = 4;
+    public static final int OFFSET_ISO_PACKET_STATUS = 8;
     private final int isoSlots;
     protected final UsbDevice device;
     private long nativeObject;
     private ByteBuffer buffer; // TODO: DMA support (libusb_dev_mem_alloc/free)
+    private final ByteBuffer isoSizeBuffer;
     private TransferCallback callback;
 
     public AsyncTransfer(@NonNull UsbDevice device, int isoSlots) {
         this.isoSlots = isoSlots;
         this.device = device;
         this.nativeObject = nativeAllocate(isoSlots);
+        this.isoSizeBuffer = isoSlots > 0 ? nativeGetIsoBuffer(nativeObject, isoSlots) : null;
     }
 
     public boolean isInFlight() {
@@ -61,6 +67,9 @@ public class AsyncTransfer {
         if (!buffer.isDirect()) {
             throw new IllegalArgumentException("Buffer should be direct");
         }
+        if (nativeObject == 0) {
+            throw new IllegalArgumentException("This transfer was already released");
+        }
         if (isInFlight()) {
             throw new IllegalStateException("Transfer is in flight, can't change buffer anymore");
         }
@@ -71,7 +80,7 @@ public class AsyncTransfer {
         if (buffer == null) {
             throw new IllegalStateException("Buffer of transfer not set yet");
         }
-        if (isInFlight()) {
+        if (nativeObject != 0 && isInFlight()) {
             throw new IllegalStateException("Transfer is in flight, can't use buffer anymore");
         }
         return buffer;
@@ -97,6 +106,9 @@ public class AsyncTransfer {
     }
 
     public void setCallback(@NonNull TransferCallback callback) {
+        if (nativeObject == 0) {
+            throw new IllegalArgumentException("This transfer was already released");
+        }
         this.callback = callback;
     }
 
@@ -319,15 +331,40 @@ public class AsyncTransfer {
         if (isInFlight()) {
             throw new IllegalStateException("Transfer is in flight, can't change transfer anymore");
         }
-        int ret = nativeSetIsochronousPacket(getNativeObject(), packetNumber, size);
-        if (ret < 0) {
-            throw new IllegalArgumentException("Transfer is set to " + -ret +
-                    " packets but tried to change packet " + packetNumber);
+        if (packetNumber >= isoSlots) {
+            throw new IllegalArgumentException("Packet number " + packetNumber + " would be out " +
+                    "of bounds (" + isoSlots + ")");
+        }
+        if (packetNumber >= 0) {
+            isoSizeBuffer.putInt(packetNumber * SIZEOF_ISO_PACKET_DESCRIPTOR +
+                    OFFSET_ISO_PACKET_SIZE, size);
+        } else {
+            for (int i = 0; i < isoSlots; i++) {
+                isoSizeBuffer.putInt(i * SIZEOF_ISO_PACKET_DESCRIPTOR +
+                        OFFSET_ISO_PACKET_SIZE, size);
+            }
         }
     }
 
+    /**
+     * Returns a direct ByteBuffer pointing to a C-array of libusb_iso_packet_descriptor. They can
+     * be modified using the ByteBuffer methods and helper sizes like {@link
+     * #SIZEOF_ISO_PACKET_DESCRIPTOR}, {@link #OFFSET_ISO_PACKET_SIZE}, {@link
+     * #OFFSET_ISO_PACKET_ACTUAL_SIZE} and {@link #OFFSET_ISO_PACKET_STATUS}.<p>
+     *
+     * Take special care to not use this buffer after submitting a transfer!
+     */
+    public ByteBuffer getIsoBuffer() {
+        if (isoSlots == 0) {
+            throw new IllegalArgumentException("This transfer was set up with zero iso slots");
+        }
+        if (isInFlight()) {
+            throw new IllegalStateException("Transfer is in flight, can't change transfer anymore");
+        }
+        return isoSizeBuffer;
+    }
+
     private native void nativeFillIsochronousTransfer(long nativeObject, int address, int timeout, int numPackets);
-    private native int nativeSetIsochronousPacket(long nativeObject, int packetNumber, int size);
 
     public void setFlags(int flags, int mask) {
         if (isInFlight()) {
@@ -353,6 +390,7 @@ public class AsyncTransfer {
     }
 
     private native long nativeAllocate(int isoSlots);
+    private native ByteBuffer nativeGetIsoBuffer(long nativeObject, int isoSlots);
     private native boolean nativeIsInFlight(long nativeObject);
     private native void nativeDestroy(long nativeObject);
 }
