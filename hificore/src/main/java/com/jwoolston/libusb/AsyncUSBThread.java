@@ -16,8 +16,6 @@
 
 package com.jwoolston.libusb;
 
-import androidx.media3.common.util.Log;
-
 import org.jetbrains.annotations.NotNull;
 
 /**

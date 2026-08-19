@@ -41,7 +41,7 @@ import java.nio.ByteBuffer;
  */
 public class UsbDevice {
 
-    private final UsbManager manager;
+    public final UsbManager manager;
     final @NotNull String name;
     final @Nullable String manufacturerName;
     final @Nullable String productName;
@@ -717,8 +717,9 @@ public class UsbDevice {
     public int controlTransfer(int requestType, int request, int value, int index, byte[] buffer, int offset,
                                int length, int timeout) {
         checkBounds(buffer, offset, length);
-        return nativeControlRequest(getNativeObject(), requestType, request, value, index, buffer, offset,
-                length, timeout);
+        // TODO: safely reimplement blocking transfer based on async transfer, in a real-time safe
+        //  way. most likely blocking on condition variable in native and setting it from callback.
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -755,7 +756,9 @@ public class UsbDevice {
      */
     public int bulkTransfer(UsbEndpoint endpoint, byte[] buffer, int offset, int length, int timeout) {
         checkBounds(buffer, offset, length);
-        return nativeBulkRequest(getNativeObject(), endpoint.getAddress(), buffer, offset, length, timeout);
+        // TODO: safely reimplement blocking transfer based on async transfer, in a real-time safe
+        //  way. most likely blocking on condition variable in native and setting it from callback.
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -792,7 +795,9 @@ public class UsbDevice {
      */
     public int interruptTransfer(UsbEndpoint endpoint, byte[] buffer, int offset, int length, int timeout) {
         checkBounds(buffer, offset, length);
-        return nativeInterruptRequest(getNativeObject(), endpoint.getAddress(), buffer, offset, length, timeout);
+        // TODO: safely reimplement blocking transfer based on async transfer, in a real-time safe
+        //  way. most likely blocking on condition variable in native and setting it from callback.
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -822,6 +827,9 @@ public class UsbDevice {
             throw new IllegalArgumentException("Transfer callback should be set");
         }
         @NonNull ByteBuffer buffer = transfer.getBuffer();
+        manager.onTransferAdded(transfer.getNativeObject());
+        // TODO: add dispatch to handler in real-time-safe way (if no dispatch and not blocking, it
+        //  may use real-time-unsafe in place callback)
         return LibusbError.fromNative(nativeRequestAsync(getNativeObject(), transfer,
                 buffer, buffer.position(), buffer.remaining()));
     }
@@ -872,19 +880,10 @@ public class UsbDevice {
 
     private native int nativeSetConfiguration(long device, int configurationID);
 
-    private native int nativeControlRequest(long device, int requestType, int request, int value,
-                                            int index, byte[] buffer, int offset, int length, int timeout);
-
     private native int nativeRequestAsync(long device, @NotNull AsyncTransfer transfer,
                                           @NotNull ByteBuffer buffer, int offset, int length);
 
     private native int nativeCancelAsync(long transfer);
-
-    private native int nativeBulkRequest(long device, int endpoint, byte[] buffer, int offset,
-                                         int length, int timeout);
-
-    private native int nativeInterruptRequest(long device, int endpoint, byte[] buffer, int offset,
-                                              int length, int timeout);
 
     private native int nativeResetDevice(long device);
 

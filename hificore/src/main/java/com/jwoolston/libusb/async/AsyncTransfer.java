@@ -395,6 +395,7 @@ public class AsyncTransfer {
         if (isInFlight())
             throw new IllegalStateException("Can't release in-progress transfer");
         nativeDestroy(getNativeObject());
+        device.manager.onTransferReleased(nativeObject);
         nativeObject = 0;
     }
 

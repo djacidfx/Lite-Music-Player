@@ -25,6 +25,9 @@ import androidx.media3.common.util.Log;
 import org.jetbrains.annotations.NotNull;
 import org.nift4.gramophone.hificore.AdaptiveDynamicRangeCompression;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * This class allows you to access the state of USB and communicate with USB devices.
  * Currently only host mode is supported in the public API.
@@ -46,6 +49,8 @@ public class UsbManager {
     private int refCount;
     @GuardedBy("#lock")
     private long nativeObject;
+    @GuardedBy("#transfers")
+    private final Set<Long> transfers = new HashSet<>();
 
     final Object lock = new Object();
     private volatile AsyncUSBThread asyncUsbThread;
@@ -90,13 +95,20 @@ public class UsbManager {
     }
 
     public void destroy() {
+        // both of these throw clauses shouldn't be reachable from finalizer. if everything is
+        // leaked, GC will close it in the right order at least :)
         synchronized (lock) {
             if (refCount != 0) {
-                throw new IllegalStateException("Can't close UsbManager if some device is still open!");
+                throw new IllegalStateException("Can't destroy UsbManager if some device is still open!");
             }
-            if (nativeObject != 0) {
-                nativeDestroy(getNativeObject());
-                nativeObject = 0;
+            synchronized (transfers) {
+                if (!transfers.isEmpty()) {
+                    throw new IllegalStateException("Can't destroy UsbManager if some transfer is still not released!");
+                }
+                if (nativeObject != 0) {
+                    nativeDestroy(nativeObject);
+                    nativeObject = 0;
+                }
             }
         }
     }
@@ -107,13 +119,12 @@ public class UsbManager {
         super.finalize();
     }
 
+    @GuardedBy("#lock") // except AsyncUSBThread :)
     public long getNativeObject() {
-        synchronized (lock) {
-            if (nativeObject == 0) {
-                throw new IllegalStateException("This UsbManager was already destroyed");
-            }
-            return nativeObject;
+        if (nativeObject == 0) {
+            throw new IllegalStateException("This UsbManager was already destroyed");
         }
+        return nativeObject;
     }
 
     @GuardedBy("#lock")
@@ -142,6 +153,19 @@ public class UsbManager {
             Log.d(TAG, "Starting async usb thread.");
             asyncUsbThread = new AsyncUSBThread(this);
             asyncUsbThread.start();
+        }
+    }
+
+    void onTransferAdded(long transfer) {
+        synchronized (transfers) {
+            transfers.add(transfer);
+        }
+    }
+
+    // Do NOT call this manually, AsyncTransfer will call it.
+    public void onTransferReleased(long transfer) {
+        synchronized (transfers) {
+            transfers.remove(transfer);
         }
     }
 

@@ -23,7 +23,7 @@ import org.jetbrains.annotations.NotNull;
 /**
  * @author Jared Woolston (Jared.Woolston@gmail.com)
  */
-public class LibUsbDeviceDescriptor {
+class LibUsbDeviceDescriptor {
 
     private final long nativeObject;
 

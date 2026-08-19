@@ -43,7 +43,7 @@ import androidx.media3.common.util.Util;
 import androidx.media3.exoplayer.analytics.PlayerId;
 import androidx.media3.exoplayer.audio.AudioOutput;
 import androidx.media3.exoplayer.audio.AudioOutputProvider.OutputConfig;
-import androidx.media3.exoplayer.audio.DefaultAudioSink;
+import androidx.media3.extractor.ExtractorUtil;
 
 import org.nift4.gramophone.hificore.NativeTrack;
 
@@ -234,7 +234,7 @@ public final class NativeTrackAudioOutput implements AudioOutput {
       throws WriteException {
     if (!isOutputPcm && framesPerEncodedSample == 0) {
       // If this is the first encoded sample, calculate the sample size in frames.
-      framesPerEncodedSample = DefaultAudioSink.getFramesPerEncodedSample(config.encoding, buffer);
+      framesPerEncodedSample = ExtractorUtil.getFramesPerEncodedSample(config.encoding, buffer);
     }
     maybeReportUnderrun();
     int bytesRemaining = buffer.remaining();

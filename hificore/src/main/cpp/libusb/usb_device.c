@@ -377,69 +377,6 @@ Java_com_jwoolston_libusb_UsbDevice_nativeSetConfiguration(JNIEnv *env, jobject 
 }
 
 JNIEXPORT jint JNICALL
-Java_com_jwoolston_libusb_UsbDevice_nativeControlRequest(JNIEnv *env, jobject instance,
-                                                                   jlong device, jint requestType,
-                                                                   jint request, jint value, jint index,
-                                                                   jbyteArray buffer_, jint offset, jint length,
-                                                                   jint timeout) {
-    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
-    jbyte *buffer = NULL;
-    if (buffer_) {
-        // We have to use this over GetPrimitiveArrayCritical due to the need to call other JNI functions
-        buffer = (*env)->GetByteArrayElements(env, buffer_, NULL);
-    }
-    jint result = libusb_control_transfer(deviceHandle, (uint8_t) (0xFF & requestType), (uint8_t) (0xFF & request),
-                                          (uint16_t) (0xFFFF & value), (uint16_t) (0xFFFF & index),
-                                          (unsigned char *) (buffer + offset), (uint16_t) (0xFFFF & length),
-                                          (unsigned int) timeout);
-    if (buffer) {
-        (*env)->ReleaseByteArrayElements(env, buffer_, buffer, 0);
-    }
-
-    return result;
-}
-
-JNIEXPORT jint JNICALL
-Java_com_jwoolston_libusb_UsbDevice_nativeBulkRequest(JNIEnv *env, jobject instance, jlong device,
-                                                                jint endpoint, jbyteArray buffer_, jint offset,
-                                                                jint length, jint timeout) {
-    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
-    jbyte *buffer = NULL;
-    if (buffer_) {
-        // We have to use this over GetPrimitiveArrayCritical due to the need to call other JNI functions
-        buffer = (*env)->GetByteArrayElements(env, buffer_, NULL);
-    }
-
-    int transferred;
-    jint result = libusb_bulk_transfer(deviceHandle, (unsigned char) (0xFF & endpoint),
-                                       (unsigned char*)buffer + offset, length, &transferred, (unsigned int) timeout);
-
-    if (buffer) {
-        (*env)->ReleaseByteArrayElements(env, buffer_, buffer, 0);
-    }
-    return ((result == 0) ? transferred : result);
-}
-
-JNIEXPORT jint JNICALL
-Java_com_jwoolston_libusb_UsbDevice_nativeInterruptRequest(JNIEnv *env, jobject instance,
-                                                                     jlong device, jint endpoint,
-                                                                     jbyteArray buffer_, jint offset,
-                                                                     jint length, jint timeout) {
-    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
-    jbyte *buffer = NULL;
-    if (buffer_) {
-        // We have to use this over GetPrimitiveArrayCritical due to the need to call other JNI functions
-        buffer = (*env)->GetByteArrayElements(env, buffer_, NULL);
-    }
-    jint transfered;
-    jint result = libusb_interrupt_transfer(deviceHandle, endpoint, buffer + offset, length, &transfered, timeout);
-    if (buffer) {
-        (*env)->ReleaseByteArrayElements(env, buffer_, buffer, 0);
-    }
-    return ((result == 0) ? transfered : result);
-}
-
-JNIEXPORT jint JNICALL
 Java_com_jwoolston_libusb_UsbDevice_nativeRequestAsync(JNIEnv *env, jobject instance,
                                                        jlong device, jobject transfer,
                                                        jobject buffer,
