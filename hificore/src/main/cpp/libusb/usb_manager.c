@@ -42,7 +42,6 @@ void log_cb(libusb_context *ctx, enum libusb_log_level level, const char *str) {
 
 JNIEXPORT jlong JNICALL
 Java_com_jwoolston_libusb_UsbManager_nativeInitialize(JNIEnv *env, jobject instance) {
-    initializeUacLog(env);
     LOGD("Initializing libusb.");
     struct libusb_context *ctx;
     const struct libusb_init_option options[1] = {

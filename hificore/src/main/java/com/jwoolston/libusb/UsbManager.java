@@ -59,9 +59,9 @@ public class UsbManager {
     private final android.hardware.usb.UsbManager androidUsbManager;
 
     public UsbManager(@NotNull Context context) {
+        UsbDevice.initialize(); // must be called before nativeInitialize because log is set up here
         nativeObject = nativeInitialize();
         setNativeLogLevel(LoggingLevel.WARNING); // logging uses JNI, it's expensive, so be careful
-        UsbDevice.initialize();
         androidUsbManager = (android.hardware.usb.UsbManager) context.getSystemService(Context.USB_SERVICE);
     }
 

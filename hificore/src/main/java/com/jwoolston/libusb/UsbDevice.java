@@ -121,10 +121,14 @@ public class UsbDevice {
         this.configurations = configurations;
     }
 
-    static void initialize() {
+    static {
         if (!nativeInitialize()) {
             throw new RuntimeException("Failed to initialize native layer for UsbDevice.");
         }
+    }
+
+    static void initialize() {
+        // intentionally empty, forces class initialization
     }
 
     /**

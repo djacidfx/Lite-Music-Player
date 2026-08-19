@@ -240,6 +240,7 @@ static void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfe
 
 JNIEXPORT jboolean JNICALL
 Java_com_jwoolston_libusb_UsbDevice_nativeInitialize(JNIEnv *env, jclass type) {
+    initializeUacLog(env);
     // Find the interrupt transfer callback method
     jobject clazz = (*env)->FindClass(env, "com/jwoolston/libusb/async/TransferCallback");
     if (clazz == NULL) {
