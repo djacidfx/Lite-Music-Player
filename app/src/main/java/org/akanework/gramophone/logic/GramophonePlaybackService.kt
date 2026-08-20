@@ -1507,7 +1507,6 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             //lyrics = null
             //scheduleSendingLyrics(true)
         }
-        refreshMediaButtonCustomLayout()
 
         // reshuffle queue when shuffle AND repeat all are enabled
         val player = endedWorkaroundPlayer
