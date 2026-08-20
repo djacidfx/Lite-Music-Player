@@ -844,9 +844,6 @@ public class UsbDevice {
             throw new IllegalArgumentException("Transfer callback should be set");
         }
         Looper l = transfer.callbackLooper;
-        if (l != null && !l.getThread().isAlive()) {
-            throw new IllegalArgumentException("The callback looper is dead");
-        }
         manager.onTransferAdded(transfer);
         int fd = -1;
         if (l != null) {
