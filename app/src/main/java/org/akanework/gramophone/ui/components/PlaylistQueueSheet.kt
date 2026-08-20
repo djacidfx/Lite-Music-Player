@@ -215,9 +215,9 @@ class PlaylistQueueSheet(
                         mqEnabled = mqEnabled,
                         onDismiss = { dismiss() },
                         onRecyclerScrollTo = {
-                            recyclerView.smoothScrollToPosition(playlistAdapter.playlist.first.indexOfFirst { i ->
+                            playlistAdapter.playlist.first.indexOfFirst { i ->
                                 i == (instance?.currentMediaItemIndex ?: 0)
-                            })
+                            }.takeIf { it != -1 }?.let { recyclerView.smoothScrollToPosition(it) }
                         }
                     )
                 }
