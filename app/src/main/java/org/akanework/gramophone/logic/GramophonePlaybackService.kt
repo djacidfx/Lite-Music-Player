@@ -1026,7 +1026,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             return itemsFuture
         }
 
-        fun buildCustomCommand(action: String, queueId: Long?): SessionCommand {
+        fun buildMqCustomCommand(action: String, queueId: Long?): SessionCommand {
             return SessionCommand(action, Bundle.EMPTY).apply {
                 val plr = endedWorkaroundPlayer!!
                 queueId?.let {
@@ -1175,7 +1175,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                         qb.commitQueue(index, startIndex)
 
                         for (controller in mediaSession!!.connectedControllers) {
-                            val customCommand = buildCustomCommand(CLIENT_QB_REFRESH_ALL, null)
+                            val customCommand = buildMqCustomCommand(CLIENT_QB_REFRESH_ALL, null)
                             mediaSession!!.sendCustomCommand(
                                 controller,
                                 customCommand,
@@ -1203,7 +1203,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     }
                     if (status) {
                         for (controller in mediaSession!!.connectedControllers) {
-                            val customCommand = buildCustomCommand(CLIENT_QB_REFRESH_ITEM, queueId)
+                            val customCommand = buildMqCustomCommand(CLIENT_QB_REFRESH_ITEM, queueId)
                             mediaSession!!.sendCustomCommand(controller, customCommand, Bundle.EMPTY)
                         }
                     }
@@ -1225,7 +1225,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     }
                     if (status) {
                         for (controller in mediaSession!!.connectedControllers) {
-                            val customCommand = buildCustomCommand(CLIENT_QB_REFRESH_ITEM, queueId)
+                            val customCommand = buildMqCustomCommand(CLIENT_QB_REFRESH_ITEM, queueId)
                             mediaSession!!.sendCustomCommand(controller, customCommand, Bundle.EMPTY)
                         }
                     }
@@ -1269,7 +1269,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
 
                     if (status) {
                         for (controller in mediaSession!!.connectedControllers) {
-                            val customCommand = buildCustomCommand(refreshLevel, null)
+                            val customCommand = buildMqCustomCommand(refreshLevel, null)
                             mediaSession!!.sendCustomCommand(controller, customCommand, Bundle.EMPTY)
                         }
                     }
@@ -1298,7 +1298,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     }
                     if (status) {
                         for (controller in mediaSession!!.connectedControllers) {
-                            val customCommand = buildCustomCommand(CLIENT_QB_REFRESH_ITEM, queueId)
+                            val customCommand = buildMqCustomCommand(CLIENT_QB_REFRESH_ITEM, queueId)
                             mediaSession!!.sendCustomCommand(controller, customCommand, Bundle.EMPTY)
                         }
                     }
