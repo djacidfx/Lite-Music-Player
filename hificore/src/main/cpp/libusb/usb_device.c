@@ -145,16 +145,17 @@ void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfer) {
         LOGE("Null callback holder! Callback cannot be called.");
         abort();
     }
-    if (holder->fd != -1) {
-        int counter = 1;
+    if (holder->ready == 1 && holder->fd != -1) {
+        uint64_t counter = 1;
         int fd = holder->fd;
         // Java will iterate though list of weak references with transfers to find this one. This is
         // safe because we have a JNI-side global reference we'll only release if Java finds us.
-        holder->fd = -1; // don't access holder after this, java may reap it instantly
+        holder->ready = 2; // don't access holder after this, java may reap it instantly
         write(fd, &counter, sizeof(counter)); // notify java to wake up if sleeping
         close(fd);
         return;
     }
+
     int result;
     switch (transfer->status) {
         case LIBUSB_TRANSFER_COMPLETED:
@@ -209,24 +210,27 @@ void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfer) {
         jobject useless = (*env)->CallObjectMethod(
                 env, holder->buffer, byteBufferLimit, transferred);
         (*env)->DeleteLocalRef(env, useless);
+        (*env)->DeleteGlobalRef(env, holder->buffer);
     }
     callback = (*env)->CallObjectMethod(env, holder->transfer, getTransferCallback);
+    jobject gTransfer = holder->transfer;
     // Mark the transfer as no longer in-flight now that we're no longer using it.
     // After this, we mustn't access it anymore as ownership returns to JVM with this.
     // But we should do it before calling the callback.
-    transfer->dev_handle = NULL; transfer = NULL;
-    if (result >= 0) {
-        (*env)->CallVoidMethod(env, callback, transferCallback, holder->transfer, transferred);
-    } else {
-        jobject error = (*env)->CallStaticObjectMethod(env, errorClass, getError, result);
-        (*env)->CallVoidMethod(env, callback, transferFailedCallback, holder->transfer, error,
-                               transferred);
-        (*env)->DeleteLocalRef(env, error);
+    holder->ready = 0; transfer = NULL;
+    if (callback != NULL) {
+        if (result >= 0) {
+            (*env)->CallVoidMethod(env, callback, transferCallback, gTransfer, transferred);
+        } else {
+            jobject error = (*env)->CallStaticObjectMethod(env, errorClass, getError, result);
+            (*env)->CallVoidMethod(env, callback, transferFailedCallback, gTransfer, error,
+                                   transferred);
+            (*env)->DeleteLocalRef(env, error);
+        }
+        (*env)->DeleteLocalRef(env, callback);
     }
-    (*env)->DeleteLocalRef(env, callback);
-    // We must always free our callback holder's refs
-    (*env)->DeleteGlobalRef(env, holder->transfer);
-    (*env)->DeleteGlobalRef(env, holder->buffer);
+    // allow freeing the transfer
+    (*env)->DeleteGlobalRef(env, gTransfer);
 }
 
 JNIEXPORT jboolean JNICALL
@@ -369,22 +373,35 @@ Java_com_jwoolston_libusb_UsbDevice_nativeSetConfiguration(JNIEnv *env, jobject 
 
 JNIEXPORT jint JNICALL
 Java_com_jwoolston_libusb_UsbDevice_nativeRequestAsync(JNIEnv *env, jobject instance,
+                                                       jlong device,
                                                        jobject transferObject,
                                                        jint fd, jobject buffer,
                                                        jint offset, jint length) {
     struct libusb_transfer *_transfer = (struct libusb_transfer *)
             (*env)->CallLongMethod(env, transferObject, getNativePtrFromAsyncTransfer);
+    struct transfer_callback_holder *holder = _transfer->user_data;
+    if (holder == NULL) {
+        LOGE("Null user data set");
+        if (fd != -1) close(fd);
+        return LIBUSB_ERROR_INVALID_PARAM;
+    }
+    if (holder->ready != 1) {
+        LOGE("Bad ready set: %d", holder->ready);
+        if (fd != -1) close(fd);
+        return LIBUSB_ERROR_INVALID_PARAM;
+    }
     // Ensure none of the free flags, which are footguns here, are set
     if ((_transfer->flags & (LIBUSB_TRANSFER_FREE_BUFFER | LIBUSB_TRANSFER_FREE_TRANSFER)) != 0) {
         LOGE("Bad flags set: %d", _transfer->flags);
         if (fd != -1) close(fd);
+        holder->ready = 0;
         return LIBUSB_ERROR_INVALID_PARAM;
     }
-    jobject globalTransfer = (*env)->NewGlobalRef(env, transferObject);
     unsigned char *_buffer = (*env)->GetDirectBufferAddress(env, buffer);
+    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
 
     // caller must fill num_iso_packets, iso_packet_desc, timeout, flags, type and endpoint
-    // dev_handle is done in fly() by UsbDevice to lock the transferObject
+    _transfer->dev_handle = deviceHandle;
     _transfer->buffer = _buffer + offset;
     _transfer->length = length;
     _transfer->callback = libusb_transfer_callback;
@@ -395,6 +412,7 @@ Java_com_jwoolston_libusb_UsbDevice_nativeRequestAsync(JNIEnv *env, jobject inst
         LOGE("Bad control setup length set: %d vs %d", libusb_control_transfer_get_setup(
                 _transfer)->wLength, length);
         if (fd != -1) close(fd);
+        holder->ready = 0;
         return LIBUSB_ERROR_INVALID_PARAM;
     }
 
@@ -406,21 +424,18 @@ Java_com_jwoolston_libusb_UsbDevice_nativeRequestAsync(JNIEnv *env, jobject inst
         if (isoLength != length || length < 1 || isoLength < 1) {
             LOGE("Bad isochronous length set: %d vs %d", isoLength, length);
             if (fd != -1) close(fd);
+            holder->ready = 0;
             return LIBUSB_ERROR_INVALID_PARAM;
         }
     }
 
     // Populate the transferObject structure
-    struct transfer_callback_holder *holder = _transfer->user_data;
-    if (!holder)
-        _transfer->user_data = holder = malloc(sizeof(struct transfer_callback_holder));
     JavaVM *vm;
     (*env)->GetJavaVM(env, &vm);
     holder->vm = vm;
-    holder->transfer = globalTransfer;
+    holder->transfer = (*env)->NewGlobalRef(env, transferObject);
     holder->buffer = (*env)->NewGlobalRef(env, buffer);
     holder->fd = fd;
-    _transfer->user_data = holder;
 
     // Submit the transferObject
     int ret = libusb_submit_transfer(_transfer);
@@ -432,6 +447,7 @@ Java_com_jwoolston_libusb_UsbDevice_nativeRequestAsync(JNIEnv *env, jobject inst
         // We must always free our callback holder's refs
         (*env)->DeleteGlobalRef(env, holder->transfer);
         (*env)->DeleteGlobalRef(env, holder->buffer);
+        holder->ready = 0;
         if (fd != -1) close(fd);
     }
     return ret;

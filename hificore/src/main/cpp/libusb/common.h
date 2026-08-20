@@ -22,7 +22,7 @@
 
 #include <jni.h>
 #include <libusb.h>
-#include <stdbool.h>
+#include <stdatomic.h>
 
 #include "logging.h"
 
@@ -31,6 +31,7 @@ struct transfer_callback_holder {
     jobject buffer;
     jobject transfer;
     int fd;
+    atomic_int ready;
 };
 void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfer);
 

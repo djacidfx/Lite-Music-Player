@@ -59,7 +59,7 @@ public class UsbDevice {
     final int protocol;
 
     private final UsbDeviceConnection connection;
-
+    private final boolean requireRealTime;
     private long nativeObject;
 
     /**
@@ -89,12 +89,13 @@ public class UsbDevice {
     /**
      * UsbDevice should only be instantiated by UsbManager implementation
      */
-    UsbDevice(@NonNull UsbManager manager, @NonNull android.hardware.usb.UsbDevice device, @NonNull UsbDeviceConnection connection) {
+    UsbDevice(@NonNull UsbManager manager, @NonNull android.hardware.usb.UsbDevice device, @NonNull UsbDeviceConnection connection, boolean requireRealTime) {
         this.connection = connection;
         this.nativeObject = wrapDevice(manager.getNativeObject(), connection.getFileDescriptor());
         Preconditions.checkArgument(nativeObject != 0, "UsbDevice initialization failed.");
         this.manager = manager;
         this.device = device;
+        this.requireRealTime = requireRealTime;
         name = device.getDeviceName();
 
         LibUsbDeviceDescriptor descriptor = LibUsbDeviceDescriptor.getDeviceDescriptor(this);
@@ -826,29 +827,40 @@ public class UsbDevice {
     // wrt order: https://github.com/libusb/libusb/issues/1077 - Linux backend is OK because it uses
     // reap urb ioctl which reads from an ordered list in kernel.
     public LibusbError asyncTransfer(@NotNull AsyncTransfer transfer) {
+        @NonNull ByteBuffer buffer;
         synchronized (transfer) {
             if (transfer.isInFlight()) {
                 throw new IllegalArgumentException("Transfer already submitted previously and not" +
                         " back yet!");
             }
-            transfer.fly(getNativeObject());
+            if (requireRealTime && transfer.callbackLooper == null) {
+                throw new IllegalArgumentException("This device was configured to require " +
+                        "real-time-safe transfers, but this transfer has no callback looper.");
+            }
+            buffer = transfer.getBuffer();
+            transfer.fly();
         }
         if (transfer.getCallback() == null) {
             throw new IllegalArgumentException("Transfer callback should be set");
         }
-        @NonNull ByteBuffer buffer = transfer.getBuffer();
-        manager.onTransferAdded(transfer);
         Looper l = transfer.callbackLooper;
+        if (l != null && !l.getThread().isAlive()) {
+            throw new IllegalArgumentException("The callback looper is dead");
+        }
+        manager.onTransferAdded(transfer);
         int fd = -1;
         if (l != null) {
             fd = manager.getWriteFdForLooper(l).detachFd();
         }
-        return LibusbError.fromNative(nativeRequestAsync(transfer, fd, buffer, buffer.position(),
-                buffer.remaining()));
+        return LibusbError.fromNative(nativeRequestAsync(getNativeObject(), transfer, fd, buffer,
+                buffer.position(), buffer.remaining()));
     }
 
     private int blockingTransfer(@NotNull AsyncTransfer transfer) {
         final int[] ret2 = {0};
+        if (Thread.currentThread() == manager.asyncUsbThread) {
+            throw new IllegalArgumentException("Can't make blocking transfer on event thread");
+        }
         if (transfer.getCallback() != null) {
             throw new IllegalArgumentException("Transfer callback should be null");
         }
@@ -863,8 +875,8 @@ public class UsbDevice {
                 ret2[0] = result.code;
             }
         });
-        transfer.fly(getNativeObject());
         @NonNull ByteBuffer buffer = transfer.getBuffer();
+        transfer.fly();
         manager.onTransferAdded(transfer);
         if (transfer.callbackLooper != null) {
             throw new IllegalArgumentException("Transfer callback looper should be null");
@@ -872,14 +884,16 @@ public class UsbDevice {
         try (ParcelFileDescriptor blockFd = ParcelFileDescriptor.adoptFd(
                 manager.nativeEventfd(true))) {
             try (ParcelFileDescriptor fd = blockFd.dup()) {
-                LibusbError ret = LibusbError.fromNative(nativeRequestAsync(transfer, fd.detachFd(),
-                        buffer, buffer.position(), buffer.remaining()));
+                LibusbError ret = LibusbError.fromNative(nativeRequestAsync(getNativeObject(),
+                        transfer, fd.detachFd(), buffer, buffer.position(), buffer.remaining()));
                 if (ret != LibusbError.LIBUSB_SUCCESS) {
                     transfer.release();
                     return ret.code;
                 }
             }
-            manager.readEventfd(blockFd.getFd());
+            while (!transfer.readyForCallback()) {
+                manager.readEventfd(blockFd.getFd());
+            }
         } catch (IOException e) {
             transfer.release();
             throw new RuntimeException(e);
@@ -935,7 +949,7 @@ public class UsbDevice {
 
     private native int nativeSetConfiguration(long device, int configurationID);
 
-    private native int nativeRequestAsync(@NotNull AsyncTransfer transfer, int fd,
+    private native int nativeRequestAsync(long device, @NotNull AsyncTransfer transfer, int fd,
                                           @NotNull ByteBuffer buffer, int offset, int length);
 
     private native int nativeCancelAsync(long transfer);

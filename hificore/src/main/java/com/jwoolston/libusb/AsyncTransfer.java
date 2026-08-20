@@ -39,7 +39,7 @@ public class AsyncTransfer {
     private long nativeObject;
     private ByteBuffer buffer; // TODO: DMA support (libusb_dev_mem_alloc/free)
     private final ByteBuffer isoSizeBuffer;
-    private TransferCallback callback;
+    TransferCallback callback;
 
     public AsyncTransfer(@NonNull UsbDevice device, int isoSlots) {
         this.isoSlots = isoSlots;
@@ -59,8 +59,8 @@ public class AsyncTransfer {
         return nativeReadyForCallback(getNativeObject());
     }
 
-    void fly(long device) {
-        nativeFly(getNativeObject(), device);
+    void fly() {
+        nativeFly(getNativeObject());
     }
 
     void callbackOnLooper() {
@@ -422,7 +422,7 @@ public class AsyncTransfer {
     private native ByteBuffer nativeGetIsoBuffer(long nativeObject, int isoSlots);
     private native boolean nativeIsInFlight(long nativeObject);
     private native boolean nativeReadyForCallback(long nativeObject);
-    private native void nativeFly(long nativeObject, long device);
+    private native void nativeFly(long nativeObject);
     private native void nativeCallback(long nativeObject);
     private native void nativeDestroy(long nativeObject);
 }

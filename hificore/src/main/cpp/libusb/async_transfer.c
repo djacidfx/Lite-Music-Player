@@ -40,8 +40,10 @@ JNIEXPORT void JNICALL
 Java_com_jwoolston_libusb_AsyncTransfer_nativeDestroy(JNIEnv *env, jobject instance,
                                                                     jlong nativeObject) {
     struct libusb_transfer *transfer = (struct libusb_transfer *) nativeObject;
-    if (transfer->user_data)
-        free(transfer->user_data);
+    struct transfer_callback_holder *holder = (struct transfer_callback_holder *) transfer->user_data;
+    if (holder) {
+        free(holder);
+    }
     libusb_free_transfer(transfer);
 }
 
@@ -49,25 +51,27 @@ JNIEXPORT jboolean JNICALL
 Java_com_jwoolston_libusb_AsyncTransfer_nativeIsInFlight(JNIEnv *env, jobject thiz,
                                                                jlong native_object) {
     struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
-    // Why this works: dev_handle is cleared by our callback when the transfer is received.
-    return transfer->dev_handle != NULL;
+    struct transfer_callback_holder *holder = (struct transfer_callback_holder *) transfer->user_data;
+    return holder != NULL && holder->ready != 0;
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_jwoolston_libusb_AsyncTransfer_nativeReadyForCallback(JNIEnv *env, jobject thiz,
                                                          jlong native_object) {
     struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
-    // This is safe because this function is only called from the looper where user_data is freed,
-    // which is determined by callbackLooper on java side being set on submission.
-    return transfer->dev_handle != NULL && ((struct transfer_callback_holder*)transfer->user_data)->fd == -1;
+    struct transfer_callback_holder *holder = (struct transfer_callback_holder *) transfer->user_data;
+    return holder != NULL && holder->ready == 2;
 }
 
 JNIEXPORT void JNICALL
 Java_com_jwoolston_libusb_AsyncTransfer_nativeFly(JNIEnv *env, jobject thiz,
-                                                               jlong native_object, jlong device) {
+                                                               jlong native_object) {
     struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
-    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
-    transfer->dev_handle = deviceHandle;
+    struct transfer_callback_holder *holder = transfer->user_data;
+    if (!holder) {
+        transfer->user_data = holder = malloc(sizeof(struct transfer_callback_holder));
+    }
+    holder->ready = 1;
 }
 
 JNIEXPORT void JNICALL

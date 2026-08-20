@@ -81,6 +81,6 @@ Java_com_jwoolston_libusb_UsbManager_nativeEventfd(JNIEnv *env, jobject thiz, jb
 
 JNIEXPORT void JNICALL
 Java_com_jwoolston_libusb_UsbManager_readEventfd(JNIEnv *env, jobject thiz, jint fd) {
-    int dummy;
+    int64_t dummy;
     read(fd, &dummy, sizeof(dummy));
 }

@@ -26,13 +26,14 @@ class SynchronousLibusbAudioOutput(
     private val transferSendQueue = mutableListOf<TimestampedAsyncTransfer>()
     private val transferQueue = mutableListOf<TimestampedAsyncTransfer>()
     private var pendingTransfer: TimestampedAsyncTransfer? = null
-    private val handler = Handler(Looper.myLooper()!!)
+    private val looper = Looper.myLooper()!!
     private var timestampFrames = 0L
     private var timestampWrite = 0L
     private var flushGeneration = 0
     private var sentAdvancing = false
     private var paused = false
     private var stopping = true
+    private var released = false
     private val streamEp = usbInterface.endpointCount.let {
         for (i in 0..<it) {
             val ep = usbInterface.getEndpoint(i)
@@ -43,6 +44,7 @@ class SynchronousLibusbAudioOutput(
     }
 
     init {
+        device.manager.enableUsbEventsForLooper(looper)
         repeat(4) {
             // assume high speed for now :)
             transferQueue.add(TimestampedAsyncTransfer(device, 8 * 10)) // one transfer gets 10ms of audio, or 441 frames
@@ -50,6 +52,7 @@ class SynchronousLibusbAudioOutput(
         transferQueue.forEach {
             it.ensureSize(2 /*16bit*/ * 2 /*stereo*/ * 441)
             it.fillIsochronousTransfer(streamEp, 0, 8 * 10)
+            it.setCallbackLooper(looper)
             val ib = it.isoBuffer
             for (i in 0..<it.isoSlots) {
                 val samples = (i + 1) * 441 / 80 - i * 441 / 80
@@ -183,6 +186,8 @@ class SynchronousLibusbAudioOutput(
         } catch (e: Exception) {
             Log.e(TAG, "failed to reset to idle interface", e)
         }
+        device.manager.disableUsbEventsForLooper(looper, false)
+        released = true
         listeners.forEach { it.onReleased() }
     }
 
@@ -258,19 +263,18 @@ class SynchronousLibusbAudioOutput(
         transfer: AsyncTransfer,
         bytesTransferred: Int
     ) {
+        if (released) return
         val transfer = transfer as TimestampedAsyncTransfer
         val time = System.currentTimeMillis() - 10
-        handler.post {
-            if (!sentAdvancing) {
-                listeners.forEach { it.onPositionAdvancing(time) }
-                sentAdvancing = true
-            }
-            if (transfer.flushGeneration == flushGeneration)
-                this.timestampFrames = transfer.timestamp
-            transfer.buffer.clear()
-            transferQueue.add(transfer)
-            Log.e(TAG, "SUCCESSFUL transfer with ts ${transfer.flushGeneration} ${transfer.timestamp}(at gen${flushGeneration} $timestampFrames), tx=$bytesTransferred, qs=${transferQueue.size}/${transfers.size} (p=${pendingTransfer != null},sq=${transferSendQueue.size})")
+        if (!sentAdvancing) {
+            listeners.forEach { it.onPositionAdvancing(time) }
+            sentAdvancing = true
         }
+        if (transfer.flushGeneration == flushGeneration)
+            this.timestampFrames = transfer.timestamp
+        transfer.buffer.clear()
+        transferQueue.add(transfer)
+        Log.e(TAG, "SUCCESSFUL transfer with ts ${transfer.flushGeneration} ${transfer.timestamp}(at gen${flushGeneration} $timestampFrames), tx=$bytesTransferred, qs=${transferQueue.size}/${transfers.size} (p=${pendingTransfer != null},sq=${transferSendQueue.size})")
     }
 
     override fun onTransferFailed(
@@ -278,15 +282,14 @@ class SynchronousLibusbAudioOutput(
         result: LibusbError,
         bytesTransferred: Int
     ) {
+        if (released) return
         val transfer = transfer as TimestampedAsyncTransfer
-        handler.post {
-            //TODO()
-            Log.e(TAG, "failed to send data: $result, tx=$bytesTransferred")
-            if (transfer.flushGeneration == flushGeneration)
-                this.timestampFrames = transfer.timestamp
-            transfer.buffer.clear()
-            transferQueue.add(transfer)
-        }
+        //TODO()
+        Log.e(TAG, "failed to send data: $result, tx=$bytesTransferred")
+        if (transfer.flushGeneration == flushGeneration)
+            this.timestampFrames = transfer.timestamp
+        transfer.buffer.clear()
+        transferQueue.add(transfer)
     }
 
     private class TimestampedAsyncTransfer(device: UsbDevice, isoSlots: Int) : AsyncTransfer(device,

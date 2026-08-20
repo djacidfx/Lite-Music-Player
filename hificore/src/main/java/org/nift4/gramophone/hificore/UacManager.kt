@@ -278,7 +278,7 @@ class UacManager(private val context: Context) {
                 if (openDevices.find { it.androidDevice == it } != null)
                     return@forEach
                 val deviceHandle = try {
-                    libUsbManager.await().openDevice(it)
+                    libUsbManager.await().openDevice(it, true)
                 } catch (e: Exception) {
                     Log.e(TAG, "failed to open $it", e)
                     return@forEach
