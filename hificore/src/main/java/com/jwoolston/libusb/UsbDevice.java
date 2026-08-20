@@ -22,6 +22,7 @@ import android.os.ParcelFileDescriptor;
 import android.system.Os;
 
 import androidx.annotation.NonNull;
+import androidx.media3.common.util.Log;
 
 import com.jwoolston.libusb.util.Preconditions;
 
@@ -43,6 +44,8 @@ import java.nio.ByteBuffer;
  * <p>
  */
 public class UsbDevice {
+
+    private static final String TAG = "UsbDevice-java";
 
     public final UsbManager manager;
     final @NotNull String name;
@@ -827,30 +830,40 @@ public class UsbDevice {
     // wrt order: https://github.com/libusb/libusb/issues/1077 - Linux backend is OK because it uses
     // reap urb ioctl which reads from an ordered list in kernel.
     public LibusbError asyncTransfer(@NotNull AsyncTransfer transfer) {
-        @NonNull ByteBuffer buffer;
-        synchronized (transfer) {
-            if (transfer.isInFlight()) {
-                throw new IllegalArgumentException("Transfer already submitted previously and not" +
-                        " back yet!");
+        ParcelFileDescriptor fd = null;
+        try {
+            @NonNull ByteBuffer buffer;
+            synchronized (transfer) {
+                if (transfer.isInFlight()) {
+                    throw new IllegalArgumentException("Transfer already submitted previously and not" +
+                            " back yet!");
+                }
+                if (requireRealTime && transfer.callbackLooper == null) {
+                    throw new IllegalArgumentException("This device was configured to require " +
+                            "real-time-safe transfers, but this transfer has no callback looper.");
+                }
+                if (transfer.getCallback() == null) {
+                    throw new IllegalArgumentException("Transfer callback should be set");
+                }
+                buffer = transfer.getBuffer();
+                Looper l = transfer.callbackLooper;
+                if (l != null) {
+                    fd = manager.getWriteFdForLooper(l);
+                }
+                transfer.fly();
             }
-            if (requireRealTime && transfer.callbackLooper == null) {
-                throw new IllegalArgumentException("This device was configured to require " +
-                        "real-time-safe transfers, but this transfer has no callback looper.");
+            manager.onTransferAdded(transfer);
+            return LibusbError.fromNative(nativeRequestAsync(getNativeObject(), transfer,
+                    fd != null ? fd.detachFd() : -1, buffer, buffer.position(), buffer.remaining()));
+        } finally {
+            if (fd != null) {
+                try {
+                    fd.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "failed to close eventfd", e);
+                }
             }
-            buffer = transfer.getBuffer();
-            transfer.fly();
         }
-        if (transfer.getCallback() == null) {
-            throw new IllegalArgumentException("Transfer callback should be set");
-        }
-        Looper l = transfer.callbackLooper;
-        manager.onTransferAdded(transfer);
-        int fd = -1;
-        if (l != null) {
-            fd = manager.getWriteFdForLooper(l).detachFd();
-        }
-        return LibusbError.fromNative(nativeRequestAsync(getNativeObject(), transfer, fd, buffer,
-                buffer.position(), buffer.remaining()));
     }
 
     private int blockingTransfer(@NotNull AsyncTransfer transfer) {
@@ -873,11 +886,11 @@ public class UsbDevice {
             }
         });
         @NonNull ByteBuffer buffer = transfer.getBuffer();
-        transfer.fly();
-        manager.onTransferAdded(transfer);
         if (transfer.callbackLooper != null) {
             throw new IllegalArgumentException("Transfer callback looper should be null");
         }
+        transfer.fly();
+        manager.onTransferAdded(transfer);
         try (ParcelFileDescriptor blockFd = ParcelFileDescriptor.adoptFd(
                 manager.nativeEventfd(true))) {
             try (ParcelFileDescriptor fd = blockFd.dup()) {
