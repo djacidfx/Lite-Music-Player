@@ -17,15 +17,18 @@ package com.jwoolston.libusb;
  */
 
 import android.hardware.usb.UsbDeviceConnection;
+import android.os.Looper;
+import android.os.ParcelFileDescriptor;
+import android.system.Os;
 
 import androidx.annotation.NonNull;
 
-import com.jwoolston.libusb.async.AsyncTransfer;
 import com.jwoolston.libusb.util.Preconditions;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
@@ -717,9 +720,9 @@ public class UsbDevice {
     public int controlTransfer(int requestType, int request, int value, int index, byte[] buffer, int offset,
                                int length, int timeout) {
         checkBounds(buffer, offset, length);
-        // TODO: safely reimplement blocking transfer based on async transfer, in a real-time safe
-        //  way. most likely blocking on condition variable in native and setting it from callback.
-        throw new UnsupportedOperationException();
+        AsyncTransfer transfer = new AsyncTransfer(this, 0);
+        transfer.fillControlTransfer(requestType, request, value, index, buffer, offset, length, timeout);
+        return blockingTransfer(transfer);
     }
 
     /**
@@ -756,9 +759,9 @@ public class UsbDevice {
      */
     public int bulkTransfer(UsbEndpoint endpoint, byte[] buffer, int offset, int length, int timeout) {
         checkBounds(buffer, offset, length);
-        // TODO: safely reimplement blocking transfer based on async transfer, in a real-time safe
-        //  way. most likely blocking on condition variable in native and setting it from callback.
-        throw new UnsupportedOperationException();
+        AsyncTransfer transfer = new AsyncTransfer(this, 0);
+        transfer.fillBulkTransfer(endpoint, buffer, offset, length, timeout);
+        return blockingTransfer(transfer);
     }
 
     /**
@@ -795,9 +798,9 @@ public class UsbDevice {
      */
     public int interruptTransfer(UsbEndpoint endpoint, byte[] buffer, int offset, int length, int timeout) {
         checkBounds(buffer, offset, length);
-        // TODO: safely reimplement blocking transfer based on async transfer, in a real-time safe
-        //  way. most likely blocking on condition variable in native and setting it from callback.
-        throw new UnsupportedOperationException();
+        AsyncTransfer transfer = new AsyncTransfer(this, 0);
+        transfer.fillInterruptTransfer(endpoint, buffer, offset, length, timeout);
+        return blockingTransfer(transfer);
     }
 
     /**
@@ -823,15 +826,67 @@ public class UsbDevice {
     // wrt order: https://github.com/libusb/libusb/issues/1077 - Linux backend is OK because it uses
     // reap urb ioctl which reads from an ordered list in kernel.
     public LibusbError asyncTransfer(@NotNull AsyncTransfer transfer) {
+        synchronized (transfer) {
+            if (transfer.isInFlight()) {
+                throw new IllegalArgumentException("Transfer already submitted previously and not" +
+                        " back yet!");
+            }
+            transfer.fly(getNativeObject());
+        }
         if (transfer.getCallback() == null) {
             throw new IllegalArgumentException("Transfer callback should be set");
         }
         @NonNull ByteBuffer buffer = transfer.getBuffer();
-        manager.onTransferAdded(transfer.getNativeObject());
-        // TODO: add dispatch to handler in real-time-safe way (if no dispatch and not blocking, it
-        //  may use real-time-unsafe in place callback)
-        return LibusbError.fromNative(nativeRequestAsync(getNativeObject(), transfer,
-                buffer, buffer.position(), buffer.remaining()));
+        manager.onTransferAdded(transfer);
+        Looper l = transfer.callbackLooper;
+        int fd = -1;
+        if (l != null) {
+            fd = manager.getWriteFdForLooper(l).detachFd();
+        }
+        return LibusbError.fromNative(nativeRequestAsync(transfer, fd, buffer, buffer.position(),
+                buffer.remaining()));
+    }
+
+    private int blockingTransfer(@NotNull AsyncTransfer transfer) {
+        final int[] ret2 = {0};
+        if (transfer.getCallback() != null) {
+            throw new IllegalArgumentException("Transfer callback should be null");
+        }
+        transfer.setCallback(new TransferCallback() {
+            @Override
+            public void onTransferComplete(@NonNull AsyncTransfer transfer, int bytesTransferred) throws IOException {
+                ret2[0] = bytesTransferred;
+            }
+
+            @Override
+            public void onTransferFailed(@NonNull AsyncTransfer transfer, @NonNull LibusbError result, int bytesTransferred) throws IOException {
+                ret2[0] = result.code;
+            }
+        });
+        transfer.fly(getNativeObject());
+        @NonNull ByteBuffer buffer = transfer.getBuffer();
+        manager.onTransferAdded(transfer);
+        if (transfer.callbackLooper != null) {
+            throw new IllegalArgumentException("Transfer callback looper should be null");
+        }
+        try (ParcelFileDescriptor blockFd = ParcelFileDescriptor.adoptFd(
+                manager.nativeEventfd(true))) {
+            try (ParcelFileDescriptor fd = blockFd.dup()) {
+                LibusbError ret = LibusbError.fromNative(nativeRequestAsync(transfer, fd.detachFd(),
+                        buffer, buffer.position(), buffer.remaining()));
+                if (ret != LibusbError.LIBUSB_SUCCESS) {
+                    transfer.release();
+                    return ret.code;
+                }
+            }
+            manager.readEventfd(blockFd.getFd());
+        } catch (IOException e) {
+            transfer.release();
+            throw new RuntimeException(e);
+        }
+        transfer.callbackOnLooper();
+        transfer.release();
+        return ret2[0];
     }
 
     /**
@@ -880,7 +935,7 @@ public class UsbDevice {
 
     private native int nativeSetConfiguration(long device, int configurationID);
 
-    private native int nativeRequestAsync(long device, @NotNull AsyncTransfer transfer,
+    private native int nativeRequestAsync(@NotNull AsyncTransfer transfer, int fd,
                                           @NotNull ByteBuffer buffer, int offset, int length);
 
     private native int nativeCancelAsync(long transfer);

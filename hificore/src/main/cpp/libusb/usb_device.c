@@ -21,6 +21,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include "common.h"
 
 #pragma clang diagnostic push
@@ -138,23 +139,22 @@ static jmethodID transferFailedCallback;
 static jmethodID getTransferCallback;
 static jmethodID byteBufferLimit;
 
-struct transfer_callback_holder {
-    JavaVM *vm;
-    jobject buffer;
-    jobject transfer;
-};
-
-static struct transfer_callback_holder *allocate_callback_holder(JNIEnv *env, jobject buffer, jobject transfer) {
-    struct transfer_callback_holder *holder = malloc(sizeof(struct transfer_callback_holder));
-    JavaVM *vm;
-    (*env)->GetJavaVM(env, &vm);
-    holder->vm = vm;
-    holder->transfer = transfer;
-    holder->buffer = (*env)->NewGlobalRef(env, buffer);
-    return holder;
-}
-
-static void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfer) {
+void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfer) {
+    struct transfer_callback_holder *holder = (struct transfer_callback_holder *) transfer->user_data;
+    if (holder == NULL) {
+        LOGE("Null callback holder! Callback cannot be called.");
+        abort();
+    }
+    if (holder->fd != -1) {
+        int counter = 1;
+        int fd = holder->fd;
+        // Java will iterate though list of weak references with transfers to find this one. This is
+        // safe because we have a JNI-side global reference we'll only release if Java finds us.
+        holder->fd = -1; // don't access holder after this, java may reap it instantly
+        write(fd, &counter, sizeof(counter)); // notify java to wake up if sleeping
+        close(fd);
+        return;
+    }
     int result;
     switch (transfer->status) {
         case LIBUSB_TRANSFER_COMPLETED:
@@ -180,14 +180,6 @@ static void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfe
             LOGE("Unrecognised status code %d", transfer->status);
             result = LIBUSB_ERROR_OTHER;
     }
-
-    struct transfer_callback_holder *holder = (struct transfer_callback_holder *) transfer->user_data;
-    if (holder == NULL) {
-        LOGE("Null callback holder! Callback cannot be called.");
-        // This is a fatal error so we cant make any decisions about freeing the transfer, so we
-        // leave it intact in case the calling code recovers.
-        return;
-    }
     JNIEnv *env;
     int jniResult = (*holder->vm)->GetEnv(holder->vm, (void **) &env, JNI_VERSION_1_6);
     if (jniResult != JNI_OK) {
@@ -200,7 +192,7 @@ static void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfe
 
     int transferred = 0;
     if (transfer->type == LIBUSB_TRANSFER_TYPE_ISOCHRONOUS) {
-        // TODO: expose packet individual length values, and packet status, instead of aggregation.
+        // individual packet length and status is already exposed through getIsoBuffer().
         for (int i = 0; i < transfer->num_iso_packets; ++i) {
             if (transfer->iso_packet_desc[i].actual_length > 0) {
                 transferred += transfer->iso_packet_desc[i].actual_length;
@@ -222,7 +214,7 @@ static void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfe
     // Mark the transfer as no longer in-flight now that we're no longer using it.
     // After this, we mustn't access it anymore as ownership returns to JVM with this.
     // But we should do it before calling the callback.
-    transfer->user_data = NULL; transfer = NULL;
+    transfer->dev_handle = NULL; transfer = NULL;
     if (result >= 0) {
         (*env)->CallVoidMethod(env, callback, transferCallback, holder->transfer, transferred);
     } else {
@@ -232,29 +224,28 @@ static void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfe
         (*env)->DeleteLocalRef(env, error);
     }
     (*env)->DeleteLocalRef(env, callback);
-    // We must always free our callback holder
+    // We must always free our callback holder's refs
     (*env)->DeleteGlobalRef(env, holder->transfer);
     (*env)->DeleteGlobalRef(env, holder->buffer);
-    free(holder);
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_jwoolston_libusb_UsbDevice_nativeInitialize(JNIEnv *env, jclass type) {
     initializeUacLog(env);
     // Find the interrupt transfer callback method
-    jobject clazz = (*env)->FindClass(env, "com/jwoolston/libusb/async/TransferCallback");
+    jobject clazz = (*env)->FindClass(env, "com/jwoolston/libusb/TransferCallback");
     if (clazz == NULL) {
-        LOGE("Failed to find class com.jwoolston.libusb.async.TransferCallback");
+        LOGE("Failed to find class com.jwoolston.libusb.TransferCallback");
         return JNI_FALSE;
     }
     transferCallback = (*env)->GetMethodID(env, clazz, "onTransferComplete",
-                                           "(Lcom/jwoolston/libusb/async/AsyncTransfer;I)V");
+                                           "(Lcom/jwoolston/libusb/AsyncTransfer;I)V");
     if (transferCallback == NULL) {
         LOGE("Failed to find onTransferComplete(AsyncTransfer, int) method.");
         return JNI_FALSE;
     }
     transferFailedCallback = (*env)->GetMethodID(env, clazz, "onTransferFailed",
-                                                 "(Lcom/jwoolston/libusb/async/AsyncTransfer;Lcom/jwoolston/libusb/LibusbError;I)V");
+                                                 "(Lcom/jwoolston/libusb/AsyncTransfer;Lcom/jwoolston/libusb/LibusbError;I)V");
     if (transferFailedCallback == NULL) {
         LOGE("Failed to find onTransferFailed(AsyncTransfer, LibusbError, int) method.");
         return JNI_FALSE;
@@ -272,9 +263,9 @@ Java_com_jwoolston_libusb_UsbDevice_nativeInitialize(JNIEnv *env, jclass type) {
         return JNI_FALSE;
     }
 
-    clazz = (*env)->FindClass(env, "com/jwoolston/libusb/async/AsyncTransfer");
+    clazz = (*env)->FindClass(env, "com/jwoolston/libusb/AsyncTransfer");
     if (clazz == NULL) {
-        LOGE("Failed to find class com.jwoolston.libusb.async.AsyncTransfer");
+        LOGE("Failed to find class com.jwoolston.libusb.AsyncTransfer");
         return JNI_FALSE;
     }
     getNativePtrFromAsyncTransfer = (*env)->GetMethodID(env, clazz, "getNativeObject", "()J");
@@ -282,7 +273,7 @@ Java_com_jwoolston_libusb_UsbDevice_nativeInitialize(JNIEnv *env, jclass type) {
         LOGE("Failed to find getNativeObject() method.");
         return JNI_FALSE;
     }
-    getTransferCallback = (*env)->GetMethodID(env, clazz, "getCallback", "()Lcom/jwoolston/libusb/async/TransferCallback;");
+    getTransferCallback = (*env)->GetMethodID(env, clazz, "getCallback", "()Lcom/jwoolston/libusb/TransferCallback;");
     if (getTransferCallback == NULL) {
         LOGE("Failed to find getCallback() method.");
         return JNI_FALSE;
@@ -378,62 +369,70 @@ Java_com_jwoolston_libusb_UsbDevice_nativeSetConfiguration(JNIEnv *env, jobject 
 
 JNIEXPORT jint JNICALL
 Java_com_jwoolston_libusb_UsbDevice_nativeRequestAsync(JNIEnv *env, jobject instance,
-                                                       jlong device, jobject transfer,
-                                                       jobject buffer,
+                                                       jobject transferObject,
+                                                       jint fd, jobject buffer,
                                                        jint offset, jint length) {
     struct libusb_transfer *_transfer = (struct libusb_transfer *)
-            (*env)->CallLongMethod(env, transfer, getNativePtrFromAsyncTransfer);
+            (*env)->CallLongMethod(env, transferObject, getNativePtrFromAsyncTransfer);
     // Ensure none of the free flags, which are footguns here, are set
     if ((_transfer->flags & (LIBUSB_TRANSFER_FREE_BUFFER | LIBUSB_TRANSFER_FREE_TRANSFER)) != 0) {
         LOGE("Bad flags set: %d", _transfer->flags);
+        if (fd != -1) close(fd);
         return LIBUSB_ERROR_INVALID_PARAM;
     }
-    // Ensure transfer isn't in flight according to our state machine
-    if (_transfer->user_data != NULL) {
-        LOGE("Bad user data set: %d", _transfer->user_data);
-        return LIBUSB_ERROR_INVALID_PARAM;
-    }
-    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
-    jobject globalTransfer = (*env)->NewGlobalRef(env, transfer);
+    jobject globalTransfer = (*env)->NewGlobalRef(env, transferObject);
     unsigned char *_buffer = (*env)->GetDirectBufferAddress(env, buffer);
 
     // caller must fill num_iso_packets, iso_packet_desc, timeout, flags, type and endpoint
+    // dev_handle is done in fly() by UsbDevice to lock the transferObject
     _transfer->buffer = _buffer + offset;
     _transfer->length = length;
-    _transfer->dev_handle = deviceHandle;
     _transfer->callback = libusb_transfer_callback;
 
-    // Ensure that, in case of control transfer, the length is declared properly.
+    // Ensure that, in case of control transferObject, the length is declared properly.
     if (_transfer->type == LIBUSB_TRANSFER_TYPE_CONTROL && libusb_control_transfer_get_setup(
             _transfer)->wLength != length - LIBUSB_CONTROL_SETUP_SIZE) {
         LOGE("Bad control setup length set: %d vs %d", libusb_control_transfer_get_setup(
                 _transfer)->wLength, length);
+        if (fd != -1) close(fd);
         return LIBUSB_ERROR_INVALID_PARAM;
     }
 
-    // Ensure that, in case of isochronous transfer, the buffer is big enough.
+    // Ensure that, in case of isochronous transferObject, the buffer is big enough.
     if (_transfer->type == LIBUSB_TRANSFER_TYPE_ISOCHRONOUS && _transfer->num_iso_packets > 0) {
         int isoLength = libusb_get_iso_packet_buffer(_transfer, _transfer->
             num_iso_packets - 1) - _transfer->buffer + (int)_transfer->iso_packet_desc[_transfer->
                 num_iso_packets - 1].length;
         if (isoLength != length || length < 1 || isoLength < 1) {
             LOGE("Bad isochronous length set: %d vs %d", isoLength, length);
+            if (fd != -1) close(fd);
             return LIBUSB_ERROR_INVALID_PARAM;
         }
     }
 
-    // Populate the transfer structure
-    struct transfer_callback_holder *holder = allocate_callback_holder(env, buffer, globalTransfer);
+    // Populate the transferObject structure
+    struct transfer_callback_holder *holder = _transfer->user_data;
+    if (!holder)
+        _transfer->user_data = holder = malloc(sizeof(struct transfer_callback_holder));
+    JavaVM *vm;
+    (*env)->GetJavaVM(env, &vm);
+    holder->vm = vm;
+    holder->transfer = globalTransfer;
+    holder->buffer = (*env)->NewGlobalRef(env, buffer);
+    holder->fd = fd;
     _transfer->user_data = holder;
 
-    // Submit the transfer
+    // Submit the transferObject
     int ret = libusb_submit_transfer(_transfer);
-    if (ret != 0 && ret != LIBUSB_ERROR_BUSY) {
-        // We must always free our callback holder
-        _transfer->user_data = NULL;
+    if (ret == LIBUSB_ERROR_BUSY) {
+        LOGE("Duplicate transfer submission");
+        abort();
+    }
+    if (ret != 0) {
+        // We must always free our callback holder's refs
         (*env)->DeleteGlobalRef(env, holder->transfer);
         (*env)->DeleteGlobalRef(env, holder->buffer);
-        free(holder);
+        if (fd != -1) close(fd);
     }
     return ret;
 }

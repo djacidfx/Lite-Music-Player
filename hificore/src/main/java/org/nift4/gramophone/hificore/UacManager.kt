@@ -260,14 +260,9 @@ class UacManager(private val context: Context) {
         // big enough to compensate for non-real-time decoder, while the packet queue is small to
         // keep feedback latency small. We can also choose to use less transfers if we use a
         // real-time-safe transfer filling environment.)
-        // TODO: to not ruin the real-time-safe libusb callback thread we have now: dispatch
-        //  JNI-based callbacks to another thread (how?).
         // TODO: then, implement purely event-handler-refill based feedback polling in C(++).
         // TODO: lastly, implement some buffer (maybe ring? idk yet) that Java can write from, and
         //  event handler can read _without blocking_. also implement cancel even in this LL case.
-        // TODO: and then we implement adaptive/synchronous buffer filling in java as seperate
-        //  AudioOutput, there's no reason to overcomplicate it by making it C++ too :) especially
-        //  as it is a mostly seperate codepath.
 
 
     }

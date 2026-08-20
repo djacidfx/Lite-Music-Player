@@ -14,16 +14,11 @@
  * limitations under the License.
  */
 
-package com.jwoolston.libusb.async;
+package com.jwoolston.libusb;
 
 import androidx.annotation.NonNull;
 
-import com.jwoolston.libusb.LibusbError;
-
-import org.jetbrains.annotations.Nullable;
-
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
 /**
  * @author Jared Woolston (Jared.Woolston@gmail.com)

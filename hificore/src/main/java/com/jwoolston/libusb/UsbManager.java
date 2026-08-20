@@ -17,6 +17,9 @@ package com.jwoolston.libusb;
 
 import android.content.Context;
 import android.hardware.usb.UsbDeviceConnection;
+import android.os.Looper;
+import android.os.MessageQueue;
+import android.os.ParcelFileDescriptor;
 
 import androidx.annotation.GuardedBy;
 import androidx.annotation.NonNull;
@@ -25,8 +28,12 @@ import androidx.media3.common.util.Log;
 import org.jetbrains.annotations.NotNull;
 import org.nift4.gramophone.hificore.AdaptiveDynamicRangeCompression;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.io.FileDescriptor;
+import java.io.IOException;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 
 /**
  * This class allows you to access the state of USB and communicate with USB devices.
@@ -36,7 +43,7 @@ import java.util.Set;
  *
  * @author Jared Woolston (Jared.Woolston@gmail.com)
  */
-public class UsbManager {
+public class UsbManager implements MessageQueue.OnFileDescriptorEventListener {
 
     static {
         if (!AdaptiveDynamicRangeCompression.getLibLoaded()) {
@@ -50,7 +57,9 @@ public class UsbManager {
     @GuardedBy("#lock")
     private long nativeObject;
     @GuardedBy("#transfers")
-    private final Set<Long> transfers = new HashSet<>();
+    private final HashMap<Long, WeakReference<AsyncTransfer>> transfers = new HashMap<>();
+    @GuardedBy("#looperFd")
+    private final IdentityHashMap<Looper, ParcelFileDescriptor> loopers = new IdentityHashMap<>();
 
     final Object lock = new Object();
     private volatile AsyncUSBThread asyncUsbThread;
@@ -156,18 +165,80 @@ public class UsbManager {
         }
     }
 
-    void onTransferAdded(long transfer) {
-        synchronized (transfers) {
-            transfers.add(transfer);
+    ParcelFileDescriptor getWriteFdForLooper(Looper l) {
+        synchronized (loopers) {
+            ParcelFileDescriptor pfd = loopers.get(l);
+            if (pfd == null) {
+                pfd = ParcelFileDescriptor.adoptFd(nativeEventfd(false));
+                l.getQueue().addOnFileDescriptorEventListener(pfd.getFileDescriptor(), EVENT_INPUT,
+                        this);
+                loopers.put(l, pfd);
+            }
+            try {
+                return pfd.dup();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
-    // Do NOT call this manually, AsyncTransfer will call it.
-    public void onTransferReleased(long transfer) {
-        synchronized (transfers) {
-            transfers.remove(transfer);
+    /**
+     * Warning: after calling this, events destined for this looper will be silently dropped!
+     * This is intended to be used when stopping a looper.
+     */
+    public void disableUsbEventsForLooper(Looper l) {
+        synchronized (loopers) {
+            try (ParcelFileDescriptor pfd = loopers.remove(l)) {
+                if (pfd == null) {
+                    return;
+                }
+                l.getQueue().removeOnFileDescriptorEventListener(pfd.getFileDescriptor());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
+
+    @Override
+    public int onFileDescriptorEvents(@NonNull FileDescriptor fd, int events) {
+        Looper l = Looper.myLooper();
+        synchronized (loopers) {
+            ParcelFileDescriptor pfd = loopers.get(l);
+            if (pfd == null) {
+                return 0;
+            }
+            readEventfd(pfd.getFd());
+        }
+        ArrayList<AsyncTransfer> toCallback = new ArrayList<>();
+        synchronized (transfers) {
+            for (WeakReference<AsyncTransfer> ref : transfers.values()) {
+                AsyncTransfer transfer = ref.get();
+                if (transfer != null && transfer.callbackLooper == l &&
+                        transfer.readyForCallback()) {
+                    toCallback.add(transfer);
+                }
+            }
+        }
+        for (AsyncTransfer transfer : toCallback) {
+            transfer.callbackOnLooper();
+        }
+        return EVENT_INPUT;
+    }
+
+    void onTransferAdded(AsyncTransfer transfer) {
+        synchronized (transfers) {
+            transfers.put(transfer.getNativeObject(), new WeakReference<>(transfer));
+        }
+    }
+
+    void onTransferReleased(AsyncTransfer transfer) {
+        synchronized (transfers) {
+            transfers.remove(transfer.getNativeObject());
+        }
+    }
+
+    native int nativeEventfd(boolean block);
+    native void readEventfd(int fd);
 
     public enum LoggingLevel {
         NONE,

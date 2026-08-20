@@ -17,18 +17,19 @@
 // Created by Jared Woolston (Jared.Woolston@gmail.com)
 //
 
+#include <malloc.h>
 #include "common.h"
 
 #define  LOG_TAG    "AsyncTransfer-Native"
 
 JNIEXPORT jlong JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeAllocate(JNIEnv *env, jobject thiz,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeAllocate(JNIEnv *env, jobject thiz,
                                                              jint iso_slots) {
     return (jlong)libusb_alloc_transfer(iso_slots);
 }
 
 JNIEXPORT jobject JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeGetIsoBuffer(JNIEnv *env, jobject thiz,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeGetIsoBuffer(JNIEnv *env, jobject thiz,
                                                                  jlong nativeObject, jint iso_slots) {
     struct libusb_transfer *transfer = (struct libusb_transfer *) nativeObject;
     return (*env)->NewDirectByteBuffer(env, (void*)(&transfer->iso_packet_desc[0]),
@@ -36,22 +37,41 @@ Java_com_jwoolston_libusb_async_AsyncTransfer_nativeGetIsoBuffer(JNIEnv *env, jo
 }
 
 JNIEXPORT void JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeDestroy(JNIEnv *env, jobject instance,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeDestroy(JNIEnv *env, jobject instance,
                                                                     jlong nativeObject) {
     struct libusb_transfer *transfer = (struct libusb_transfer *) nativeObject;
+    if (transfer->user_data)
+        free(transfer->user_data);
     libusb_free_transfer(transfer);
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeIsInFlight(JNIEnv *env, jobject thiz,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeIsInFlight(JNIEnv *env, jobject thiz,
                                                                jlong native_object) {
     struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
-    // Why this works: user_data is cleared by our callback when the transfer is received.
-    return transfer->user_data != NULL;
+    // Why this works: dev_handle is cleared by our callback when the transfer is received.
+    return transfer->dev_handle != NULL;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_jwoolston_libusb_AsyncTransfer_nativeReadyForCallback(JNIEnv *env, jobject thiz,
+                                                         jlong native_object) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    // This is safe because this function is only called from the looper where user_data is freed,
+    // which is determined by callbackLooper on java side being set on submission.
+    return transfer->dev_handle != NULL && ((struct transfer_callback_holder*)transfer->user_data)->fd == -1;
 }
 
 JNIEXPORT void JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillControlTransfer(JNIEnv *env,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeFly(JNIEnv *env, jobject thiz,
+                                                               jlong native_object, jlong device) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    struct libusb_device_handle *deviceHandle = (struct libusb_device_handle *) device;
+    transfer->dev_handle = deviceHandle;
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_AsyncTransfer_nativeFillControlTransfer(JNIEnv *env,
                                                                         jobject thiz,
                                                                         jlong native_object,
                                                                         jint timeout) {
@@ -63,7 +83,7 @@ Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillControlTransfer(JNIEnv *
 }
 
 JNIEXPORT void JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeSetupControlTransfer(JNIEnv *env, jobject thiz,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeSetupControlTransfer(JNIEnv *env, jobject thiz,
                                                                          jobject buffer,
                                                                          jint request_type,
                                                                          jint request, jint value,
@@ -78,7 +98,7 @@ Java_com_jwoolston_libusb_async_AsyncTransfer_nativeSetupControlTransfer(JNIEnv 
 }
 
 JNIEXPORT void JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillBulkTransfer(JNIEnv *env, jobject thiz,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeFillBulkTransfer(JNIEnv *env, jobject thiz,
                                                                      jlong native_object,
                                                                      jint address, jint timeout) {
     struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
@@ -89,7 +109,7 @@ Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillBulkTransfer(JNIEnv *env
 }
 
 JNIEXPORT void JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillBulkStreamTransfer(JNIEnv *env, jobject thiz,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeFillBulkStreamTransfer(JNIEnv *env, jobject thiz,
                                                                      jlong native_object,
                                                                      jint address, jint timeout,
                                                                      jint stream_id) {
@@ -102,7 +122,7 @@ Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillBulkStreamTransfer(JNIEn
 }
 
 JNIEXPORT void JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillInterruptTransfer(JNIEnv *env, jobject thiz,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeFillInterruptTransfer(JNIEnv *env, jobject thiz,
                                                                           jlong native_object,
                                                                           jint address,
                                                                           jint timeout) {
@@ -114,7 +134,7 @@ Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillInterruptTransfer(JNIEnv
 }
 
 JNIEXPORT void JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillIsochronousTransfer(JNIEnv *env,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeFillIsochronousTransfer(JNIEnv *env,
                                                                             jobject thiz,
                                                                             jlong native_object,
                                                                             jint address,
@@ -128,9 +148,16 @@ Java_com_jwoolston_libusb_async_AsyncTransfer_nativeFillIsochronousTransfer(JNIE
 }
 
 JNIEXPORT void JNICALL
-Java_com_jwoolston_libusb_async_AsyncTransfer_nativeSetFlags(JNIEnv *env, jobject thiz,
+Java_com_jwoolston_libusb_AsyncTransfer_nativeSetFlags(JNIEnv *env, jobject thiz,
                                                              jlong native_object, jint flags,
                                                              jint mask) {
     struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
     transfer->flags = (transfer->flags & ~mask) | (flags & mask);
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_AsyncTransfer_nativeCallback(JNIEnv *env, jobject thiz,
+                                                       jlong native_object) {
+    struct libusb_transfer *transfer = (struct libusb_transfer *) native_object;
+    libusb_transfer_callback(transfer);
 }

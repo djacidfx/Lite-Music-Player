@@ -17,6 +17,8 @@
 // Created by Jared Woolston (Jared.Woolston@gmail.com)
 //
 
+#include <sys/eventfd.h>
+#include <unistd.h>
 #include "common.h"
 
 #define  LOG_TAG    "UsbManager-Native"
@@ -72,3 +74,13 @@ Java_com_jwoolston_libusb_UsbManager_nativeDestroy(JNIEnv *env, jobject instance
     libusb_exit(ctx);
 }
 
+JNIEXPORT jint JNICALL
+Java_com_jwoolston_libusb_UsbManager_nativeEventfd(JNIEnv *env, jobject thiz, jboolean block) {
+    return eventfd(0, !block ? EFD_NONBLOCK : 0);
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_UsbManager_readEventfd(JNIEnv *env, jobject thiz, jint fd) {
+    int dummy;
+    read(fd, &dummy, sizeof(dummy));
+}

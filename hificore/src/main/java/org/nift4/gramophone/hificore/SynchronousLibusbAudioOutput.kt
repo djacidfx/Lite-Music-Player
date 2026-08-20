@@ -7,12 +7,12 @@ import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.Log
 import androidx.media3.exoplayer.audio.AudioOutput
+import com.jwoolston.libusb.AsyncTransfer
 import com.jwoolston.libusb.LibusbError
 import com.jwoolston.libusb.UsbConstants
 import com.jwoolston.libusb.UsbDevice
 import com.jwoolston.libusb.UsbInterface
-import com.jwoolston.libusb.async.AsyncTransfer
-import com.jwoolston.libusb.async.TransferCallback
+import com.jwoolston.libusb.TransferCallback
 import java.nio.ByteBuffer
 
 class SynchronousLibusbAudioOutput(

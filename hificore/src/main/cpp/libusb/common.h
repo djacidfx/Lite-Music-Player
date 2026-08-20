@@ -22,7 +22,16 @@
 
 #include <jni.h>
 #include <libusb.h>
+#include <stdbool.h>
 
 #include "logging.h"
+
+struct transfer_callback_holder {
+    JavaVM *vm;
+    jobject buffer;
+    jobject transfer;
+    int fd;
+};
+void LIBUSB_CALL libusb_transfer_callback(struct libusb_transfer *transfer);
 
 #endif //ANDROID_LIBUSB_WRAPPER_COMMON_H

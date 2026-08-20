@@ -69,7 +69,7 @@ public enum LibusbError {
     /** Other error */
     LIBUSB_ERROR_OTHER(-99);
 
-    private final int code;
+    public final int code;
 
     LibusbError(int code) {
         this.code = code;

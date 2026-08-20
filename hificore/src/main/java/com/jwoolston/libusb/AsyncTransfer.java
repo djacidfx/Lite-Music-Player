@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-package com.jwoolston.libusb.async;
+package com.jwoolston.libusb;
+
+import android.os.Looper;
 
 import androidx.annotation.NonNull;
-
-import com.jwoolston.libusb.LibusbError;
-import com.jwoolston.libusb.UsbDevice;
-import com.jwoolston.libusb.UsbEndpoint;
+import androidx.annotation.Nullable;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -36,6 +35,7 @@ public class AsyncTransfer {
     public static final int OFFSET_ISO_PACKET_STATUS = 8;
     public final int isoSlots;
     protected final UsbDevice device;
+    @Nullable Looper callbackLooper;
     private long nativeObject;
     private ByteBuffer buffer; // TODO: DMA support (libusb_dev_mem_alloc/free)
     private final ByteBuffer isoSizeBuffer;
@@ -55,11 +55,30 @@ public class AsyncTransfer {
         return nativeIsInFlight(getNativeObject());
     }
 
-    public long getNativeObject() {
+    boolean readyForCallback() {
+        return nativeReadyForCallback(getNativeObject());
+    }
+
+    void fly(long device) {
+        nativeFly(getNativeObject(), device);
+    }
+
+    void callbackOnLooper() {
+        nativeCallback(getNativeObject());
+    }
+
+    long getNativeObject() {
         if (nativeObject == 0) {
             throw new IllegalStateException("This transfer was already released");
         }
         return nativeObject;
+    }
+
+    public void setCallbackLooper(Looper callbackLooper) {
+        if (isInFlight()) {
+            throw new IllegalStateException("Transfer is in flight, can't change looper anymore");
+        }
+        this.callbackLooper = callbackLooper;
     }
 
     /** Calls {@link UsbDevice#asyncTransfer(AsyncTransfer)}. */
@@ -395,12 +414,15 @@ public class AsyncTransfer {
         if (isInFlight())
             throw new IllegalStateException("Can't release in-progress transfer");
         nativeDestroy(getNativeObject());
-        device.manager.onTransferReleased(nativeObject);
+        device.manager.onTransferReleased(this);
         nativeObject = 0;
     }
 
     private native long nativeAllocate(int isoSlots);
     private native ByteBuffer nativeGetIsoBuffer(long nativeObject, int isoSlots);
     private native boolean nativeIsInFlight(long nativeObject);
+    private native boolean nativeReadyForCallback(long nativeObject);
+    private native void nativeFly(long nativeObject, long device);
+    private native void nativeCallback(long nativeObject);
     private native void nativeDestroy(long nativeObject);
 }
