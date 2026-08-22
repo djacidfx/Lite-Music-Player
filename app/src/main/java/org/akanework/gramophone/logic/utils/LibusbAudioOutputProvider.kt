@@ -34,7 +34,7 @@ class LibusbAudioOutputProvider(private val context: Context) : AudioOutputProvi
 
     override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput {
         context.gramophoneApplication.uacManager.interfaces?.let {
-            return SynchronousLibusbAudioOutput(context.gramophoneApplication.uacManager.openDevices.first(), it.second)
+            return SynchronousLibusbAudioOutput(context.gramophoneApplication.uacManager.openDevices.first().second, it.second)
         }
         throw IllegalStateException("pls grant usb dac perm")
     }

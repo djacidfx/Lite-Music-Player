@@ -474,4 +474,19 @@ Java_com_jwoolston_libusb_UsbDevice_nativeGetMaxAltPacketSize(JNIEnv *env, jobje
                                           address);
 }
 
+JNIEXPORT jlong JNICALL
+Java_com_jwoolston_libusb_UsbDevice_nativeTakeReference(JNIEnv *env, jobject thiz) {
+    return (jlong) (*env)->NewGlobalRef(env, thiz);
+}
+
+JNIEXPORT void JNICALL
+Java_com_jwoolston_libusb_UsbDevice_nativeReleaseReference(JNIEnv *env, jobject thiz, jlong ref) {
+    (*env)->DeleteGlobalRef(env, (jobject) ref);
+}
+
+JNIEXPORT jobject JNICALL
+Java_com_jwoolston_libusb_UsbDevice_nativeGetReference(JNIEnv *env, jclass clazz, jlong ref) {
+    return (jobject) ref;
+}
+
 #pragma clang diagnostic pop
