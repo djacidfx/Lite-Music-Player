@@ -204,6 +204,21 @@ class UacManager(private val context: Context) {
                     handleDeviceOpened(deviceHandle)
                 }
             }
+
+        // to find the endpoint, according to USB 2.0 specification chapter 9.6.6, the feedback EP
+        // for a data EP is the first opposite-direction EP with the same _or lower_ number.
+        // so we first choose a data EP and can then compute the feedback EP from that information.
+        // the feedback EP might be a Feedback-only EP or an implicit feedback data EP, we don't
+        // support the latter, and should not select such alt settings I suppose (TODO).
+        // TODO https://github.com/torvalds/linux/blob/8d3ae59288f1e7d58d76558a6ee96d533bc5019f/sound/usb/pcm.c#L375
+        //  why does Linux do this? is this carried over from UAC1 (need to check old spec!)?
+        // --UAC1--:
+        // For adaptive IN endpoints and asynchronous OUT endpoints, the standard endpoint descriptor provides
+        //the bSynchAddress field to establish a link to the associated synch endpoint. It contains the address of the
+        //synch endpoint. The bSynchAddress field of the synch standard endpoint descriptor must be set to zero.
+        //As indicated earlier, a new Ff value is available every 2(10 – P) frames with P ranging from 1 to 9. The
+        //bRefresh field of the synch standard endpoint descriptor is used to report the exponent (10-P) to the Host.
+        //It can range from 9 down to 1. (512 ms down to 2 ms)
     }
 
     private fun requestPermission(device: UsbDevice) {
