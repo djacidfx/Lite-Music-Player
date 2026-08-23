@@ -351,6 +351,7 @@ private:
     void callback(libusb_transfer *theTransfer) override {
         if (--waitingCount > 0)
             return;
+        transferData->num_iso_packets *= -1; // mark as not ready to send
         Transfer::callback(theTransfer);
     }
 
@@ -383,6 +384,7 @@ public:
 
     bool process(bool inCallback) override {
         if (inCallback) {
+            transferData->num_iso_packets *= -1; // if we weren't canceled, restore original number
             int j = 0;
             unsigned int totalLength = 0;
             for (int i = 0; i < transfer->num_iso_packets; i++) {
