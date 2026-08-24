@@ -15,6 +15,25 @@ import com.jwoolston.libusb.UsbInterface
 import com.jwoolston.libusb.TransferCallback
 import java.nio.ByteBuffer
 
+// For synchronous, the clock source is the USB clock. That means we send constant amount of
+// samples per packet based on the assumption we send exactly samples for 125us, per packet.
+// Adaptive sinks will essentially achieve the same result when we use the same strategy.
+// The basic assumption for the above is that decoder is faster than real-time to ensure we
+// always have enough data. We do NOT use an internal buffer, we use transfers as the buffer.
+// If we read too many iso packets into one transfer at once, we would starve the decoder.
+// If we do not read enough in, we waste CPU time with repeatedly having overhead of
+// decoding and submitting transfer, so we optimally want as much as possible that would not
+// starve decoder (but a lot would mean high packet queue size, which means high audio
+// latency, which we don't want). The total packet queue (=buffer size, essentially) should
+// be tuned for avoiding USB xrun if we are too slow to generate new packets, this means it
+// should be some higher multiple of transfer queue to make sure if we are late once or
+// twice we don't instantly xrun (maybe 4 times). It should also not be too high due to
+// audio latency as previously mentioned.
+// We can say 4 transfers and as such (packet queue size / 4) packets per transfer, with
+// packet queue size being size of audio buffer. If audio buffer is too small, we will xrun,
+// and if it's too big we simply have high latency. Pause/flush can be implemented like that too, by
+// cancelling  transfers. So we can go safe and queue a lot of buffers and just cancel some
+// transfers if we don't feel like sending those anymore.
 class SynchronousLibusbAudioOutput(
     private val device: UsbDevice, private val usbInterface: UsbInterface
 ) : AudioOutput, TransferCallback {
