@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.Log
+import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.audio.AudioOutput
 import com.jwoolston.libusb.LibusbError
 import com.jwoolston.libusb.UsbConstants
@@ -39,21 +40,21 @@ class AsynchronousLibusbAudioOutput(
                 throw IllegalArgumentException("no fb ep?")
             }, 4410, 8,
             10, 4, 44100,
-            1.5, 8, 0, 8)
+            8, 0, 8)
 
         // let bRefresh be 0 if device is not UAC1
         fun createExplicitFeedback(device: UsbDevice, usbInterface: UsbInterface,
-                                   endpointData: UsbEndpoint,
-                                   endpointFb: UsbEndpoint, javaBufferSizeFrames: Int,
-                                   isoSlots: Int, transferQueueSize: Int, audioFrameSize: Int,
-                                   audioSampleRate: Int, audioBufferSizeFramesFactor: Double,
+                                   endpointData: UsbEndpoint, endpointFb: UsbEndpoint,
+                                   javaBufferSizeFrames: Int, isoSlots: Int, transferQueueSize: Int,
+                                   audioFrameSize: Int, audioSampleRate: Int,
                                    feedbackTransferCount: Int, bRefresh: Int,
                                    feedbackMinIsoSlots: Int): AsynchronousLibusbAudioOutput {
             val handle = device.takeReference()
             val ptr = nativeCreateExplicit(device.nativeObject, endpointData.address.toByte(),
                 endpointFb.address.toByte(), javaBufferSizeFrames, isoSlots, transferQueueSize,
-                audioFrameSize, audioSampleRate, audioBufferSizeFramesFactor, feedbackTransferCount,
-                bRefresh, feedbackMinIsoSlots)
+                audioFrameSize, audioSampleRate, device
+                    .getMaxPacketSizeForMicroFrame(usbInterface, endpointData),
+                feedbackTransferCount, bRefresh, feedbackMinIsoSlots)
             return AsynchronousLibusbAudioOutput(device, usbInterface, handle, ptr)
         }
 
@@ -66,7 +67,7 @@ class AsynchronousLibusbAudioOutput(
             transferQueueSize: Int,
             audioFrameSize: Int,
             audioSampleRate: Int,
-            audioBufferSizeFramesFactor: Double,
+            maxIsoPacketSizeBytes: Int,
             feedbackTransferCount: Int,
             bRefresh: Int,
             feedbackMinIsoSlots: Int
@@ -104,8 +105,13 @@ class AsynchronousLibusbAudioOutput(
     private val handler = Handler(Looper.myLooper()!!)
     private var sentAdvancing = false
     private var paused = true
+    private var stopping = false
     private var released = false
-    private val startRunnable = ::startStreaming
+    private val startRunnable = Runnable { startStreaming() }
+    private val tmp = LongArray(2)
+    private var lastTimestampRawPositionFrames = 0uL
+    private var expectTimestampFramePositionReset = false
+    private var accumulatedRawTimestampFramePosition = 0uL
 
     init {
         device.manager.enableUsbEventsForLooper(handler.looper)
@@ -155,19 +161,36 @@ class AsynchronousLibusbAudioOutput(
     private fun startStreaming() {
         if (released) return
         while (true) {
-            val i = nativeStart(getPtr())
+            val i = nativeStart(getPtr(), stopping)
+            if (i == 2 && stopping) {
+                stopping = false
+                sentAdvancing = false
+                return // do not reschedule start runnable anymore, we successfully stopped
+            }
             if (i != 0) {
+                if (i == 1 || i == 2) {
+                    if (paused || stopping)
+                        break
+                    Log.e(TAG, "-->start in play(): underflow")
+                    listeners.forEach { it.onUnderrun() }
+                    continue
+                }
                 Log.e(TAG, "-->start in play(): error ${errToStr(i)}")
-                break//TODO
+                break//TODO are all other errors fatal
             } else {
-                if (!sentAdvancing && positionUs > 0) {
-                    listeners.forEach { it.onPositionAdvancing(System.currentTimeMillis()) }
-                    sentAdvancing = true
+                if (!sentAdvancing) {
+                    nativeGetWriteCounter(getPtr(), tmp)
+                    if (tmp[1] != 0L) {
+                        // TODO: we could convert monotonic nanotime to epoch if we cared
+                        val start = System.currentTimeMillis()
+                        listeners.forEach { it.onPositionAdvancing(start) }
+                        sentAdvancing = true
+                    }
                 }
                 break
             }
         }
-        handler.postDelayed(startRunnable, 100)
+        handler.postDelayed(startRunnable, 100)//TODO: 100ms, or maybe less?
     }
 
     private fun stopStreaming() {
@@ -185,6 +208,9 @@ class AsynchronousLibusbAudioOutput(
         Log.e(TAG, "-->pause")
         paused = true
         stopStreaming()
+        if (stopping)
+            stopping = false
+        sentAdvancing = false
     }
 
     override fun write(
@@ -203,14 +229,18 @@ class AsynchronousLibusbAudioOutput(
 
     override fun flush() {
         stopStreaming()
-        if (!paused)
+        expectTimestampFramePositionReset = true
+        nativeResetWriteCounter(getPtr())
+        sentAdvancing = false
+        if (stopping)
+            stopping = false
+        else if (!paused)
             startStreaming()
     }
 
     override fun stop() {
         Log.e(TAG, "-->stop")
-        //TODO:stopping = true --> should tell startStreaming() to treat underrun as non-error (and
-        // maybe if we can find out everything had underrun we r done stopping?)
+        stopping = true
     }
 
     override fun release() {
@@ -254,8 +284,30 @@ class AsynchronousLibusbAudioOutput(
     }
 
     override fun getPositionUs(): Long {
-        //return timestampFrames * 10000 / 441 //TODO ASAP
-        return 0
+        nativeGetWriteCounter(getPtr(), tmp)
+        val rawPositionFrames = tmp[0].toULong()
+        val nanoTime = tmp[1].toULong()
+        if (nanoTime > 0uL) {
+            if (lastTimestampRawPositionFrames > rawPositionFrames) {
+                if (expectTimestampFramePositionReset) {
+                    // ExoPlayer expects getPositionUs() to _not_ reset on a flush, but we reset it,
+                    // hence we compensate for that here.
+                    accumulatedRawTimestampFramePosition += lastTimestampRawPositionFrames
+                    expectTimestampFramePositionReset = false
+                } else {
+                    // TODO wait, what?
+                }
+            }
+            lastTimestampRawPositionFrames = rawPositionFrames
+            val frameCounter = rawPositionFrames + accumulatedRawTimestampFramePosition
+            val timestampPositionUs = Util.sampleCountToDurationUs(frameCounter.toLong(),
+                sampleRate)
+            val elapsedSinceTimestampUs = (System.nanoTime() - nanoTime.toLong()) / 1000
+            return timestampPositionUs + elapsedSinceTimestampUs
+        } else {
+            return Util.sampleCountToDurationUs(accumulatedRawTimestampFramePosition.toLong(),
+                sampleRate)
+        }
     }
 
     override fun getPlaybackParameters(): PlaybackParameters {
@@ -304,8 +356,10 @@ class AsynchronousLibusbAudioOutput(
         release()
     }
 
-    private external fun nativeStart(ptr: Long): Int
+    private external fun nativeStart(ptr: Long, empty: Boolean): Int
     private external fun nativeWrite(ptr: Long, buf: ByteBuffer, position: Int, remaining: Int): Int
+    private external fun nativeGetWriteCounter(ptr: Long, out: LongArray)
+    private external fun nativeResetWriteCounter(ptr: Long)
     private external fun nativeStop(ptr: Long)
     private external fun nativeRelease(ptr: Long)
 }

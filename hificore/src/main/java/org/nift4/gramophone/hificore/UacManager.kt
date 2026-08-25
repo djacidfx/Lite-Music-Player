@@ -37,7 +37,6 @@ import com.jwoolston.libusb.UsbInterface
 import com.jwoolston.libusb.UsbManager as LibUsbManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 class UacManager(private val context: Context) {
@@ -219,6 +218,9 @@ class UacManager(private val context: Context) {
         //As indicated earlier, a new Ff value is available every 2(10 – P) frames with P ranging from 1 to 9. The
         //bRefresh field of the synch standard endpoint descriptor is used to report the exponent (10-P) to the Host.
         //It can range from 9 down to 1. (512 ms down to 2 ms)
+
+
+        //TODO:uac use channel phase delay feature to replace AudioTrack.getLatency() (where tho?)
     }
 
     private fun requestPermission(device: UsbDevice) {

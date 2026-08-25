@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.Log
+import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.audio.AudioOutput
 import com.jwoolston.libusb.AsyncTransfer
 import com.jwoolston.libusb.LibusbError
@@ -124,6 +125,7 @@ class SynchronousLibusbAudioOutput(
 
     override fun pause() {
         paused = true
+        sentAdvancing = false
         Log.e(TAG, "-->pause")
         //cancel() todo
     }
@@ -182,6 +184,7 @@ class SynchronousLibusbAudioOutput(
     override fun flush() {
         Log.e(TAG, "-->flush")
         flushGeneration++
+        sentAdvancing = false
         timestampFrames = 0
         timestampWrite = 0
         cancel()
@@ -194,6 +197,7 @@ class SynchronousLibusbAudioOutput(
     override fun stop() {
         Log.e(TAG, "-->stop")
         stopping = true
+        sentAdvancing = false
     }
 
     override fun release() {
@@ -233,7 +237,8 @@ class SynchronousLibusbAudioOutput(
     }
 
     override fun getPositionUs(): Long {
-        return timestampFrames * 10000 / 441
+        //TODO: this should NOT reset on flush ....or should it?!
+        return Util.sampleCountToDurationUs(timestampFrames, sampleRate)
     }
 
     override fun getPlaybackParameters(): PlaybackParameters {
@@ -285,12 +290,13 @@ class SynchronousLibusbAudioOutput(
         if (released) return
         val transfer = transfer as TimestampedAsyncTransfer
         val time = System.currentTimeMillis() - 10
-        if (!sentAdvancing) {
-            listeners.forEach { it.onPositionAdvancing(time) }
-            sentAdvancing = true
-        }
-        if (transfer.flushGeneration == flushGeneration)
+        if (transfer.flushGeneration == flushGeneration) {
             this.timestampFrames = transfer.timestamp
+            if (!paused && !stopping && !sentAdvancing) {
+                listeners.forEach { it.onPositionAdvancing(time) }
+                sentAdvancing = true
+            }
+        }
         transfer.buffer.clear()
         transferQueue.add(transfer)
         Log.e(TAG, "SUCCESSFUL transfer with ts ${transfer.flushGeneration} ${transfer.timestamp}(at gen${flushGeneration} $timestampFrames), tx=$bytesTransferred, qs=${transferQueue.size}/${transfers.size} (p=${pendingTransfer != null},sq=${transferSendQueue.size})")
@@ -305,8 +311,6 @@ class SynchronousLibusbAudioOutput(
         val transfer = transfer as TimestampedAsyncTransfer
         //TODO()
         Log.e(TAG, "failed to send data: $result, tx=$bytesTransferred")
-        if (transfer.flushGeneration == flushGeneration)
-            this.timestampFrames = transfer.timestamp
         transfer.buffer.clear()
         transferQueue.add(transfer)
     }

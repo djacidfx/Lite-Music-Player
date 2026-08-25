@@ -49,6 +49,17 @@
 // feedback latency small. We can also choose to use low amount of transfers if we use a
 // real-time-safe transfer filling environment.)
 
+enum StreamingError {
+    STREAMING_NO_ERROR = LIBUSB_SUCCESS,
+    STREAMING_ERROR_UNDERFLOW,
+    STREAMING_ERROR_GLOBAL_UNDERFLOW,
+};
+
+struct timestamp {
+    uint64_t frameCount;
+    uint64_t nanoTime;
+};
+
 static void LIBUSB_CALL transfer_callback_wrapper(libusb_transfer* transfer);
 class Transfer {
 private:
@@ -81,7 +92,7 @@ public:
         transfer->dev_handle = device;
         transfer->flags = 0;
         transfer->type = LIBUSB_TRANSFER_TYPE_ISOCHRONOUS;
-        transfer->timeout = 60; // placeholder, TBD
+        transfer->timeout = 60000; // placeholder, TBD
         transfer->endpoint = endpoint;
         transfer->buffer = static_cast<unsigned char *>(malloc(buffer_size));
         transfer->length = buffer_size;
@@ -90,8 +101,8 @@ public:
     }
 
     void awaitStop() {
-        while (state.load() == Transfer::Canceled)
-            state.wait(Transfer::Canceled);
+        state.wait(Transfer::Active);
+        state.wait(Transfer::Canceled);
         {
             std::unique_lock lock(idleNotificationMutex);
             // must not be optimized out / removed, otherwise:
@@ -116,17 +127,13 @@ public:
             return false;
         }
         // if state is currently idle: we'll have to submit the transfer.
-        bool ok = false;
         int rc = process(false);
-        if (rc == 0) {
-            ok = true;
-        } else {
-            error = rc;
-        }
-        if (!ok) {
+        error = rc;
+        if (rc != 0) {
             state.store(Transfer::Idle);
+            return false;
         }
-        return ok;
+        return true;
     }
 
     // The reason start process is split into two parts is that process() shouldn't race with itself
@@ -141,6 +148,19 @@ public:
 
     int dequeueError() {
         return error.exchange(LIBUSB_SUCCESS);
+    }
+
+    bool dequeueUnderflow() {
+        int expected = STREAMING_ERROR_UNDERFLOW;
+        if (error.compare_exchange_strong(expected, LIBUSB_SUCCESS)) {
+            awaitStop();
+            return true;
+        }
+        return false;
+    }
+
+    bool isIdle() {
+        return state.load() == Transfer::Idle;
     }
 
     void cancel() {
@@ -312,11 +332,6 @@ public:
     }
 };
 
-enum StreamingError {
-    STREAMING_NO_ERROR = LIBUSB_SUCCESS,
-    STREAMING_ERROR_UNDERFLOW,
-};
-
 class Buffer { // SPSC
 public:
     unsigned char* data;
@@ -374,14 +389,15 @@ private:
     int sampleRateIn;
     uint32_t* q16Accumulator;
     Buffer* b;
+    std::atomic<timestamp>* writeCounter;
 
     ImplicitFeedbackTransfer(libusb_device_handle *device, char endpoint, char endpointData,
                              int isoSlots, int sampleRateIn, int sampleRateOut, int dataSizeFrames,
                              int feedbackSizeFrames, int frameSizeIn, int frameSizeOut, uint32_t*
-    q16Accumulator, Buffer* b) : Transfer
+    q16Accumulator, Buffer* b, std::atomic<timestamp>* writeCounter) : Transfer
     (isoSlots, device, endpoint, isoSlots * feedbackSizeFrames * frameSizeIn),
     frameSizeIn(frameSizeIn), frameSizeOut(frameSizeOut), sampleRateIn(sampleRateIn),
-    sampleRateOut(sampleRateOut), q16Accumulator(q16Accumulator), b(b) {
+    sampleRateOut(sampleRateOut), q16Accumulator(q16Accumulator), b(b), writeCounter(writeCounter) {
         int dataSize = dataSizeFrames * frameSizeOut;
         libusb_set_iso_packet_lengths(transfer, feedbackSizeFrames * frameSizeIn);
         transferData = libusb_alloc_transfer(isoSlots);
@@ -389,7 +405,7 @@ private:
         transferData->dev_handle = device;
         transferData->flags = 0;
         transferData->type = LIBUSB_TRANSFER_TYPE_ISOCHRONOUS;
-        transferData->timeout = 60; // placeholder, TBD
+        transferData->timeout = 60000; // placeholder, TBD
         transferData->endpoint = endpointData;
         transferData->length = isoSlots * dataSize;
         transferData->buffer = static_cast<unsigned char *>(malloc(transferData->length));
@@ -431,6 +447,15 @@ private:
     }
 
     void callback(libusb_transfer *theTransfer) override {
+        if (theTransfer == transferData) {
+            timespec tp{};
+            clock_gettime(CLOCK_MONOTONIC, &tp);
+            timestamp t = writeCounter->load();
+            //TODO: can we get nanoTime from libusb or kernel, or something...
+            t.nanoTime = (uint64_t)((tp.tv_sec * 1000000000LL) + tp.tv_nsec);
+            t.frameCount += theTransfer->length / frameSizeOut;
+            writeCounter->store(t);
+        }
         if (--waitingCount > 0)
             return;
         transferData->num_iso_packets *= -1; // mark as not ready to send
@@ -442,12 +467,13 @@ public:
     // still be subjected to clock division, hence they may differ.
     ImplicitFeedbackTransfer(libusb_device_handle *device, char endpoint, char endpointData,
                              int isoSlots, int sampleRateIn, int sampleRateOut, int frameSizeIn,
-                             int frameSizeOut, uint32_t* q16Accumulator, Buffer* b
+                             int frameSizeOut, uint32_t* q16Accumulator, Buffer* b,
+                             std::atomic<timestamp>* writeCounter
     ) : ImplicitFeedbackTransfer(
             device, endpoint, endpointData, isoSlots, sampleRateIn, sampleRateOut,
             calculateNormalSlotCountPerIso(device, sampleRateOut) + 1,
             calculateNormalSlotCountPerIso(device, sampleRateIn) + 1,
-            frameSizeIn, frameSizeOut, q16Accumulator, b) {}
+            frameSizeIn, frameSizeOut, q16Accumulator, b, writeCounter) {}
 
     ~ImplicitFeedbackTransfer() override {
         awaitStop();
@@ -480,6 +506,7 @@ public:
                 totalLengthToSend += outBytes;
             }
             transferData->num_iso_packets = j;
+            transferData->length = (int)totalLengthToSend;
             return read_buffer_into_transfer(b, transfer->buffer, totalLengthToSend);
         }
         return STREAMING_NO_ERROR;
@@ -492,16 +519,26 @@ class AudioTransfer : public Transfer {
     int frameSize;
     int sampleRate;
     Buffer* b;
+    std::atomic<timestamp>* writeCounter;
 public:
     AudioTransfer(int isoSlots, libusb_device_handle *device, char endpoint,
-                  double bufferSizeFramesFactor, int frameSize, int sampleRate,
+                  int maxIsoPacketSizeBytes, int frameSize, int sampleRate,
                   std::atomic<uint32_t>* feedbackIn, std::atomic<uint32_t>* q16Accumulator,
-                  Buffer* b)
-            : Transfer(isoSlots, device, endpoint,
-                       (int32_t)(calculateNormalSlotCountPerIso(device, sampleRate) *
-                       bufferSizeFramesFactor) * frameSize),
+                  Buffer* b, std::atomic<timestamp>* writeCounter)
+            : Transfer(isoSlots, device, endpoint, maxIsoPacketSizeBytes * isoSlots),
             feedbackIn(feedbackIn), frameSize(frameSize), sampleRate(sampleRate),
-            q16Accumulator(q16Accumulator), b(b) {}
+            q16Accumulator(q16Accumulator), b(b), writeCounter(writeCounter) {}
+
+    void callback(libusb_transfer *theTransfer) override {
+        timespec tp{};
+        clock_gettime(CLOCK_MONOTONIC, &tp);
+        timestamp t = writeCounter->load();
+        //TODO: can we get nanoTime from libusb or kernel, or something...
+        t.nanoTime = (uint64_t)((tp.tv_sec * 1000000000LL) + tp.tv_nsec);
+        t.frameCount += theTransfer->length / frameSize;
+        writeCounter->store(t);
+        Transfer::callback(theTransfer);
+    }
 
     int process(bool inCallback) override {
         uint32_t feedback = feedbackIn->load();
@@ -525,13 +562,13 @@ public:
                     break;
                 }
             }
-            // misconfiguration: our bet that a buffer larger than this would never be needed ended
-            // up failing. we can't do anything about it.
-            if (outBytes > frameSize * bufferSize)
-                outBytes = frameSize * bufferSize;
+            int maxSize = bufferSize / transfer->num_iso_packets;
+            if (outBytes > maxSize)
+                outBytes = maxSize;
             transfer->iso_packet_desc[i].length = outBytes;
             totalLengthToSend += outBytes;
         }
+        transfer->length = (int)totalLengthToSend;
         // for now, short transfers aren't implemented, it's all or nothing. alternative according
         // to spec would be zero-sized iso packets, but it doesn't seem like a great idea.
         return read_buffer_into_transfer(b, transfer->buffer, totalLengthToSend);
@@ -541,13 +578,20 @@ public:
 class AsyncFeedbackStreaming {
 protected:
     Buffer b;
+    std::atomic<timestamp> writeCounter;
 public:
     // To keep streaming running:
-    // 1. call start()
+    // 1. call start(whether you intend to empty the buffer)
     // 2. if error is returned: handle error (for example, LIBUSB_ERROR_NO_DEVICE -> call stop),
     //    and if wanting to continue, go to step 1. if LIBUSB_SUCCESS is returned, go to step 3.
     // 3. wait 100ms, then go to step 1
-    virtual int start() = 0;
+    virtual int start(bool empty) = 0;
+    virtual timestamp getWriteCounter() {
+        return writeCounter.load();
+    }
+    void resetWriteCounter() {
+        writeCounter.store({});
+    }
     virtual void stop() = 0;
 
     AsyncFeedbackStreaming(int javaBufferSizeFrames, int audioFrameSize) {
@@ -593,7 +637,7 @@ public:
     ExplicitAsyncFeedbackStreaming(libusb_device_handle *device, char endpointData, char endpointFb,
                                    int javaBufferSizeFrames, int audioIsoSlots,
                                    int audioTransferCount, int audioFrameSize, int audioSampleRate,
-                                   double audioBufferSizeFramesFactor, int feedbackTransferCount,
+                                   int maxIsoPacketSizeBytes, int feedbackTransferCount,
                                    int bRefresh, int feedbackMinIsoSlots) : AsyncFeedbackStreaming(
                                            javaBufferSizeFrames, audioFrameSize) {
         for (int i = 0; i < feedbackTransferCount; i++) {
@@ -604,12 +648,24 @@ public:
         for (int i = 0; i < audioTransferCount; i++) {
             audioTransfers.emplace_back(new AudioTransfer(
                     audioIsoSlots, device, endpointData,
-                    audioBufferSizeFramesFactor, audioFrameSize,
-                    audioSampleRate, &feedback, &accumulator, &b));
+                    maxIsoPacketSizeBytes, audioFrameSize,
+                    audioSampleRate, &feedback, &accumulator, &b,
+                    &writeCounter));
         }
     }
 
-    int start() override {
+    int start(bool empty) override {
+        bool allUnderrun = false;
+        bool oneUnderrun = false;
+        for (auto & audioTransfer : audioTransfers) {
+            bool underrun = audioTransfer->dequeueUnderflow();
+            oneUnderrun = oneUnderrun || underrun;
+            allUnderrun = allUnderrun && underrun;
+        }
+        if (allUnderrun)
+            return STREAMING_ERROR_GLOBAL_UNDERFLOW;
+        else if (oneUnderrun)
+            return STREAMING_ERROR_UNDERFLOW;
         for (auto & audioTransfer : audioTransfers) {
             int error = audioTransfer->dequeueError();
             if (error != LIBUSB_SUCCESS)
@@ -620,6 +676,25 @@ public:
             if (error != LIBUSB_SUCCESS)
                 return error;
         }
+        bool allIdle = false;
+        bool oneIdle = false;
+        for (auto & audioTransfer : audioTransfers) {
+            bool idle = audioTransfer->isIdle();
+            oneIdle = oneIdle || idle;
+            allIdle = allIdle && idle;
+        }
+        if (!allIdle && oneIdle) {
+            // to ensure we read data from ring buffer in proper order and don't cause races, stop
+            // transfers and restart them properly
+            if (empty) {
+                for (auto & audioTransfer : audioTransfers) {
+                    // first let the audio transfers stop themselves
+                    audioTransfer->awaitStop();
+                }
+            }
+            stop();
+        }
+        feedback.store(0);
         std::vector<Transfer*> transfersToStart;
         for (auto & audioTransfer : audioTransfers) {
             if (audioTransfer->start1())
@@ -685,14 +760,45 @@ public:
             transfers.push_back(new ImplicitFeedbackTransfer(
                     device, endpointFb, endpointData, isoSlots,
                     audioSampleRate, feedbackSampleRate,
-                    feedbackFrameSize, audioFrameSize, &q16Accumulator, &b));
+                    feedbackFrameSize, audioFrameSize, &q16Accumulator, &b,
+                    &writeCounter));
         }
     }
-    int start() override {
+    int start(bool empty) override {
+        bool allUnderrun = false;
+        bool oneUnderrun = false;
+        for (auto & transfer : transfers) {
+            bool underrun = transfer->dequeueUnderflow();
+            oneUnderrun = oneUnderrun || underrun;
+            allUnderrun = allUnderrun && underrun;
+        }
+        if (allUnderrun)
+            return STREAMING_ERROR_GLOBAL_UNDERFLOW;
+        else if (oneUnderrun)
+            return STREAMING_ERROR_UNDERFLOW;
         for (auto & transfer : transfers) {
             int error = transfer->dequeueError();
             if (error != LIBUSB_SUCCESS)
                 return error;
+        }
+        bool allIdle = false;
+        bool oneIdle = false;
+        for (auto & transfer : transfers) {
+            bool idle = transfer->isIdle();
+            oneIdle = oneIdle || idle;
+            allIdle = allIdle && idle;
+        }
+        if (!allIdle && oneIdle) {
+            // to ensure we read data from ring buffer in proper order and don't cause races, stop
+            // transfers and restart them properly
+            if (empty) {
+                for (auto & transfer : transfers) {
+                    // first let the audio transfers stop themselves
+                    transfer->awaitStop();
+                }
+            } else {
+                stop();
+            }
         }
         std::vector<Transfer*> transfersToStart;
         for (auto & transfer : transfers) {
@@ -729,9 +835,29 @@ public:
 extern "C"
 JNIEXPORT jint JNICALL
 Java_org_nift4_gramophone_hificore_AsynchronousLibusbAudioOutput_nativeStart(JNIEnv *env, jobject thiz,
-                                                                      jlong ptr) {
+                                                                      jlong ptr, jboolean empty) {
     auto* asyncFeedbackStreaming = (AsyncFeedbackStreaming*) ptr;
-    return asyncFeedbackStreaming->start();
+    return asyncFeedbackStreaming->start(empty);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_AsynchronousLibusbAudioOutput_nativeGetWriteCounter(JNIEnv *env,
+                                                                                       jobject thiz,
+                                                                                       jlong ptr,
+                                                                                       jlongArray out) {
+    auto* asyncFeedbackStreaming = (AsyncFeedbackStreaming*) ptr;
+    timestamp ts = asyncFeedbackStreaming->getWriteCounter();
+    env->SetLongArrayRegion(out, 0, 2, (jlong*)&ts);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_AsynchronousLibusbAudioOutput_nativeResetWriteCounter(JNIEnv *env,
+                                                                                       jobject thiz,
+                                                                                       jlong ptr) {
+    auto* asyncFeedbackStreaming = (AsyncFeedbackStreaming*) ptr;
+    asyncFeedbackStreaming->resetWriteCounter();
 }
 
 extern "C"
@@ -767,7 +893,7 @@ Java_org_nift4_gramophone_hificore_AsynchronousLibusbAudioOutput_00024Companion_
         JNIEnv *env, jobject thiz, jlong native_object,
         jbyte endpoint_data, jbyte endpoint_fb, jint java_buffer_size_frames, jint iso_slots,
         jint transfer_queue_size, jint audio_frame_size, jint audio_sample_rate,
-        jdouble audio_buffer_size_frames_factor, jint feedback_transfer_count, jint b_refresh,
+        jint max_iso_packet_size_bytes, jint feedback_transfer_count, jint b_refresh,
         jint feedback_min_iso_slots) {
     auto* device = (libusb_device_handle*) native_object;
     return (jlong) new ExplicitAsyncFeedbackStreaming(
@@ -775,7 +901,7 @@ Java_org_nift4_gramophone_hificore_AsynchronousLibusbAudioOutput_00024Companion_
             java_buffer_size_frames, iso_slots,
             transfer_queue_size, audio_frame_size,
             audio_sample_rate,
-            audio_buffer_size_frames_factor,
+            max_iso_packet_size_bytes,
             feedback_transfer_count, b_refresh,
             feedback_min_iso_slots);
 }
