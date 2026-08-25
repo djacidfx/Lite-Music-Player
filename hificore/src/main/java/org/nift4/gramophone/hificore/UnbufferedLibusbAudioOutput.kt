@@ -1,7 +1,6 @@
 package org.nift4.gramophone.hificore
 
 import android.media.AudioDeviceInfo
-import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
@@ -35,11 +34,11 @@ import java.nio.ByteBuffer
 // and if it's too big we simply have high latency. Pause/flush can be implemented like that too, by
 // cancelling  transfers. So we can go safe and queue a lot of buffers and just cancel some
 // transfers if we don't feel like sending those anymore.
-class SynchronousLibusbAudioOutput(
+class UnbufferedLibusbAudioOutput(
     private val device: UsbDevice, private val usbInterface: UsbInterface
 ) : AudioOutput, TransferCallback {
     companion object {
-        private const val TAG = "SynchronousLibusbAO"
+        private const val TAG = "UnbufferedLibusbAO"
     }
     private val listeners = mutableListOf<AudioOutput.Listener>()
     private val transfers: List<TimestampedAsyncTransfer>

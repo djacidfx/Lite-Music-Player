@@ -1,27 +1,20 @@
 package org.nift4.gramophone.hificore
 
 import android.media.AudioDeviceInfo
-import android.os.Handler
-import android.os.Looper
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
-import androidx.media3.common.util.Log
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.audio.AudioOutput
-import com.jwoolston.libusb.LibusbError
 import com.jwoolston.libusb.UsbConstants
 import com.jwoolston.libusb.UsbDevice
 import com.jwoolston.libusb.UsbEndpoint
 import com.jwoolston.libusb.UsbInterface
 import java.nio.ByteBuffer
 
-class AsynchronousLibusbAudioOutput(
-    private val device: UsbDevice, private val usbInterface: UsbInterface,
-    private val handle: Long, private val ptr: Long
-) : AudioOutput {
+class BufferedLibusbAudioOutput(
+    device: UsbDevice, usbInterface: UsbInterface, handle: Long, ptr: Long
+) : BufferedStreaming(device, usbInterface, handle, ptr), AudioOutput {
     companion object {
-        private const val TAG = "AsynchronousLibusbAO"
-
         fun new(device: UsbDevice, usbInterface: UsbInterface) = createExplicitFeedback(device,
             usbInterface,
             usbInterface.endpointCount.let {
@@ -48,30 +41,16 @@ class AsynchronousLibusbAudioOutput(
                                    javaBufferSizeFrames: Int, isoSlots: Int, transferQueueSize: Int,
                                    audioFrameSize: Int, audioSampleRate: Int,
                                    feedbackTransferCount: Int, bRefresh: Int,
-                                   feedbackMinIsoSlots: Int): AsynchronousLibusbAudioOutput {
+                                   feedbackMinIsoSlots: Int): BufferedLibusbAudioOutput {
             val handle = device.takeReference()
             val ptr = nativeCreateExplicit(device.nativeObject, endpointData.address.toByte(),
-                endpointFb.address.toByte(), javaBufferSizeFrames, isoSlots, transferQueueSize,
-                audioFrameSize, audioSampleRate, device
+                endpointFb.address.toByte(), nativeCreateBuffer(
+                    javaBufferSizeFrames * audioFrameSize), isoSlots,
+                transferQueueSize, audioFrameSize, audioSampleRate, device
                     .getMaxPacketSizeForMicroFrame(usbInterface, endpointData),
                 feedbackTransferCount, bRefresh, feedbackMinIsoSlots)
-            return AsynchronousLibusbAudioOutput(device, usbInterface, handle, ptr)
+            return BufferedLibusbAudioOutput(device, usbInterface, handle, ptr)
         }
-
-        private external fun nativeCreateExplicit(
-            nativeObject: Long,
-            endpointData: Byte,
-            endpointFb: Byte,
-            javaBufferSizeFrames: Int,
-            isoSlots: Int,
-            transferQueueSize: Int,
-            audioFrameSize: Int,
-            audioSampleRate: Int,
-            maxIsoPacketSizeBytes: Int,
-            feedbackTransferCount: Int,
-            bRefresh: Int,
-            feedbackMinIsoSlots: Int
-        ): Long
 
         // in and out sample rate must be derived from the same clock, but one or both of these may
         // still be subjected to clock division, hence they may differ.
@@ -80,42 +59,32 @@ class AsynchronousLibusbAudioOutput(
                                    endpointFb: UsbEndpoint, javaBufferSizeFrames: Int,
                                    isoSlots: Int, transferQueueSize: Int, audioFrameSize: Int,
                                    audioSampleRate: Int, feedbackFrameSize: Int,
-                                   feedbackSampleRate: Int): AsynchronousLibusbAudioOutput {
+                                   feedbackSampleRate: Int): BufferedLibusbAudioOutput {
             val handle = device.takeReference()
             val ptr = nativeCreateImplicit(device.nativeObject, endpointData.address.toByte(),
-                endpointFb.address.toByte(), javaBufferSizeFrames, isoSlots, transferQueueSize,
-                audioFrameSize, audioSampleRate, feedbackFrameSize, feedbackSampleRate)
-            return AsynchronousLibusbAudioOutput(device, usbInterface, handle, ptr)
+                endpointFb.address.toByte(), nativeCreateBuffer(
+                    javaBufferSizeFrames * audioFrameSize), isoSlots,
+                transferQueueSize, audioFrameSize, audioSampleRate, feedbackFrameSize,
+                feedbackSampleRate)
+            return BufferedLibusbAudioOutput(device, usbInterface, handle, ptr)
         }
 
-        private external fun nativeCreateImplicit(
-            nativeObject: Long,
-            endpointData: Byte,
-            endpointFb: Byte,
-            javaBufferSizeFrames: Int,
-            isoSlots: Int,
-            transferQueueSize: Int,
-            audioFrameSize: Int,
-            audioSampleRate: Int,
-            feedbackFrameSize: Int,
-            feedbackSampleRate: Int
-        ): Long
+        fun createSync(device: UsbDevice, usbInterface: UsbInterface, endpointData: UsbEndpoint,
+                       javaBufferSizeFrames: Int, isoSlots: Int, transferQueueSize: Int,
+                       audioFrameSize: Int, audioSampleRate: Int): BufferedLibusbAudioOutput {
+            val handle = device.takeReference()
+            val ptr = nativeCreateSync(device.nativeObject, endpointData.address.toByte(),
+                nativeCreateBuffer(javaBufferSizeFrames * audioFrameSize),
+                isoSlots, transferQueueSize, audioFrameSize, audioSampleRate)
+            return BufferedLibusbAudioOutput(device, usbInterface, handle, ptr)
+        }
     }
     private val listeners = mutableListOf<AudioOutput.Listener>()
-    private val handler = Handler(Looper.myLooper()!!)
-    private var sentAdvancing = false
-    private var paused = true
-    private var stopping = false
-    private var released = false
-    private val startRunnable = Runnable { startStreaming() }
-    private val tmp = LongArray(2)
     private var lastTimestampRawPositionFrames = 0uL
     private var expectTimestampFramePositionReset = false
     private var accumulatedRawTimestampFramePosition = 0uL
 
     init {
-        device.manager.enableUsbEventsForLooper(handler.looper)
-
         val rate = byteArrayOf(
             0x44.toByte(),
             0xAC.toByte(),
@@ -142,122 +111,22 @@ class AsynchronousLibusbAudioOutput(
         device.setInterface(usbInterface)
     }
 
-    private fun errToStr(i: Int) = if (i <= 0) LibusbError.fromNative(i).toString()
-    else if (i == 1) "Underflow" else "unknown: $i"
-
-    private fun getPtr(): Long {
-        if (released) {
-            throw IllegalStateException("AsyncFeedbackStreaming was already released")
-        }
-        return ptr
-    }
-
-    // To keep streaming running:
-    // 1. call nativeStart()
-    // 2. if error is returned: handle error (for example, LIBUSB_ERROR_NO_DEVICE -> call stop),
-    //    and if wanting to continue, go to step 1. if LIBUSB_SUCCESS is returned, go to step 3.
-    // 3. wait 100ms, then go to step 1
-    // ... and don't forget to write enough data :)
-    private fun startStreaming() {
-        if (released) return
-        while (true) {
-            val i = nativeStart(getPtr(), stopping)
-            if (i == 2 && stopping) {
-                stopping = false
-                sentAdvancing = false
-                return // do not reschedule start runnable anymore, we successfully stopped
-            }
-            if (i != 0) {
-                if (i == 1 || i == 2) {
-                    if (paused || stopping)
-                        break
-                    Log.e(TAG, "-->start in play(): underflow")
-                    listeners.forEach { it.onUnderrun() }
-                    continue
-                }
-                Log.e(TAG, "-->start in play(): error ${errToStr(i)}")
-                break//TODO are all other errors fatal
-            } else {
-                if (!sentAdvancing) {
-                    nativeGetWriteCounter(getPtr(), tmp)
-                    if (tmp[1] != 0L) {
-                        // TODO: we could convert monotonic nanotime to epoch if we cared
-                        val start = System.currentTimeMillis()
-                        listeners.forEach { it.onPositionAdvancing(start) }
-                        sentAdvancing = true
-                    }
-                }
-                break
-            }
-        }
-        handler.postDelayed(startRunnable, 100)//TODO: 100ms, or maybe less?
-    }
-
-    private fun stopStreaming() {
-        handler.removeCallbacks(startRunnable)
-        nativeStop(getPtr())
-    }
-
-    override fun play() {
-        Log.e(TAG, "-->play")
-        paused = false
-        startStreaming()
-    }
-
-    override fun pause() {
-        Log.e(TAG, "-->pause")
-        paused = true
-        stopStreaming()
-        if (stopping)
-            stopping = false
-        sentAdvancing = false
-    }
-
     override fun write(
         buffer: ByteBuffer,
         encodedAccessUnitCount: Int,
         presentationTimeUs: Long
     ): Boolean {
-        if (!buffer.isDirect) {
-            throw IllegalArgumentException("Buffer must be direct")
-        }
-        val progress = nativeWrite(getPtr(), buffer, buffer.position(),
-            buffer.remaining())
-        buffer.position(buffer.position() + progress)
-        return !buffer.hasRemaining()
+        return write(buffer)
     }
 
-    override fun flush() {
-        stopStreaming()
+    override fun onGoingToResetWriteCounter() {
         expectTimestampFramePositionReset = true
-        nativeResetWriteCounter(getPtr())
-        sentAdvancing = false
-        if (stopping)
-            stopping = false
-        else if (!paused)
-            startStreaming()
-    }
-
-    override fun stop() {
-        Log.e(TAG, "-->stop")
-        stopping = true
     }
 
     override fun release() {
         if (released)
             return
-        Log.e(TAG, "-->release")
-        try {
-            // set altsetting 0 (idle)
-            device.setInterface(device.getConfigurationOrThrow()!!
-                .getInterface(usbInterface.id, 0))
-        } catch (e: Exception) {
-            Log.e(TAG, "failed to reset to idle interface", e)
-        }
-        device.manager.disableUsbEventsForLooper(handler.looper, false)
-        nativeRelease(ptr)
-        UsbDevice.releaseReferenceStatic(handle)
-        released = true
+        super.release()
         listeners.forEach { it.onReleased() }
     }
 
@@ -351,15 +220,4 @@ class AsynchronousLibusbAudioOutput(
     override fun setPreferredDevice(preferredDevice: AudioDeviceInfo?) {
         //TODO("Not yet implemented")
     }
-
-    protected fun finalize() {
-        release()
-    }
-
-    private external fun nativeStart(ptr: Long, empty: Boolean): Int
-    private external fun nativeWrite(ptr: Long, buf: ByteBuffer, position: Int, remaining: Int): Int
-    private external fun nativeGetWriteCounter(ptr: Long, out: LongArray)
-    private external fun nativeResetWriteCounter(ptr: Long)
-    private external fun nativeStop(ptr: Long)
-    private external fun nativeRelease(ptr: Long)
 }
