@@ -67,6 +67,7 @@ abstract class Streaming(
     protected fun errToStr(i: Int) = if (i <= 0) LibusbError.fromNative(i).toString()
     else if (i == 1) "Underflow" else "unknown: $i"
 
+    @JvmName("getPtrChecked")
     protected fun getPtr(): Long {
         if (released) {
             throw IllegalStateException("Streaming was already released")
