@@ -792,13 +792,12 @@ public:
             // to ensure we read data from ring buffer in proper order and don't cause races, stop
             // transfers and restart them properly
             if (empty) {
-                for (auto & transfer : transfers) {
+                for (auto &transfer: transfers) {
                     // first let the audio transfers stop themselves
                     transfer->awaitStop();
                 }
-            } else {
-                stop();
             }
+            stop();
         }
         std::vector<Transfer*> transfersToStart;
         for (auto & transfer : transfers) {
