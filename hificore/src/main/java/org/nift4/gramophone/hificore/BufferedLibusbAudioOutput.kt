@@ -12,8 +12,8 @@ import com.jwoolston.libusb.UsbInterface
 import java.nio.ByteBuffer
 
 class BufferedLibusbAudioOutput(
-    device: UsbDevice, usbInterface: UsbInterface, handle: Long, ptr: Long
-) : BufferedStreaming(device, usbInterface, handle, ptr), AudioOutput {
+    device: UsbDevice, usbInterface: UsbInterface, handle: Long, ptr: Long, private val buf: Buffer
+) : Streaming(device, usbInterface, handle, ptr, false), AudioOutput {
     companion object {
         fun new(device: UsbDevice, usbInterface: UsbInterface) = createExplicitFeedback(device,
             usbInterface,
@@ -43,13 +43,13 @@ class BufferedLibusbAudioOutput(
                                    feedbackTransferCount: Int, bRefresh: Int,
                                    feedbackMinIsoSlots: Int): BufferedLibusbAudioOutput {
             val handle = device.takeReference()
+            val buf = Buffer(javaBufferSizeFrames, audioFrameSize)
             val ptr = nativeCreateExplicit(device.nativeObject, endpointData.address.toByte(),
-                endpointFb.address.toByte(), nativeCreateBuffer(
-                    javaBufferSizeFrames * audioFrameSize), isoSlots,
+                endpointFb.address.toByte(), buf.getPtr(), isoSlots,
                 transferQueueSize, audioFrameSize, audioSampleRate, device
                     .getMaxPacketSizeForMicroFrame(usbInterface, endpointData),
                 feedbackTransferCount, bRefresh, feedbackMinIsoSlots)
-            return BufferedLibusbAudioOutput(device, usbInterface, handle, ptr)
+            return BufferedLibusbAudioOutput(device, usbInterface, handle, ptr, buf)
         }
 
         // in and out sample rate must be derived from the same clock, but one or both of these may
@@ -61,22 +61,22 @@ class BufferedLibusbAudioOutput(
                                    audioSampleRate: Int, feedbackFrameSize: Int,
                                    feedbackSampleRate: Int): BufferedLibusbAudioOutput {
             val handle = device.takeReference()
+            val buf = Buffer(javaBufferSizeFrames, audioFrameSize)
             val ptr = nativeCreateImplicit(device.nativeObject, endpointData.address.toByte(),
-                endpointFb.address.toByte(), nativeCreateBuffer(
-                    javaBufferSizeFrames * audioFrameSize), isoSlots,
+                endpointFb.address.toByte(), buf.getPtr(), isoSlots,
                 transferQueueSize, audioFrameSize, audioSampleRate, feedbackFrameSize,
                 feedbackSampleRate)
-            return BufferedLibusbAudioOutput(device, usbInterface, handle, ptr)
+            return BufferedLibusbAudioOutput(device, usbInterface, handle, ptr, buf)
         }
 
         fun createSync(device: UsbDevice, usbInterface: UsbInterface, endpointData: UsbEndpoint,
                        javaBufferSizeFrames: Int, isoSlots: Int, transferQueueSize: Int,
                        audioFrameSize: Int, audioSampleRate: Int): BufferedLibusbAudioOutput {
             val handle = device.takeReference()
+            val buf = Buffer(javaBufferSizeFrames, audioFrameSize)
             val ptr = nativeCreateSync(device.nativeObject, endpointData.address.toByte(),
-                nativeCreateBuffer(javaBufferSizeFrames * audioFrameSize),
-                isoSlots, transferQueueSize, audioFrameSize, audioSampleRate)
-            return BufferedLibusbAudioOutput(device, usbInterface, handle, ptr)
+                buf.getPtr(), isoSlots, transferQueueSize, audioFrameSize, audioSampleRate)
+            return BufferedLibusbAudioOutput(device, usbInterface, handle, ptr, buf)
         }
     }
     private val listeners = mutableListOf<AudioOutput.Listener>()
@@ -116,17 +116,16 @@ class BufferedLibusbAudioOutput(
         encodedAccessUnitCount: Int,
         presentationTimeUs: Long
     ): Boolean {
-        return write(buffer)
+        return buf.write(buffer)
     }
 
     override fun onGoingToResetWriteCounter() {
         expectTimestampFramePositionReset = true
     }
 
-    override fun release() {
-        if (released)
-            return
-        super.release()
+    override fun onRelease() {
+        super.onRelease()
+        buf.release()
         listeners.forEach { it.onReleased() }
     }
 

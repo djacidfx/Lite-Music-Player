@@ -18,9 +18,10 @@
 #include <libusb.h>
 #include <jni.h>
 #include <atomic>
-#include <mutex>
 #include <cmath>
+#include <algorithm>
 #include <vector>
+#include <stdckdint.h>
 #include "farbot/include/farbot/RealtimeObject.hpp"
 #include "farbot/include/farbot/RealtimeTraits.hpp"
 
@@ -78,6 +79,7 @@ private:
     static_assert(std::atomic<bool>::is_always_lock_free);
     std::atomic<int> error = LIBUSB_SUCCESS; // negative=libusb_error, 0=ok, positive=custom error
     static_assert(std::atomic<int>::is_always_lock_free);
+    void* dma = nullptr;
 
 protected:
     libusb_transfer* transfer;
@@ -92,7 +94,8 @@ protected:
     }
 
 public:
-    Transfer(int isoSlots, libusb_device_handle* device, char endpoint, ssize_t buffer_size) :
+    Transfer(int isoSlots, libusb_device_handle* device, char endpoint, ssize_t buffer_size,
+             bool allowDmaMemory) :
     bufferSize(buffer_size) {
         transfer = libusb_alloc_transfer(isoSlots);
         transfer->num_iso_packets = isoSlots;
@@ -101,8 +104,12 @@ public:
         transfer->type = LIBUSB_TRANSFER_TYPE_ISOCHRONOUS;
         transfer->timeout = 60000; // placeholder, TBD
         transfer->endpoint = endpoint;
-        transfer->buffer = static_cast<unsigned char *>(malloc(buffer_size));
         transfer->length = buffer_size;
+        if (allowDmaMemory) {
+            dma = libusb_dev_mem_alloc(device, transfer->length);
+        }
+        transfer->buffer = static_cast<unsigned char *>(dma != nullptr ? dma :
+                                                            malloc(transfer->length));
         transfer->user_data = this;
         transfer->callback = transfer_callback_wrapper;
     }
@@ -252,7 +259,11 @@ public:
     // dtor can only be canceled after cancel()
     virtual ~Transfer() {
         awaitStop();
-        free(transfer->buffer);
+        if (dma != nullptr)
+            libusb_dev_mem_free(transfer->dev_handle, transfer->buffer,
+                                transfer->length);
+        else
+            free(transfer->buffer);
         libusb_free_transfer(transfer);
     }
 };
@@ -305,7 +316,8 @@ private:
     static_assert(std::atomic<uint32_t>::is_always_lock_free);
     ExplicitFeedbackTransfer(libusb_device_handle *device, char endpoint, std::atomic<uint32_t>* out,
                      int isoSlots, int feedbackSize) : Transfer(isoSlots, device, endpoint,
-                                              isoSlots * feedbackSize), out(out) {
+                                              isoSlots * feedbackSize,
+                                              true), out(out) {
         libusb_set_iso_packet_lengths(transfer, feedbackSize);
     }
 public:
@@ -338,22 +350,51 @@ public:
 };
 
 class AudioSource {
+    int frameSize;
+protected:
+    RealtimeTimestamp writeCounter;
 public:
+    AudioSource(int frameSize) : frameSize(frameSize) {}
     virtual StreamingError readAudio(unsigned char* outBuf, size_t length) = 0;
+    virtual bool allowDmaMemory() = 0;
     virtual ~AudioSource() = default;
+    virtual timestamp getWriteCounter() {
+        {
+            RealtimeTimestamp::ScopedAccess<farbot::ThreadType::nonRealtime> t(writeCounter);
+
+            return *t;
+        }
+    }
+    virtual void resetWriteCounter() {
+        // This is actually called on nonRealtime thread, but while the realtime thread isn't
+        // running, so we can impersonate it. (I know, it's evil)
+        {
+            RealtimeTimestamp::ScopedAccess<farbot::ThreadType::realtime> t(writeCounter);
+
+            t->frameCount = 0;
+            t->nanoTime = 0;
+        }
+    }
+
+    virtual void completedWrite(timespec tp, size_t bytes) {
+        {
+            RealtimeTimestamp::ScopedAccess<farbot::ThreadType::realtime> t(writeCounter);
+
+            t->nanoTime = (uint64_t)((tp.tv_sec * 1000000000LL) + tp.tv_nsec);
+            t->frameCount += bytes / frameSize;
+        }
+    }
 };
 
 class Buffer : public AudioSource { // SPSC
+public:
     unsigned char* data;
     uint32_t size;
     std::atomic<uint32_t> read;
     std::atomic<uint32_t> write;
+    std::atomic<uint32_t> underrunCounter;
     static_assert(std::atomic<uint32_t>::is_always_lock_free);
-public:
-    Buffer(int sizeBytes) {
-        size = sizeBytes;
-        data = static_cast<unsigned char *>(malloc(size));
-    }
+
 // the transfer is already pre-filled with both num_iso_packet and the iso packet's lengths, we just
 // have to fill the buffer. we shouldn't modify read pointer if we underflow to not drop data into
 // the void (as underflow means we won't send this transfer). this function may race with itself on
@@ -365,8 +406,10 @@ public:
         uint32_t readCount = read.load();
         uint32_t readMod = readCount % size;
         uint32_t available = write.load() - readCount;
-        if (available < length)
+        if (available < length) {
+            underrunCounter++;
             return STREAMING_ERROR_UNDERFLOW;
+        }
         if (readMod + length <= size) { // normal case, single memcpy
             memcpy(outBuf, data + readMod, length);
         } else { // wrap is in the middle of our transfer
@@ -375,6 +418,10 @@ public:
         }
         read.store(readCount + length);
         return STREAMING_NO_ERROR;
+    }
+    Buffer(int bufferSizeFrames, int frameSize) : AudioSource(frameSize) {
+        size = bufferSizeFrames * frameSize;
+        data = static_cast<unsigned char *>(malloc(size));
     }
 
     uint32_t writeAudio(unsigned char* inBuf, uint32_t length) {
@@ -399,9 +446,174 @@ public:
         return length;
     }
 
+    bool allowDmaMemory() override {
+        return true;
+    }
+
     ~Buffer() override {
         free(data);
     }
+};
+
+class __attribute__((packed)) int24_t {
+    unsigned char data[3];
+public:
+    inline int24_t& operator=(int32_t v)
+    {
+        data[0] = (unsigned char)v;
+        data[1] = (unsigned char)(v >> 8);
+        data[2] = (unsigned char)(v >> 16);
+        return *this;
+    }
+};
+static_assert(sizeof(int24_t) == 3);
+
+class SoftMixer : public AudioSource {
+protected:
+    using BufferList = farbot::RealtimeObject<std::vector<Buffer*>, farbot::RealtimeObjectOptions::nonRealtimeMutatable>;
+    static_assert (farbot::is_realtime_move_assignable<std::vector<Buffer*>>::value);
+    BufferList list;
+
+    bool allowDmaMemory() override {
+        return false;
+    }
+    StreamingError readAudio(unsigned char *outBuf, size_t length) override {
+        if (length > 0) {
+            BufferList::ScopedAccess <farbot::ThreadType::realtime> buffers(list);
+            clear(outBuf, length);
+            for (Buffer* b : *buffers) {
+                uint32_t readCount = b->read.load();
+                uint32_t readMod = readCount % b->size;
+                uint32_t available = b->write.load() - readCount;
+                if (available < length) {
+                    b->underrunCounter++;
+                    continue;
+                }
+                if (readMod + length <= b->size) { // normal case, single mix
+                    mix(outBuf, b->data + readMod, length);
+                } else { // wrap is in the middle of our transfer
+                    mix(outBuf, b->data + readMod, b->size - readMod);
+                    mix(outBuf + (b->size - readMod), b->data, length - (b->size - readMod));
+                }
+                b->read.store(readCount + length);
+            }
+        }
+        return STREAMING_NO_ERROR;
+    }
+
+    virtual size_t frameCountBytes() = 0;
+    virtual void clear(unsigned char* out, size_t length) = 0;
+    virtual void mix(unsigned char* out, unsigned char* src, size_t length) = 0;
+
+public:
+    // 1 if successfully added, 0 if already in list, -1 if invalid size
+    int addBuffer(Buffer* b) {
+        if (b->size % frameCountBytes() != 0)
+            return -1;
+        {
+            BufferList::ScopedAccess<farbot::ThreadType::nonRealtime> buffers(list);
+            auto position = std::find(buffers->begin(), buffers->end(), b);
+            if (position != buffers->end())
+                return false;
+            buffers->push_back(b);
+            return true;
+        }
+    }
+    void completedWrite(timespec tp, size_t bytes) override {
+        AudioSource::completedWrite(tp, bytes);
+        // TODO: this doesn't consider late-joining buffers that would need to skip this call a few
+        //  times in order to be correct. should be fixed
+        {
+            BufferList::ScopedAccess<farbot::ThreadType::realtime> buffers(list);
+            for (Buffer* b : *buffers) {
+                b->completedWrite(tp, bytes);
+            }
+        }
+    }
+    void resetWriteCounter() override {
+        AudioSource::resetWriteCounter();
+        {
+            BufferList::ScopedAccess<farbot::ThreadType::nonRealtime> buffers(list);
+            for (Buffer* b : *buffers) {
+                b->resetWriteCounter();
+            }
+        }
+    }
+    // true if successfully removed and may now be freed, false if wasn't in list
+    bool removeBuffer(Buffer* b) {
+        {
+            BufferList::ScopedAccess<farbot::ThreadType::nonRealtime> buffers(list);
+            auto position = std::find(buffers->begin(), buffers->end(), b);
+            if (position == buffers->end())
+                return false;
+            buffers->erase(position);
+            return true;
+        }
+    }
+};
+
+template<class output_format, class mixing_format>
+class PcmSoftMixer : public SoftMixer {
+    size_t channelCount;
+    StreamingError readAudio(unsigned char *outBuf, size_t length) override {
+        // TODO: implement dither for both int32->int16 (or uint8_t, that needs it even more) and
+        //  int32->int32 with bBitResolution=24 (or any other number actually)
+        if constexpr (!std::is_same_v<output_format, mixing_format>) {
+            unsigned char mixBuf[length * sizeof(mixing_format) / sizeof(output_format)];
+            SoftMixer::readAudio(mixBuf, length);
+            for (int i = 0; i < length / sizeof(output_format); i++) {
+                mixing_format* in = (mixing_format*)(mixBuf) + i;
+                output_format* out = (output_format*)(outBuf) + i;
+                static_assert(false); // TODO: format conversion not yet implemented
+            }
+            return STREAMING_NO_ERROR;
+        } else {
+            return SoftMixer::readAudio(outBuf, length);
+        }
+    }
+    size_t frameCountBytes() override {
+        return channelCount * sizeof(output_format);
+    }
+    void clear(unsigned char* out, size_t length) override {
+        for (size_t i = 0; i < length / sizeof(mixing_format); i++) {
+            mixing_format* entry = (mixing_format*)(out) + i;
+            if constexpr (std::is_unsigned_v<mixing_format>) {
+                *entry = std::numeric_limits<mixing_format>::max() / 2 + 1;
+            } else {
+                *entry = 0;
+            }
+        }
+    }
+    void mix(unsigned char* out, unsigned char* src, size_t length) override {
+        for (size_t i = 0; i < length / sizeof(mixing_format); i++) {
+            mixing_format* entryOut = (mixing_format*)(out) + i;
+            mixing_format* entryIn = (mixing_format*)(src) + i;
+            //TODO:need to implement https://www.vttoth.com/CMS/technical-notes/?view=article&id=68
+            static_assert(false);
+            /*if constexpr (std::is_signed_v<mixing_format>) {
+                if (!ckd_add(entryOut, *entryIn, *entryOut)) {
+                    *entryOut = (*entryIn >= 0) ? std::numeric_limits<mixing_format>::max()
+                                                : std::numeric_limits<mixing_format>::lowest();
+                }
+            } else if constexpr (std::is_unsigned_v<mixing_format>) {
+                mixing_format silence = std::numeric_limits<mixing_format>::max() / 2 + 1;
+                static_assert(sizeof(mixing_format) < 4); // not yet implemented, probably unneeded
+                int32_t a = (int32_t)*entryIn - silence;
+                int32_t b = (int32_t)*entryOut - silence;
+                std::make_signed_t<mixing_format> result;
+                if (ckd_add(&result, a, b)) {
+                    *entryOut = result + silence;
+                } else {
+                    *entryOut = (a >= 0) ? std::numeric_limits<mixing_format>::max()
+                                         : std::numeric_limits<mixing_format>::lowest();
+                }
+            } else {
+                static_assert(false); // makes no sense
+            }*/
+        }
+    }
+public:
+    PcmSoftMixer(size_t channelCount) : channelCount(channelCount) {}
 };
 
 // Implicit feedback boils down to: 1. start capture 2. wait for URB to return 3. send exactly
@@ -422,6 +634,7 @@ static int calculateNormalSlotCountPerIso(libusb_device_handle *device, int samp
 class ImplicitFeedbackTransfer : public Transfer {
 private:
     libusb_transfer* transferData;
+    void* dma = nullptr;
     std::atomic<int> waitingCount;
     static_assert(std::atomic<int>::is_always_lock_free);
     int frameSizeIn;
@@ -430,15 +643,15 @@ private:
     int sampleRateIn;
     uint32_t* q16Accumulator;
     AudioSource* b;
-    RealtimeTimestamp* writeCounter;
 
     ImplicitFeedbackTransfer(libusb_device_handle *device, char endpoint, char endpointData,
                              int isoSlots, int sampleRateIn, int sampleRateOut, int dataSizeFrames,
                              int feedbackSizeFrames, int frameSizeIn, int frameSizeOut, uint32_t*
-    q16Accumulator, AudioSource* b, RealtimeTimestamp* writeCounter) : Transfer
-    (isoSlots, device, endpoint, isoSlots * feedbackSizeFrames * frameSizeIn),
+    q16Accumulator, AudioSource* b) : Transfer
+    (isoSlots, device, endpoint, isoSlots * feedbackSizeFrames * frameSizeIn,
+     true),
     frameSizeIn(frameSizeIn), frameSizeOut(frameSizeOut), sampleRateIn(sampleRateIn),
-    sampleRateOut(sampleRateOut), q16Accumulator(q16Accumulator), b(b), writeCounter(writeCounter) {
+    sampleRateOut(sampleRateOut), q16Accumulator(q16Accumulator), b(b) {
         int dataSize = dataSizeFrames * frameSizeOut;
         libusb_set_iso_packet_lengths(transfer, feedbackSizeFrames * frameSizeIn);
         transferData = libusb_alloc_transfer(isoSlots);
@@ -449,7 +662,11 @@ private:
         transferData->timeout = 60000; // placeholder, TBD
         transferData->endpoint = endpointData;
         transferData->length = isoSlots * dataSize;
-        transferData->buffer = static_cast<unsigned char *>(malloc(transferData->length));
+        if (b->allowDmaMemory()) {
+            dma = libusb_dev_mem_alloc(device, transferData->length);
+        }
+        transferData->buffer = static_cast<unsigned char *>(dma != nullptr ? dma :
+                malloc(transferData->length));
         transferData->user_data = this;
         transferData->callback = transfer_callback_wrapper;
         libusb_set_iso_packet_lengths(transferData, dataSize);
@@ -490,14 +707,9 @@ private:
     void callback(libusb_transfer *theTransfer) override {
         if (theTransfer == transferData) {
             timespec tp{};
+            //TODO: can we get time from libusb or kernel, or something...
             clock_gettime(CLOCK_MONOTONIC, &tp);
-            {
-                RealtimeTimestamp::ScopedAccess<farbot::ThreadType::realtime> t(*writeCounter);
-
-                //TODO: can we get nanoTime from libusb or kernel, or something...
-                t->nanoTime = (uint64_t)((tp.tv_sec * 1000000000LL) + tp.tv_nsec);
-                t->frameCount += theTransfer->length / frameSizeOut;
-            }
+            b->completedWrite(tp, theTransfer->length);
         }
         if (--waitingCount > 0)
             return;
@@ -510,17 +722,20 @@ public:
     // still be subjected to clock division, hence they may differ.
     ImplicitFeedbackTransfer(libusb_device_handle *device, char endpoint, char endpointData,
                              int isoSlots, int sampleRateIn, int sampleRateOut, int frameSizeIn,
-                             int frameSizeOut, uint32_t* q16Accumulator, AudioSource* b,
-                             RealtimeTimestamp* writeCounter
+                             int frameSizeOut, uint32_t* q16Accumulator, AudioSource* b
     ) : ImplicitFeedbackTransfer(
             device, endpoint, endpointData, isoSlots, sampleRateIn, sampleRateOut,
             calculateNormalSlotCountPerIso(device, sampleRateOut) + 1,
             calculateNormalSlotCountPerIso(device, sampleRateIn) + 1,
-            frameSizeIn, frameSizeOut, q16Accumulator, b, writeCounter) {}
+            frameSizeIn, frameSizeOut, q16Accumulator, b) {}
 
     ~ImplicitFeedbackTransfer() override {
         awaitStop();
-        free(transferData->buffer);
+        if (dma != nullptr)
+            libusb_dev_mem_free(transferData->dev_handle, transferData->buffer,
+                                transferData->length);
+        else
+            free(transferData->buffer);
         libusb_free_transfer(transferData);
         Transfer::~Transfer();
     }
@@ -561,7 +776,6 @@ class AudioTransfer : public Transfer {
     int frameSize;
     int sampleRate;
     AudioSource* b;
-    RealtimeTimestamp * writeCounter;
 protected:
     virtual uint32_t getFeedbackOrDefault() {
         uint32_t usbFrameDuration = libusb_get_device_speed(libusb_get_device(
@@ -571,21 +785,16 @@ protected:
 public:
     AudioTransfer(int isoSlots, libusb_device_handle *device, char endpoint,
                   int maxIsoPacketSizeBytes, int frameSize, int sampleRate,
-                  uint32_t* q16Accumulator, AudioSource* b, RealtimeTimestamp* writeCounter)
-            : Transfer(isoSlots, device, endpoint, maxIsoPacketSizeBytes * isoSlots),
-            frameSize(frameSize), sampleRate(sampleRate), q16Accumulator(q16Accumulator), b(b),
-            writeCounter(writeCounter) {}
+                  uint32_t* q16Accumulator, AudioSource* b)
+            : Transfer(isoSlots, device, endpoint, maxIsoPacketSizeBytes * isoSlots,
+                       b->allowDmaMemory()),
+            frameSize(frameSize), sampleRate(sampleRate), q16Accumulator(q16Accumulator), b(b) {}
 
     void callback(libusb_transfer *theTransfer) override {
         timespec tp{};
+        //TODO: can we get time from libusb or kernel, or something...
         clock_gettime(CLOCK_MONOTONIC, &tp);
-        {
-            RealtimeTimestamp::ScopedAccess<farbot::ThreadType::realtime> t(*writeCounter);
-
-            //TODO: can we get nanoTime from libusb or kernel, or something...
-            t->nanoTime = (uint64_t)((tp.tv_sec * 1000000000LL) + tp.tv_nsec);
-            t->frameCount += theTransfer->length / frameSize;
-        }
+        b->completedWrite(tp, theTransfer->length);
         Transfer::callback(theTransfer);
     }
 
@@ -622,14 +831,12 @@ public:
     FeedbackAudioTransfer(int isoSlots, libusb_device_handle *device, char endpoint,
                   int maxIsoPacketSizeBytes, int frameSize, int sampleRate,
                   std::atomic<uint32_t>* feedbackIn, uint32_t* q16Accumulator,
-                  AudioSource* b, RealtimeTimestamp* writeCounter) : AudioTransfer(
+                  AudioSource* b) : AudioTransfer(
                           isoSlots, device, endpoint, maxIsoPacketSizeBytes, frameSize, sampleRate,
-                          q16Accumulator, b, writeCounter), feedbackIn(feedbackIn) {}
+                          q16Accumulator, b), feedbackIn(feedbackIn) {}
 };
 
 class Streaming {
-protected:
-    RealtimeTimestamp writeCounter;
 public:
     AudioSource* b;
     Streaming(AudioSource* b) : b(b) {}
@@ -639,23 +846,6 @@ public:
     //    and if wanting to continue, go to step 1. if LIBUSB_SUCCESS is returned, go to step 3.
     // 3. wait 100ms, then go to step 1
     virtual int start(bool empty) = 0;
-    virtual timestamp getWriteCounter() {
-        {
-            RealtimeTimestamp::ScopedAccess<farbot::ThreadType::nonRealtime> t(writeCounter);
-
-            return *t;
-        }
-    }
-    void resetWriteCounter() {
-        // This is actually called on nonRealtime thread, but while the realtime thread isn't
-        // running, so we can impersonate it. (I know, it's evil)
-        {
-            RealtimeTimestamp::ScopedAccess<farbot::ThreadType::realtime> t(writeCounter);
-
-            t->frameCount = 0;
-            t->nanoTime = 0;
-        }
-    }
     virtual void stop() = 0;
     virtual ~Streaming() = default;
 };
@@ -674,16 +864,15 @@ public:
                                    int maxIsoPacketSizeBytes, int feedbackTransferCount,
                                    int bRefresh, int feedbackMinIsoSlots) : Streaming(audioSource) {
         for (int i = 0; i < feedbackTransferCount; i++) {
-            feedbackTransfers.emplace_back(new ExplicitFeedbackTransfer(
+            feedbackTransfers.push_back(new ExplicitFeedbackTransfer(
                     bRefresh, feedbackMinIsoSlots, device, endpointFb,
                     &feedback));
         }
         for (int i = 0; i < audioTransferCount; i++) {
-            audioTransfers.emplace_back(new FeedbackAudioTransfer(
+            audioTransfers.push_back(new FeedbackAudioTransfer(
                     audioIsoSlots, device, endpointData,
                     maxIsoPacketSizeBytes, audioFrameSize,
-                    audioSampleRate, &feedback, &accumulator, b,
-                    &writeCounter));
+                    audioSampleRate, &feedback, &accumulator, b));
         }
     }
 
@@ -791,11 +980,10 @@ public:
         int maxIsoPacketSizeBytes = audioFrameSize * (calculateNormalSlotCountPerIso(
                 device, audioSampleRate) + 1);
         for (int i = 0; i < audioTransferCount; i++) {
-            audioTransfers.emplace_back(new AudioTransfer(
+            audioTransfers.push_back(new AudioTransfer(
                     audioIsoSlots, device, endpointData,
                     maxIsoPacketSizeBytes, audioFrameSize,
-                    audioSampleRate, &accumulator, b,
-                    &writeCounter));
+                    audioSampleRate, &accumulator, b));
         }
     }
 
@@ -881,8 +1069,7 @@ public:
             transfers.push_back(new ImplicitFeedbackTransfer(
                     device, endpointFb, endpointData, isoSlots,
                     audioSampleRate, feedbackSampleRate,
-                    feedbackFrameSize, audioFrameSize, &q16Accumulator, b,
-                    &writeCounter));
+                    feedbackFrameSize, audioFrameSize, &q16Accumulator, b));
         }
     }
     int start(bool empty) override {
@@ -967,7 +1154,7 @@ Java_org_nift4_gramophone_hificore_Streaming_nativeGetWriteCounter(JNIEnv *env,
                                                                                    jlong ptr,
                                                                                    jlongArray out) {
     auto* pStreaming = (Streaming*) ptr;
-    timestamp ts = pStreaming->getWriteCounter();
+    timestamp ts = pStreaming->b->getWriteCounter();
     env->SetLongArrayRegion(out, 0, 2, (jlong*)&ts);
 }
 
@@ -977,7 +1164,7 @@ Java_org_nift4_gramophone_hificore_Streaming_nativeResetWriteCounter(JNIEnv *env
                                                                                      jobject thiz,
                                                                                      jlong ptr) {
     auto* pStreaming = (Streaming*) ptr;
-    pStreaming->resetWriteCounter();
+    pStreaming->b->resetWriteCounter();
 }
 
 extern "C"
@@ -991,21 +1178,12 @@ Java_org_nift4_gramophone_hificore_Streaming_nativeStop(JNIEnv *env, jobject thi
 extern "C"
 JNIEXPORT void JNICALL
 Java_org_nift4_gramophone_hificore_Streaming_nativeRelease(JNIEnv *env, jobject thiz,
-                                                                           jlong ptr) {
+                                                                           jlong ptr,
+                                                           jboolean auto_release_native_buf) {
     auto* pStreaming = (Streaming*) ptr;
-    delete pStreaming->b;
+    if (auto_release_native_buf)
+        delete pStreaming->b;
     delete pStreaming;
-}
-
-extern "C"
-JNIEXPORT jint JNICALL
-Java_org_nift4_gramophone_hificore_BufferedStreaming_nativeWrite(JNIEnv *env, jobject thiz,
-                                                                         jlong ptr, jobject buf,
-                                                                         jint position,
-                                                                         jint remaining) {
-    auto* pStreaming = (Streaming*) ptr;
-    auto* inBuf = static_cast<unsigned char *>(env->GetDirectBufferAddress(buf));
-    return (jint)((Buffer*)pStreaming->b)->writeAudio(inBuf + position, remaining);
 }
 
 extern "C"
@@ -1056,8 +1234,59 @@ Java_org_nift4_gramophone_hificore_Streaming_00024Companion_nativeCreateSync(
 
 extern "C"
 JNIEXPORT jlong JNICALL
-Java_org_nift4_gramophone_hificore_BufferedStreaming_00024Companion_nativeCreateBuffer(JNIEnv *env,
-                                                                                       jobject thiz,
-                                                                                       jint buffer_size_bytes) {
-    return (jlong)new Buffer(buffer_size_bytes);
+Java_org_nift4_gramophone_hificore_Buffer_nativeCreateBuffer(JNIEnv *env,
+                                                             jobject thiz,
+                                                             jint buffer_size_frames,
+                                                             jint frame_size) {
+    return (jlong)new Buffer(buffer_size_frames, frame_size);
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_org_nift4_gramophone_hificore_Buffer_nativeGetUnderrunCount(JNIEnv *env, jobject thiz,
+                                                                 jlong ptr) {
+    auto* b = (Buffer*) ptr;
+    return (jint)b->underrunCounter.load();
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_org_nift4_gramophone_hificore_Buffer_nativeWrite(JNIEnv *env, jobject thiz,
+                                                      jlong ptr, jobject buf,
+                                                      jint position, jint remaining) {
+    auto* b = (Buffer*) ptr;
+    auto* inBuf = static_cast<unsigned char *>(env->GetDirectBufferAddress(buf));
+    return (jint)b->writeAudio(inBuf + position, remaining);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_Buffer_nativeRelease(JNIEnv *env,
+                                                             jobject thiz,
+                                                        jlong ptr) {
+    delete (Buffer*)ptr;
+}
+
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_org_nift4_gramophone_hificore_SoftMixedStreaming_00024Companion_nativeCreateSoftMixer(
+        JNIEnv *env, jobject thiz) {
+    // TODO: implement nativeCreateSoftMixer()
+    return 0;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_org_nift4_gramophone_hificore_SoftMixedStreaming_nativeAddBuffer(JNIEnv *env, jobject thiz,
+                                                                      jlong ptr, jlong buf) {
+    auto* pStreaming = (Streaming*) ptr;
+    return ((SoftMixer*)pStreaming->b)->addBuffer((Buffer*)buf);
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_org_nift4_gramophone_hificore_SoftMixedStreaming_nativeRemoveBuffer(JNIEnv *env, jobject thiz,
+                                                                         jlong ptr, jlong buf) {
+    auto* pStreaming = (Streaming*) ptr;
+    return ((SoftMixer*)pStreaming->b)->removeBuffer((Buffer*)buf);
 }

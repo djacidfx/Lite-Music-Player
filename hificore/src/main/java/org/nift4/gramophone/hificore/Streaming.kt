@@ -9,7 +9,7 @@ import com.jwoolston.libusb.UsbInterface
 
 abstract class Streaming(
     protected val device: UsbDevice, protected val usbInterface: UsbInterface,
-    protected val handle: Long, protected val ptr: Long
+    protected val handle: Long, protected val ptr: Long, private val autoReleaseNativeBuf: Boolean
 ) {
     companion object {
         private const val TAG = "Streaming"
@@ -164,11 +164,13 @@ abstract class Streaming(
             Log.e(TAG, "failed to reset to idle interface", e)
         }
         device.manager.disableUsbEventsForLooper(handler.looper, false)
-        nativeRelease(ptr)
+        nativeRelease(ptr, autoReleaseNativeBuf)
         UsbDevice.releaseReferenceStatic(handle)
         released = true
+        onRelease()
     }
 
+    protected open fun onRelease() {}
     protected open fun onUnderrun() {}
     protected open fun onPositionAdvancing(start: Long) {}
     protected open fun onGoingToResetWriteCounter() {}
@@ -181,5 +183,5 @@ abstract class Streaming(
     protected external fun nativeGetWriteCounter(ptr: Long, out: LongArray)
     private external fun nativeResetWriteCounter(ptr: Long)
     private external fun nativeStop(ptr: Long)
-    private external fun nativeRelease(ptr: Long)
+    private external fun nativeRelease(ptr: Long, autoReleaseNativeBuf: Boolean)
 }
