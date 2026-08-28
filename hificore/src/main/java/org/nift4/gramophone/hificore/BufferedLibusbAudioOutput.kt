@@ -3,6 +3,7 @@ package org.nift4.gramophone.hificore
 import android.media.AudioDeviceInfo
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.util.Log
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.audio.AudioOutput
 import com.jwoolston.libusb.UsbConstants
@@ -15,6 +16,7 @@ class BufferedLibusbAudioOutput(
     device: UsbDevice, usbInterface: UsbInterface, handle: Long, ptr: Long, private val buf: Buffer
 ) : Streaming(device, usbInterface, handle, ptr, false), AudioOutput {
     companion object {
+        private const val TAG = "BufferedLibusbAO"
         fun new(device: UsbDevice, usbInterface: UsbInterface) = createExplicitFeedback(device,
             usbInterface,
             usbInterface.endpointCount.let {
@@ -80,6 +82,9 @@ class BufferedLibusbAudioOutput(
         }
     }
     private val listeners = mutableListOf<AudioOutput.Listener>()
+    private var sentAdvancing = false
+    private var paused = true
+    private var stopping = false
     private var lastTimestampRawPositionFrames = 0uL
     private var expectTimestampFramePositionReset = false
     private var accumulatedRawTimestampFramePosition = 0uL
@@ -111,6 +116,41 @@ class BufferedLibusbAudioOutput(
         device.setInterface(usbInterface)
     }
 
+    override fun startStreaming() {
+        if (released) return
+        while (true) {
+            val i = nativeStart(getPtr(), stopping)
+            if (i == 2 && stopping) {
+                stopping = false
+                sentAdvancing = false
+                return // do not reschedule start runnable anymore, we successfully stopped
+            }
+            if (i != 0) {
+                if (i == 1 || i == 2) {
+                    if (paused || stopping)
+                        break
+                    Log.e(TAG, "-->start in play(): underflow")
+                    listeners.forEach { it.onUnderrun() }
+                    continue
+                }
+                Log.e(TAG, "-->start in play(): error ${errToStr(i)}")
+                break//TODO are all other errors fatal
+            } else {
+                if (!sentAdvancing) {
+                    buf.getWriteCounter(tmp)
+                    if (tmp[1] != 0L) {
+                        // TODO: we could convert monotonic nanotime to epoch if we cared
+                        val start = System.currentTimeMillis()
+                        listeners.forEach { it.onPositionAdvancing(start) }
+                        sentAdvancing = true
+                    }
+                }
+                break
+            }
+        }
+        handler.postDelayed(startRunnable, 100)//TODO: 100ms, or maybe less?
+    }
+
     override fun write(
         buffer: ByteBuffer,
         encodedAccessUnitCount: Int,
@@ -119,8 +159,36 @@ class BufferedLibusbAudioOutput(
         return buf.write(buffer)
     }
 
-    override fun onGoingToResetWriteCounter() {
+    override fun play() {
+        Log.e(TAG, "-->play")
+        paused = false
+        startStreaming()
+    }
+
+    override fun pause() {
+        Log.e(TAG, "-->pause")
+        paused = true
+        stopStreaming()
+        if (stopping)
+            stopping = false
+        sentAdvancing = false
+    }
+
+    override fun flush() {
+        stopStreaming()
+        buf.flush()
+        buf.resetWriteCounter()
         expectTimestampFramePositionReset = true
+        sentAdvancing = false
+        if (stopping)
+            stopping = false
+        else if (!paused)
+            startStreaming()
+    }
+
+    override fun stop() {
+        Log.e(TAG, "-->stop")
+        stopping = true
     }
 
     override fun onRelease() {
@@ -152,7 +220,7 @@ class BufferedLibusbAudioOutput(
     }
 
     override fun getPositionUs(): Long {
-        nativeGetWriteCounter(getPtr(), tmp)
+        buf.getWriteCounter(tmp)
         val rawPositionFrames = tmp[0].toULong()
         val nanoTime = tmp[1].toULong()
         if (nanoTime > 0uL) {

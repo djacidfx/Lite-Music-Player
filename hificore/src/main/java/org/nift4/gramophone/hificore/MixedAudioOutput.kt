@@ -1,28 +1,63 @@
 package org.nift4.gramophone.hificore
 
 import android.media.AudioDeviceInfo
+import androidx.annotation.GuardedBy
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.audio.AudioOutput
-import com.jwoolston.libusb.UsbConstants
-import com.jwoolston.libusb.UsbDevice
-import com.jwoolston.libusb.UsbEndpoint
-import com.jwoolston.libusb.UsbInterface
 import java.nio.ByteBuffer
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 
 class MixedAudioOutput(
     private val mixer: SoftMixedStreaming, javaBufferSizeFrames: Int, audioFrameSize: Int,
-) : AudioOutput {
+) : Buffer(true, javaBufferSizeFrames, audioFrameSize), AudioOutput {
+
+    companion object {
+        private val releaseExecutorLock: Any = Any()
+    
+        // Intentional statically shared mutable state
+        @GuardedBy("releaseExecutorLock")
+        private var releaseExecutor: ScheduledExecutorService? = null
+
+        @GuardedBy("releaseExecutorLock")
+        private var pendingReleaseCount: Int = 0
+
+        private const val AUDIO_TRACK_VOLUME_RAMP_TIME_MS = 20
+    }
     private val listeners = mutableListOf<AudioOutput.Listener>()
+    private var sentAdvancing = false
+    private var lastUnderrunCount = 0u
     private var lastTimestampRawPositionFrames = 0uL
     private var expectTimestampFramePositionReset = false
     private var accumulatedRawTimestampFramePosition = 0uL
-    private val buf = Buffer(javaBufferSizeFrames, audioFrameSize)
     private val tmp = LongArray(2)
 
     init {
-        mixer.addBuffer(buf)
+        setStopped(true)
+        mixer.addBuffer(this)
+    }
+
+    internal fun periodicCallback() {
+        synchronized(this) {
+            if (released)
+                return
+            val underrunCount = getUnderrunCount()
+            if (underrunCount != lastUnderrunCount) {
+                listeners.forEach { it.onUnderrun() }
+                lastUnderrunCount = underrunCount
+            }
+            if (!sentAdvancing) {
+                getWriteCounter(tmp)
+                if (tmp[1] != 0L) {
+                    // TODO: we could convert monotonic nanotime to epoch if we cared
+                    val start = System.currentTimeMillis()
+                    listeners.forEach { it.onPositionAdvancing(start) }
+                    sentAdvancing = true
+                }
+            }
+        }
     }
 
     override fun write(
@@ -30,33 +65,74 @@ class MixedAudioOutput(
         encodedAccessUnitCount: Int,
         presentationTimeUs: Long
     ): Boolean {
-        return buf.write(buffer)
+        return write(buffer)
     }
 
-    //TODO:override fun onGoingToResetWriteCounter() {
-    //    expectTimestampFramePositionReset = true
-    //}
-
     override fun play() {
-        TODO("Not yet implemented")
+        setStopped(false)
+        val fadeInFrames = sampleRate * AUDIO_TRACK_VOLUME_RAMP_TIME_MS / 1000
+        nativeSetFramesUntilPaused(getPtr(), -fadeInFrames - 1)
+        // TODO: send advancing after pause and then play, maybe by doing removeBuffer after pause
+        //  was processed or by making SoftMixer reset timestamps after pause is processed, or idk
     }
 
     override fun pause() {
-        TODO("Not yet implemented")
+        val fadeInFrames = sampleRate * AUDIO_TRACK_VOLUME_RAMP_TIME_MS / 1000
+        nativeSetFramesUntilPaused(getPtr(), fadeInFrames)
     }
 
     override fun flush() {
-        TODO("Not yet implemented")
+        mixer.removeBuffer(this)
+        super.flush()
+        resetWriteCounter()
+        expectTimestampFramePositionReset = true
+        mixer.addBuffer(this)
     }
 
     override fun stop() {
-        TODO("Not yet implemented")
+        setStopped(true)
     }
 
     override fun release() {
-        mixer.removeBuffer(buf)
-        buf.release()
-        listeners.forEach { it.onReleased() }
+        // awaitPause can take some time, so we call it on a background thread. The background
+        // thread is shared statically to avoid creating many threads when multiple players are
+        // released at the same time.
+        val audioTrackThreadHandler = Util.createHandlerForCurrentLooper()
+        synchronized(releaseExecutorLock) {
+            if (releaseExecutor == null) {
+                releaseExecutor = Util.newSingleThreadScheduledExecutor(
+                    "ExoPlayer:MixedAudioOutputReleaseThread")
+            }
+            pendingReleaseCount++
+            releaseExecutor!!.schedule(
+                {
+                    try {
+                        nativeAwaitPause(getPtr())
+                        synchronized(this) {
+                            mixer.removeBuffer(this)
+                            super.release()
+                        }
+                    } finally {
+                        if (audioTrackThreadHandler.looper.thread.isAlive) {
+                            audioTrackThreadHandler.post {
+                                listeners.forEach { it.onReleased() }
+                            }
+                        }
+                        synchronized(releaseExecutorLock) {
+                            pendingReleaseCount--
+                            if (pendingReleaseCount == 0) {
+                                releaseExecutor!!.shutdown()
+                                releaseExecutor = null
+                            }
+                        }
+                    }
+                },
+                // We need to schedule the flush and release with a delay to ensure the audio system
+                // can completely ramp down the audio output after the preceding pause.
+                AUDIO_TRACK_VOLUME_RAMP_TIME_MS.toLong(),
+                TimeUnit.MILLISECONDS
+            )
+        }
     }
 
     override fun setVolume(volume: Float) {
@@ -82,7 +158,7 @@ class MixedAudioOutput(
     }
 
     override fun getPositionUs(): Long {
-        //TODO:mixer.getWriteCounterForBuffer(buf, tmp)
+        getWriteCounter(tmp)
         val rawPositionFrames = tmp[0].toULong()
         val nanoTime = tmp[1].toULong()
         if (nanoTime > 0uL) {
@@ -149,4 +225,7 @@ class MixedAudioOutput(
     override fun setPreferredDevice(preferredDevice: AudioDeviceInfo?) {
         //TODO("Not yet implemented")
     }
+
+    private external fun nativeSetFramesUntilPaused(ptr: Long, frames: Int)
+    private external fun nativeAwaitPause(ptr: Long)
 }

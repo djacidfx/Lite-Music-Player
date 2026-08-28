@@ -56,6 +56,7 @@ enum StreamingError {
     STREAMING_NO_ERROR = LIBUSB_SUCCESS,
     STREAMING_ERROR_UNDERFLOW,
     STREAMING_ERROR_GLOBAL_UNDERFLOW,
+    STREAMING_ERROR_INVALID_ARGUMENT,
 };
 
 struct timestamp {
@@ -271,19 +272,19 @@ static void LIBUSB_CALL transfer_callback_wrapper(libusb_transfer* transfer) {
     ((Transfer*) transfer->user_data)->callback(transfer);
 }
 
-static uint16_t q16Accumulate(uint32_t* accumulator, uint32_t value) {
+static uint16_t u16Accumulate(uint32_t* accumulator, uint32_t value) {
     *accumulator += value;
     uint16_t frames = *accumulator >> 16;
     *accumulator &= 0xffff;
     return frames;
 }
 
-// Unambiguously Q10.14 feedback for full-speed operation of USB Audio Class 1.0 device.
+// Unambiguously U10.14 feedback for full-speed operation of USB Audio Class 1.0 device.
 constexpr ssize_t kFeedbackSizeUac1 = 3;
 // Some devices sadly misinterpret the USB Audio Class 2.0 specification, or worse, understand it
-// correctly but add a workaround for Windows, sending Q16.16 feedback instead of Q10.14 even if
+// correctly but add a workaround for Windows, sending U16.16 feedback instead of U10.14 even if
 // they're only full-speed, so we always have to use HS-sized buffer. By specification, full-speed
-// devices send Q10.14 feedback, and high-speed devices send Q16.16 feedback.
+// devices send Q10.14 feedback, and high-speed devices send U16.16 feedback.
 constexpr ssize_t kFeedbackSizeUac2 = 4;
 // The issue with feedback polling in userspace is that it is hard to time this to be every n
 // (micro)frames (we do know in which microframe a device updates its feedback value based on
@@ -333,7 +334,7 @@ public:
                 if (transfer->iso_packet_desc[i].status == LIBUSB_TRANSFER_COMPLETED) {
                     if (transfer->iso_packet_desc[i].actual_length == 3) {
                         unsigned char *buf = libusb_get_iso_packet_buffer_simple(transfer, i);
-                        // Q10.14 -> Q16.16
+                        // U10.14 -> U16.16
                         out->store((((uint32_t) buf[0]) | ((uint32_t) buf[1]) << 8
                             | ((uint32_t) buf[2]) << 16) << 2);
                         break;
@@ -355,7 +356,7 @@ protected:
     RealtimeTimestamp writeCounter;
 public:
     AudioSource(int frameSize) : frameSize(frameSize) {}
-    virtual StreamingError readAudio(unsigned char* outBuf, size_t length) = 0;
+    virtual uint32_t readAudio(unsigned char* outBuf, size_t length) = 0;
     virtual bool allowDmaMemory() = 0;
     virtual ~AudioSource() = default;
     virtual timestamp getWriteCounter() {
@@ -366,8 +367,6 @@ public:
         }
     }
     virtual void resetWriteCounter() {
-        // This is actually called on nonRealtime thread, but while the realtime thread isn't
-        // running, so we can impersonate it. (I know, it's evil)
         {
             RealtimeTimestamp::ScopedAccess<farbot::ThreadType::realtime> t(writeCounter);
 
@@ -394,21 +393,29 @@ public:
     std::atomic<uint32_t> write;
     std::atomic<uint32_t> underrunCounter;
     static_assert(std::atomic<uint32_t>::is_always_lock_free);
+    // this doesn't actually control if we read from it, but just if we're mad about underrun. to
+    // stop reading, stop transfer loop / remove buffer from mixer.
+    std::atomic<bool> stopped;
+    static_assert(std::atomic<bool>::is_always_lock_free);
 
-// the transfer is already pre-filled with both num_iso_packet and the iso packet's lengths, we just
-// have to fill the buffer. we shouldn't modify read pointer if we underflow to not drop data into
-// the void (as underflow means we won't send this transfer). this function may race with itself on
-// input buffer access, but it has exclusive access to output buffer.
-    StreamingError readAudio(unsigned char* outBuf, size_t length) override {
+    Buffer(int bufferSizeFrames, int frameSize) : AudioSource(frameSize) {
+        size = bufferSizeFrames * frameSize;
+        data = static_cast<unsigned char *>(malloc(size));
+    }
+
+    uint32_t readAudio(unsigned char* outBuf, size_t length) override {
         if (length == 0) {
-            return STREAMING_NO_ERROR;
+            return 0;
         }
         uint32_t readCount = read.load();
         uint32_t readMod = readCount % size;
         uint32_t available = write.load() - readCount;
         if (available < length) {
-            underrunCounter++;
-            return STREAMING_ERROR_UNDERFLOW;
+            if (!stopped) {
+                // The buffer is in fact not stopping, so count underrun
+                underrunCounter += length;
+            }
+            length = available;
         }
         if (readMod + length <= size) { // normal case, single memcpy
             memcpy(outBuf, data + readMod, length);
@@ -417,11 +424,7 @@ public:
             memcpy(outBuf + (size - readMod), data, length - (size - readMod));
         }
         read.store(readCount + length);
-        return STREAMING_NO_ERROR;
-    }
-    Buffer(int bufferSizeFrames, int frameSize) : AudioSource(frameSize) {
-        size = bufferSizeFrames * frameSize;
-        data = static_cast<unsigned char *>(malloc(size));
+        return length;
     }
 
     uint32_t writeAudio(unsigned char* inBuf, uint32_t length) {
@@ -455,6 +458,19 @@ public:
     }
 };
 
+struct pause_progress {
+    unsigned int framesFadedSoFar:24;
+    unsigned int framesLeft:24;
+    bool fadingIn:1;
+};
+
+class MixerBuffer : public Buffer {
+public:
+    MixerBuffer(int bufferSizeFrames, int frameSize) : Buffer(bufferSizeFrames, frameSize) {}
+    std::atomic<pause_progress> pauseProgress;
+    static_assert(std::atomic<pause_progress>::is_always_lock_free);
+};
+
 class __attribute__((packed)) int24_t {
     unsigned char data[3];
 public:
@@ -470,45 +486,87 @@ static_assert(sizeof(int24_t) == 3);
 
 class SoftMixer : public AudioSource {
 protected:
-    using BufferList = farbot::RealtimeObject<std::vector<Buffer*>, farbot::RealtimeObjectOptions::nonRealtimeMutatable>;
-    static_assert (farbot::is_realtime_move_assignable<std::vector<Buffer*>>::value);
+    using BufferList = farbot::RealtimeObject<std::vector<MixerBuffer*>, farbot::RealtimeObjectOptions::nonRealtimeMutatable>;
+    static_assert (farbot::is_realtime_move_assignable<std::vector<MixerBuffer*>>::value);
     BufferList list;
 
     bool allowDmaMemory() override {
         return false;
     }
-    StreamingError readAudio(unsigned char *outBuf, size_t length) override {
+    uint32_t readAudio(unsigned char *outBuf, size_t length) override {
         if (length > 0) {
             BufferList::ScopedAccess <farbot::ThreadType::realtime> buffers(list);
             clear(outBuf, length);
-            for (Buffer* b : *buffers) {
-                uint32_t readCount = b->read.load();
-                uint32_t readMod = readCount % b->size;
-                uint32_t available = b->write.load() - readCount;
-                if (available < length) {
-                    b->underrunCounter++;
-                    continue;
+            for (MixerBuffer* b : *buffers) {
+                uint32_t readCount;
+                uint32_t readMod;
+                uint32_t available;
+                uint32_t readLength;
+                // gain = (gainA / gainB)
+                uint32_t gainA = 1;
+                uint32_t gainB = 1;
+                uint32_t frameSize = frameSizeBytes();
+                while (true) {
+                    pause_progress p = b->pauseProgress.load();
+                    if (!p.framesLeft && !p.fadingIn)
+                        goto skip_this_buffer;
+                    else if (p.framesLeft) { // some work to do
+                        gainB = p.framesLeft + p.framesFadedSoFar; // total frames
+                        if (p.fadingIn)
+                            gainA = gainB - p.framesLeft; // frames already faded in
+                        else
+                            gainA = p.framesLeft; // frames left to fade-out
+                        uint32_t fadingNow = length / frameSize;
+                        pause_progress tmp = p;
+                        tmp.framesFadedSoFar += fadingNow;
+                        tmp.framesLeft -= fadingNow;
+                        if (!b->pauseProgress.compare_exchange_weak(p, tmp)) {
+                            gainA = 1;
+                            gainB = 1;
+                            continue; // try again
+                        }
+                        // TODO: it is unknown whether this is lock free with NDK. C++29 will expose
+                        //  a way to query this (https://github.com/cplusplus/papers/issues/1915),
+                        //  but a manual audit would certainly be worth it.
+                        b->pauseProgress.notify_all(); // notify anyone in awaitPause()
+                    }
+                    break;
+                }
+                readCount = b->read.load();
+                readMod = readCount % b->size;
+                available = b->write.load() - readCount;
+                readLength = length;
+                if (available < readLength) {
+                    if (b->stopped) {
+                        // The buffer is in fact not stopping, so count underrun
+                        b->underrunCounter++;
+                    }
+                    readLength = available;
                 }
                 if (readMod + length <= b->size) { // normal case, single mix
-                    mix(outBuf, b->data + readMod, length);
+                    mix(outBuf, b->data + readMod, readLength, gainA, gainB);
                 } else { // wrap is in the middle of our transfer
-                    mix(outBuf, b->data + readMod, b->size - readMod);
-                    mix(outBuf + (b->size - readMod), b->data, length - (b->size - readMod));
+                    mix(outBuf, b->data + readMod, b->size - readMod, gainA, gainB);
+                    mix(outBuf + (b->size - readMod), b->data, readLength - (b->size - readMod),
+                        gainA, gainB);
                 }
-                b->read.store(readCount + length);
+                b->read.store(readCount + readLength);
+                skip_this_buffer:;
             }
         }
-        return STREAMING_NO_ERROR;
+        return length;
     }
 
-    virtual size_t frameCountBytes() = 0;
+    virtual size_t frameSizeBytes() = 0;
     virtual void clear(unsigned char* out, size_t length) = 0;
-    virtual void mix(unsigned char* out, unsigned char* src, size_t length) = 0;
+    // gain = (gainA / gainB)
+    virtual void mix(unsigned char* out, unsigned char* src, size_t length, uint32_t gainA,
+                     uint32_t gainB) = 0;
 
 public:
     // 1 if successfully added, 0 if already in list, -1 if invalid size
-    int addBuffer(Buffer* b) {
-        if (b->size % frameCountBytes() != 0)
+    int addBuffer(MixerBuffer* b) {
+        if (b->size % frameSizeBytes() != 0)
             return -1;
         {
             BufferList::ScopedAccess<farbot::ThreadType::nonRealtime> buffers(list);
@@ -525,7 +583,7 @@ public:
         //  times in order to be correct. should be fixed
         {
             BufferList::ScopedAccess<farbot::ThreadType::realtime> buffers(list);
-            for (Buffer* b : *buffers) {
+            for (MixerBuffer* b : *buffers) {
                 b->completedWrite(tp, bytes);
             }
         }
@@ -533,14 +591,14 @@ public:
     void resetWriteCounter() override {
         AudioSource::resetWriteCounter();
         {
-            BufferList::ScopedAccess<farbot::ThreadType::nonRealtime> buffers(list);
-            for (Buffer* b : *buffers) {
+            BufferList::ScopedAccess<farbot::ThreadType::realtime> buffers(list);
+            for (MixerBuffer* b : *buffers) {
                 b->resetWriteCounter();
             }
         }
     }
     // true if successfully removed and may now be freed, false if wasn't in list
-    bool removeBuffer(Buffer* b) {
+    bool removeBuffer(MixerBuffer* b) {
         {
             BufferList::ScopedAccess<farbot::ThreadType::nonRealtime> buffers(list);
             auto position = std::find(buffers->begin(), buffers->end(), b);
@@ -555,12 +613,14 @@ public:
 template<class output_format, class mixing_format>
 class PcmSoftMixer : public SoftMixer {
     size_t channelCount;
-    StreamingError readAudio(unsigned char *outBuf, size_t length) override {
+    uint32_t readAudio(unsigned char *outBuf, size_t length) override {
         // TODO: implement dither for both int32->int16 (or uint8_t, that needs it even more) and
         //  int32->int32 with bBitResolution=24 (or any other number actually)
         if constexpr (!std::is_same_v<output_format, mixing_format>) {
-            unsigned char mixBuf[length * sizeof(mixing_format) / sizeof(output_format)];
-            SoftMixer::readAudio(mixBuf, length);
+            size_t mixBufLength = length * sizeof(mixing_format) / sizeof(output_format);
+            unsigned char mixBuf[mixBufLength];
+            // we can ignore returned value, we know it's same as mixBufLength
+            SoftMixer::readAudio(mixBuf, mixBufLength);
             for (int i = 0; i < length / sizeof(output_format); i++) {
                 mixing_format* in = (mixing_format*)(mixBuf) + i;
                 output_format* out = (output_format*)(outBuf) + i;
@@ -571,7 +631,7 @@ class PcmSoftMixer : public SoftMixer {
             return SoftMixer::readAudio(outBuf, length);
         }
     }
-    size_t frameCountBytes() override {
+    size_t frameSizeBytes() override {
         return channelCount * sizeof(output_format);
     }
     void clear(unsigned char* out, size_t length) override {
@@ -584,7 +644,7 @@ class PcmSoftMixer : public SoftMixer {
             }
         }
     }
-    void mix(unsigned char* out, unsigned char* src, size_t length) override {
+    void mix(unsigned char* out, unsigned char* src, size_t length, uint32_t gainA, uint32_t gainB) override {
         for (size_t i = 0; i < length / sizeof(mixing_format); i++) {
             mixing_format* entryOut = (mixing_format*)(out) + i;
             mixing_format* entryIn = (mixing_format*)(src) + i;
@@ -641,17 +701,17 @@ private:
     int frameSizeOut;
     int sampleRateOut;
     int sampleRateIn;
-    uint32_t* q16Accumulator;
+    uint32_t* u16Accumulator;
     AudioSource* b;
 
     ImplicitFeedbackTransfer(libusb_device_handle *device, char endpoint, char endpointData,
                              int isoSlots, int sampleRateIn, int sampleRateOut, int dataSizeFrames,
                              int feedbackSizeFrames, int frameSizeIn, int frameSizeOut, uint32_t*
-    q16Accumulator, AudioSource* b) : Transfer
+    u16Accumulator, AudioSource* b) : Transfer
     (isoSlots, device, endpoint, isoSlots * feedbackSizeFrames * frameSizeIn,
      true),
-    frameSizeIn(frameSizeIn), frameSizeOut(frameSizeOut), sampleRateIn(sampleRateIn),
-    sampleRateOut(sampleRateOut), q16Accumulator(q16Accumulator), b(b) {
+                                      frameSizeIn(frameSizeIn), frameSizeOut(frameSizeOut), sampleRateIn(sampleRateIn),
+                                      sampleRateOut(sampleRateOut), u16Accumulator(u16Accumulator), b(b) {
         int dataSize = dataSizeFrames * frameSizeOut;
         libusb_set_iso_packet_lengths(transfer, feedbackSizeFrames * frameSizeIn);
         transferData = libusb_alloc_transfer(isoSlots);
@@ -722,12 +782,12 @@ public:
     // still be subjected to clock division, hence they may differ.
     ImplicitFeedbackTransfer(libusb_device_handle *device, char endpoint, char endpointData,
                              int isoSlots, int sampleRateIn, int sampleRateOut, int frameSizeIn,
-                             int frameSizeOut, uint32_t* q16Accumulator, AudioSource* b
+                             int frameSizeOut, uint32_t* u16Accumulator, AudioSource* b
     ) : ImplicitFeedbackTransfer(
             device, endpoint, endpointData, isoSlots, sampleRateIn, sampleRateOut,
             calculateNormalSlotCountPerIso(device, sampleRateOut) + 1,
             calculateNormalSlotCountPerIso(device, sampleRateIn) + 1,
-            frameSizeIn, frameSizeOut, q16Accumulator, b) {}
+            frameSizeIn, frameSizeOut, u16Accumulator, b) {}
 
     ~ImplicitFeedbackTransfer() override {
         awaitStop();
@@ -742,37 +802,55 @@ public:
 
     int process(bool inCallback) override {
         if (inCallback) {
-            transferData->num_iso_packets *= -1; // if we weren't canceled, restore original number
             int j = 0;
             unsigned int totalLengthToSend = 0;
             for (int i = 0; i < transfer->num_iso_packets; i++) {
-                uint32_t outputFramesQ16;
+                uint32_t outputFramesU16;
                 if (transfer->iso_packet_desc[i].status == LIBUSB_TRANSFER_COMPLETED &&
                         transfer->iso_packet_desc[i].actual_length > 0) {
                     // one packet must have integer number of audio frames
                     uint32_t inFrames = transfer->iso_packet_desc[i].actual_length / frameSizeIn;
-                    outputFramesQ16 = ((uint64_t)inFrames * sampleRateOut << 16) / sampleRateIn;
+                    outputFramesU16 = ((uint64_t)inFrames * sampleRateOut << 16) / sampleRateIn;
                 } else {
                     // guesstimate at least somewhat, as some amount of errors is expected with ISO
                     uint32_t usbFrameDuration = libusb_get_device_speed(libusb_get_device(
                             transfer->dev_handle)) == LIBUSB_SPEED_FULL ? 1000 : 125;
-                    outputFramesQ16 = ((uint64_t)sampleRateOut * usbFrameDuration << 16) / 1000000;
+                    outputFramesU16 = ((uint64_t)sampleRateOut * usbFrameDuration << 16) / 1000000;
                 }
-                uint32_t outBytes = (uint32_t)q16Accumulate(
-                        q16Accumulator, outputFramesQ16) * frameSizeOut;
+                uint32_t outBytes = (uint32_t) u16Accumulate(
+                        u16Accumulator, outputFramesU16) * frameSizeOut;
                 transferData->iso_packet_desc[j++].length = outBytes;
                 totalLengthToSend += outBytes;
             }
             transferData->num_iso_packets = j;
             transferData->length = (int)totalLengthToSend;
-            return b->readAudio(transferData->buffer, totalLengthToSend);
+            uint32_t actualLength = b->readAudio(transferData->buffer, totalLengthToSend);
+            // sanity check, but this never happens
+            if (actualLength > totalLengthToSend || (actualLength % frameSizeOut) != 0) {
+                return STREAMING_ERROR_INVALID_ARGUMENT;
+            }
+            if (actualLength < totalLengthToSend) {
+                // We can't do short transfers as it would offset our perception of time and USB
+                // device's perception of time permanently if the host(!) controller's ISO queue
+                // empties. UAC spec defines zero-length packets as valid way to signal there's no more
+                // data available right now, so let's make use of that.
+                int i;
+                for (i = j - 1; i >= 0 && actualLength < totalLengthToSend; i--) {
+                    while (actualLength < totalLengthToSend &&
+                            transferData->iso_packet_desc[i].length > 0) {
+                        transferData->iso_packet_desc[i].length -= frameSizeOut;
+                        totalLengthToSend -= frameSizeOut;
+                    }
+                }
+                transferData->length = (int) totalLengthToSend;
+            }
         }
         return STREAMING_NO_ERROR;
     }
 };
 
 class AudioTransfer : public Transfer {
-    uint32_t* q16Accumulator;
+    uint32_t* u16Accumulator;
     int frameSize;
     int sampleRate;
     AudioSource* b;
@@ -785,10 +863,10 @@ protected:
 public:
     AudioTransfer(int isoSlots, libusb_device_handle *device, char endpoint,
                   int maxIsoPacketSizeBytes, int frameSize, int sampleRate,
-                  uint32_t* q16Accumulator, AudioSource* b)
+                  uint32_t* u16Accumulator, AudioSource* b)
             : Transfer(isoSlots, device, endpoint, maxIsoPacketSizeBytes * isoSlots,
                        b->allowDmaMemory()),
-            frameSize(frameSize), sampleRate(sampleRate), q16Accumulator(q16Accumulator), b(b) {}
+              frameSize(frameSize), sampleRate(sampleRate), u16Accumulator(u16Accumulator), b(b) {}
 
     void callback(libusb_transfer *theTransfer) override {
         timespec tp{};
@@ -801,18 +879,37 @@ public:
     int process(bool inCallback) override {
         uint32_t feedback = getFeedbackOrDefault();
         unsigned int totalLengthToSend = 0;
+        int maxSize = bufferSize / transfer->num_iso_packets;
         for (int i = 0; i < transfer->num_iso_packets; i++) {
-            uint32_t outBytes = q16Accumulate(q16Accumulator, feedback) * frameSize;
-            int maxSize = bufferSize / transfer->num_iso_packets;
+            uint32_t outBytes = u16Accumulate(u16Accumulator, feedback) * frameSize;
             if (outBytes > maxSize)
                 outBytes = maxSize;
             transfer->iso_packet_desc[i].length = outBytes;
             totalLengthToSend += outBytes;
         }
-        transfer->length = (int)totalLengthToSend;
-        // for now, short transfers aren't implemented, it's all or nothing. alternative according
-        // to spec would be zero-sized iso packets, but it doesn't seem like a great idea.
-        return b->readAudio(transfer->buffer, totalLengthToSend);
+        uint32_t actualLength = b->readAudio(transfer->buffer, totalLengthToSend);
+        if (totalLengthToSend > 0 && actualLength == 0) {
+            return STREAMING_ERROR_UNDERFLOW;
+        }
+        // sanity check, but this never happens
+        if (actualLength > totalLengthToSend || (actualLength % frameSize) != 0) {
+            return STREAMING_ERROR_INVALID_ARGUMENT;
+        }
+        if (actualLength < totalLengthToSend) {
+            // We can't do short transfers as it would offset our perception of time and USB
+            // device's perception of time permanently if the host(!) controller's ISO queue
+            // empties. UAC spec defines zero-length packets as valid way to signal there's no more
+            // data available right now, so let's make use of that.
+            for (int i = transfer->num_iso_packets - 1; i >= 0 && actualLength < totalLengthToSend; i--) {
+                while (actualLength < totalLengthToSend &&
+                        transfer->iso_packet_desc[i].length > 0) {
+                    transfer->iso_packet_desc[i].length -= frameSize;
+                    totalLengthToSend -= frameSize;
+                }
+            }
+            transfer->length = (int) totalLengthToSend;
+        }
+        return STREAMING_NO_ERROR;
     }
 };
 
@@ -830,10 +927,10 @@ class FeedbackAudioTransfer : public AudioTransfer {
 public:
     FeedbackAudioTransfer(int isoSlots, libusb_device_handle *device, char endpoint,
                   int maxIsoPacketSizeBytes, int frameSize, int sampleRate,
-                  std::atomic<uint32_t>* feedbackIn, uint32_t* q16Accumulator,
+                  std::atomic<uint32_t>* feedbackIn, uint32_t* u16Accumulator,
                   AudioSource* b) : AudioTransfer(
-                          isoSlots, device, endpoint, maxIsoPacketSizeBytes, frameSize, sampleRate,
-                          q16Accumulator, b), feedbackIn(feedbackIn) {}
+            isoSlots, device, endpoint, maxIsoPacketSizeBytes, frameSize, sampleRate,
+            u16Accumulator, b), feedbackIn(feedbackIn) {}
 };
 
 class Streaming {
@@ -1057,7 +1154,7 @@ public:
 
 class ImplicitAsyncFeedbackStreaming : public Streaming {
     std::vector<ImplicitFeedbackTransfer*> transfers;
-    uint32_t q16Accumulator = 0; // only accessed on callback thread
+    uint32_t u16Accumulator = 0; // only accessed on callback thread
 
 public:
     ImplicitAsyncFeedbackStreaming(libusb_device_handle *device, char endpointData, char endpointFb,
@@ -1069,7 +1166,7 @@ public:
             transfers.push_back(new ImplicitFeedbackTransfer(
                     device, endpointFb, endpointData, isoSlots,
                     audioSampleRate, feedbackSampleRate,
-                    feedbackFrameSize, audioFrameSize, &q16Accumulator, b));
+                    feedbackFrameSize, audioFrameSize, &u16Accumulator, b));
         }
     }
     int start(bool empty) override {
@@ -1149,26 +1246,6 @@ Java_org_nift4_gramophone_hificore_Streaming_nativeStart(JNIEnv *env, jobject th
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_org_nift4_gramophone_hificore_Streaming_nativeGetWriteCounter(JNIEnv *env,
-                                                                                   jobject thiz,
-                                                                                   jlong ptr,
-                                                                                   jlongArray out) {
-    auto* pStreaming = (Streaming*) ptr;
-    timestamp ts = pStreaming->b->getWriteCounter();
-    env->SetLongArrayRegion(out, 0, 2, (jlong*)&ts);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_org_nift4_gramophone_hificore_Streaming_nativeResetWriteCounter(JNIEnv *env,
-                                                                                     jobject thiz,
-                                                                                     jlong ptr) {
-    auto* pStreaming = (Streaming*) ptr;
-    pStreaming->b->resetWriteCounter();
-}
-
-extern "C"
-JNIEXPORT void JNICALL
 Java_org_nift4_gramophone_hificore_Streaming_nativeStop(JNIEnv *env, jobject thiz,
                                                                         jlong ptr) {
     auto* pStreaming = (Streaming*) ptr;
@@ -1236,9 +1313,98 @@ extern "C"
 JNIEXPORT jlong JNICALL
 Java_org_nift4_gramophone_hificore_Buffer_nativeCreateBuffer(JNIEnv *env,
                                                              jobject thiz,
+                                                             jboolean forMixer,
                                                              jint buffer_size_frames,
                                                              jint frame_size) {
-    return (jlong)new Buffer(buffer_size_frames, frame_size);
+    return (jlong)(forMixer ? new MixerBuffer(buffer_size_frames, frame_size) :
+        new Buffer(buffer_size_frames, frame_size));
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_Buffer_nativeFlush(JNIEnv *env, jobject thiz,
+                                                           jlong ptr) {
+    auto* b = (Buffer*) ptr;
+    // allow to keep correlating timestamps and write counter
+    uint32_t writtenFrameCounter = b->getWriteCounter().frameCount;
+    b->read.store(writtenFrameCounter);
+    b->write.store(writtenFrameCounter);
+    auto* mb = dynamic_cast<MixerBuffer*>(b);
+    if (mb != nullptr) {
+        pause_progress p = mb->pauseProgress.load();
+        p.framesLeft = 0; // ensure to cut off any running fade too, and just keep play/pause state
+        mb->pauseProgress.store(p);
+    }
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_MixedAudioOutput_nativeAwaitPause(JNIEnv *env, jobject thiz,
+                                                                jlong ptr) {
+    auto* b = (MixerBuffer*) ptr;
+    while (true) {
+        pause_progress p = b->pauseProgress.load();
+        if (!p.framesLeft || p.fadingIn)
+            return;
+        b->pauseProgress.wait(p);
+    }
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_Buffer_nativeGetWriteCounter(JNIEnv *env, jobject thiz,
+                                                                jlong ptr, jlongArray out) {
+    auto* b = (Buffer*) ptr;
+    timestamp ts = b->getWriteCounter();
+    env->SetLongArrayRegion(out, 0, 2, (jlong*)&ts);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_Buffer_nativeResetWriteCounter(JNIEnv *env, jobject thiz,
+                                                                jlong ptr) {
+    auto* b = (Buffer*) ptr;
+    // resetWriteCounter is actually called on nonRealtime thread, but while the realtime
+    // thread isn't running, so we can impersonate it. (I know, it's evil)
+    b->resetWriteCounter();
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_MixedAudioOutput_nativeSetFramesUntilPaused(JNIEnv *env,
+                                                                          jobject thiz,
+                                                                          jlong ptr, jint value) {
+    auto* b = (MixerBuffer*) ptr;
+    uint32_t newTotal = value >= 0 ? value : -(value + 1);
+    bool newIsFadeIn = value < 0;
+    while (true) {
+        pause_progress old = b->pauseProgress.load();
+        pause_progress p = old;
+        if (p.fadingIn == newIsFadeIn)
+            return;
+        if (!old.framesLeft) { // no fade running, just start a new one
+            p.framesLeft = newTotal;
+            p.framesFadedSoFar = 0;
+        } else { // there is a fade running, let's reverse it for smooth transition
+            // if old: soFar=25/left=75 fade in -> volume 25%, then p: soFar=75/left=25 fade out
+            // if old: soFar=25/left=75 fade out -> volume 75%, then p: soFar=75/left=25 fade in
+            uint32_t oldTotal = old.framesLeft + old.framesFadedSoFar;
+            p.framesFadedSoFar = old.framesLeft * newTotal / oldTotal;
+            p.framesLeft = old.framesFadedSoFar * newTotal / oldTotal;
+        }
+        p.fadingIn = newIsFadeIn;
+        if (b->pauseProgress.compare_exchange_weak(old, p)) {
+            return;
+        }
+    }
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_Buffer_nativeStop(JNIEnv *env, jobject thiz,
+                                                                 jlong ptr, jboolean stopped) {
+    auto* b = (Buffer*) ptr;
+    b->stopped.store(stopped);
 }
 
 extern "C"
@@ -1280,7 +1446,7 @@ JNIEXPORT jint JNICALL
 Java_org_nift4_gramophone_hificore_SoftMixedStreaming_nativeAddBuffer(JNIEnv *env, jobject thiz,
                                                                       jlong ptr, jlong buf) {
     auto* pStreaming = (Streaming*) ptr;
-    return ((SoftMixer*)pStreaming->b)->addBuffer((Buffer*)buf);
+    return ((SoftMixer*)pStreaming->b)->addBuffer((MixerBuffer*)buf);
 }
 
 extern "C"
@@ -1288,5 +1454,5 @@ JNIEXPORT jboolean JNICALL
 Java_org_nift4_gramophone_hificore_SoftMixedStreaming_nativeRemoveBuffer(JNIEnv *env, jobject thiz,
                                                                          jlong ptr, jlong buf) {
     auto* pStreaming = (Streaming*) ptr;
-    return ((SoftMixer*)pStreaming->b)->removeBuffer((Buffer*)buf);
+    return ((SoftMixer*)pStreaming->b)->removeBuffer((MixerBuffer*)buf);
 }

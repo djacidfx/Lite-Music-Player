@@ -2,18 +2,19 @@ package org.nift4.gramophone.hificore
 
 import java.nio.ByteBuffer
 
-class Buffer(bufferSizeFrames: Int, frameSize: Int) {
-    private val ptr = nativeCreateBuffer(bufferSizeFrames, frameSize)
-    private var released = false
+open class Buffer protected constructor(forMixer: Boolean, bufferSizeFrames: Int, frameSize: Int) {
+    constructor(bufferSizeFrames: Int, frameSize: Int) : this(false, bufferSizeFrames, frameSize)
+    private val ptr = nativeCreateBuffer(forMixer, bufferSizeFrames, frameSize)
+    protected var released = false
 
-    fun getPtr(): Long {
+    internal fun getPtr(): Long {
         if (released) {
             throw IllegalStateException("Streaming was already released")
         }
         return ptr
     }
 
-    fun write(
+    internal fun write(
         buffer: ByteBuffer
     ): Boolean {
         if (!buffer.isDirect) {
@@ -25,12 +26,30 @@ class Buffer(bufferSizeFrames: Int, frameSize: Int) {
         return !buffer.hasRemaining()
     }
 
+    protected fun setStopped(stopped: Boolean) {
+        return nativeStop(getPtr(), stopped)
+    }
+
+    internal open fun getWriteCounter(out: LongArray) {
+        return nativeGetWriteCounter(getPtr(), out)
+    }
+
+    // Caution: may only be called if transfers are stopped / buffer isn't in mixer
+    internal open fun resetWriteCounter() {
+        nativeResetWriteCounter(getPtr())
+    }
+
+    // Caution: may only be called if transfers are stopped / buffer isn't in mixer
+    internal open fun flush() {
+        nativeFlush(getPtr())
+    }
+
     @JvmName("getUnderrunCount")
-    fun getUnderrunCount(): UInt {
+    protected fun getUnderrunCount(): UInt {
         return nativeGetUnderrunCount(getPtr()).toUInt()
     }
 
-    fun release() {
+    internal open fun release() {
         if (released)
             return
         nativeRelease(getPtr())
@@ -41,10 +60,12 @@ class Buffer(bufferSizeFrames: Int, frameSize: Int) {
         release()
     }
 
-    private external fun nativeCreateBuffer(bufferSizeFrames: Int, frameSize: Int): Long
+    private external fun nativeCreateBuffer(forMixer: Boolean, bufferSizeFrames: Int, frameSize: Int): Long
+    private external fun nativeStop(ptr: Long, stopped: Boolean)
     private external fun nativeGetUnderrunCount(ptr: Long): Int
+    private external fun nativeFlush(ptr: Long)
     private external fun nativeWrite(ptr: Long, buf: ByteBuffer, position: Int, remaining: Int): Int
-    //TODO:private external fun nativeGetWriteCounter(ptr: Long, out: LongArray)
-    //TODO:private external fun nativeResetWriteCounter(ptr: Long)
+    private external fun nativeGetWriteCounter(ptr: Long, out: LongArray)
+    private external fun nativeResetWriteCounter(ptr: Long)
     private external fun nativeRelease(ptr: Long)
 }
