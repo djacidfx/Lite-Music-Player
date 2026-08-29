@@ -231,6 +231,16 @@ class EndedWorkaroundPlayer(
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was found orphaned")
         if (currentMediaItem?.mediaId == mediaItems[startIndex].mediaId) {
+            // no action is needed when playing the same start index in the same playlist
+            if (mediaItemCount == mediaItems.size) {
+                for (i in mediaItems.indices) {
+                    if (getMediaItemAt(i).mediaId != mediaItems[i].mediaId) {
+                        break
+                    }
+                }
+                return
+            }
+
             val index = currentMediaItemIndex
             val isLast = mediaItemCount - index == 1
             cloneQueue(generateQueueId(), title, pinned, original)
