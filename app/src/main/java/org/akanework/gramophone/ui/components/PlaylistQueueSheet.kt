@@ -228,20 +228,12 @@ class PlaylistQueueSheet(
         lockEdit.value = lock
     }
 
-    fun forceRefresh() {
-        // TODO: ask google, AI, or nick how to do recycler view stuff
-        //  1. how to not need to update entire list and just refresh the visible ones than need to be updated
-        //  2. can we update the list in a different efficient manner?
-        playlistAdapter.notifyItemRangeChanged(0, mqState!!.playlist.first.size)
-    }
-
     fun scrollToPositionWithOffsetCompat(position: Int, offset: Int) {
         (recyclerView as MyRecyclerView).scrollToPositionWithOffsetCompat(position, offset)
     }
 
-    fun smoothScrollToCurrentPosition() = recyclerView.post {
-        mqState!!.playlist.first.indexOfFirst { i -> i == (instance!!.currentMediaItemIndex) }
-            .takeIf { it != -1 }?.let { recyclerView.smoothScrollToPosition(it) }
+    fun smoothScrollToCurrentPosition(position: Int) = recyclerView.post {
+        position.takeIf { it != -1 }?.let { recyclerView.smoothScrollToPosition(it) }
     }
 
     inner class PlaylistCardAdapter : EditSongAdapter(activity, true, lockEdit) {

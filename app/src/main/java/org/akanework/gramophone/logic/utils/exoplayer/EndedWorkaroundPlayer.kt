@@ -390,7 +390,7 @@ class EndedWorkaroundPlayer(
                     add(exoPlayer.getMediaItemAt(i))
                 }
             },
-            startIndex = currentMediaItemIndex,
+            startIndex = exoPlayer.currentMediaItemIndex,
             startPositionMs = exoPlayer.currentPosition,
             repeatMode = repeatMode,
             shuffleOrder = if (shuffleModeEnabled) {

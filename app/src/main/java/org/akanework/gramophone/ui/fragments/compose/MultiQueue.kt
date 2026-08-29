@@ -1125,7 +1125,6 @@ class MqState(
         detachedQueue?.shuffleModeEnabled?.let {
             playerListener.onShuffleModeEnabledChanged(it)
         }
-        playlistQueueSheet?.smoothScrollToCurrentPosition()
     }
 
     fun loadDetached(startIndex: Int = C.INDEX_UNSET) {
@@ -1135,7 +1134,6 @@ class MqState(
         // do not use full resetHead(false) to avoid restoring the stats of old active queue right before the new one is loaded
         detachedQueue = null
         playlistQueueSheet?.lockQueue(detachedQueue != null)
-        playlistQueueSheet?.forceRefresh()
 
         coroutineScope.launch {
             init()
@@ -1370,7 +1368,7 @@ class MqState(
             if (it == -1) 0 else it
         }
         playlistQueueSheet?.playlistAdapter?.currentMediaItemIndex = playlist.first.indexOf(i)
-        playlistQueueSheet?.smoothScrollToCurrentPosition()
+        playlistQueueSheet?.smoothScrollToCurrentPosition(playlist.first.indexOf(i))
 
         updateTimer(mq?.second?.startIndex, mq?.second?.startPositionMs)
     }
