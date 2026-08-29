@@ -385,11 +385,21 @@ class EndedWorkaroundPlayer(
             index = 0,
             title = currentTitle ?: context.getString(R.string.unknown_playlist),
             expiry = if (currentIsPinned) null else 0L,
-            queue = ArrayList(),
+            queue = ArrayList<MediaItem>(exoPlayer.mediaItemCount).apply {
+                for (i in 0..<exoPlayer.mediaItemCount) {
+                    add(exoPlayer.getMediaItemAt(i))
+                }
+            },
             startIndex = currentMediaItemIndex,
-            startPositionMs = C.TIME_UNSET,
+            startPositionMs = exoPlayer.currentPosition,
             repeatMode = repeatMode,
-            shuffleOrder = null,
+            shuffleOrder = if (shuffleModeEnabled) {
+                CircularShuffleOrder.Persistent(
+                    exoPlayer.shuffleOrder as CircularShuffleOrder
+                )
+            } else {
+                null
+            },
             ended = playbackState == STATE_ENDED,
             isOriginal = currentIsOriginal,
         )

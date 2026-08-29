@@ -142,6 +142,7 @@ import org.akanework.gramophone.ui.MainActivity
 import org.akanework.gramophone.ui.fragments.compose.MqState.Companion.CLIENT_QB_REFRESH_ALL
 import org.akanework.gramophone.ui.fragments.compose.MqState.Companion.CLIENT_QB_REFRESH_CLEAR
 import org.akanework.gramophone.ui.fragments.compose.MqState.Companion.CLIENT_QB_REFRESH_ITEM
+import org.akanework.gramophone.ui.fragments.compose.MqState.Companion.CLIENT_QB_REFRESH_LIST
 import org.akanework.gramophone.ui.fragments.compose.MqState.Companion.CLIENT_QB_REFRESH_QUEUES
 import org.nift4.mediastorecompat.MediaStoreCompat
 import uk.akane.libphonograph.dynamicitem.Favorite
@@ -1035,20 +1036,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 if (action != CLIENT_QB_REFRESH_CLEAR) {
                     customExtras.putBinder(
                         "activeQueue",
-                        MultiQueueList(listOf(plr.getActiveQueue().copy(
-                            queue = ArrayList<MediaItem>(plr.exoPlayer.mediaItemCount).apply {
-                                for (i in 0..<plr.exoPlayer.mediaItemCount) {
-                                    add(plr.exoPlayer.getMediaItemAt(i))
-                                }
-                            },
-                            shuffleOrder = if (plr.shuffleModeEnabled) {
-                                CircularShuffleOrder.Persistent(
-                                    plr.exoPlayer.shuffleOrder as CircularShuffleOrder
-                                )
-                            } else {
-                                null
-                            }
-                        )))
+                        MultiQueueList(listOf(plr.getActiveQueue()))
                     )
                     customExtras.putBinder(
                         "inactiveQueues",
@@ -1154,7 +1142,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                         val queue: MultiQueueObject = if (queueId != -1L) {
                             qb.getInactiveQueue(queueId)
                         } else {
-                            endedWorkaroundPlayer!!.getActiveQueue()!!
+                            endedWorkaroundPlayer!!.getActiveQueue()
                         }!!
                         SessionResult(SessionResult.RESULT_SUCCESS).also { res ->
                             val binder = MultiQueueList(listOf(queue))
