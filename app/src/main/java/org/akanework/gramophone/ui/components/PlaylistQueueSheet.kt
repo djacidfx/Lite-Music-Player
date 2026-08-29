@@ -60,7 +60,6 @@ import org.akanework.gramophone.ui.fragments.compose.rememberMqState
 
 // TODO:
 //  queue menu flickers when queue sheet isnt full height
-//  automatic reshuffle when queue sheet is open does not update recycler aaaaaaaa
 class PlaylistQueueSheet(
     context: Context, private val activity: MainActivity
 ) : BottomSheetDialog(context), Player.Listener {

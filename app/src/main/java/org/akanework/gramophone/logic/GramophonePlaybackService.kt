@@ -1585,6 +1585,24 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     Random.nextLong()
                 )
             )
+            for (controller in mediaSession!!.connectedControllers) {
+                val customCommand = SessionCommand(CLIENT_QB_REFRESH_LIST, Bundle.EMPTY).apply {
+                    val plr = endedWorkaroundPlayer!!
+                    customExtras.putBinder(
+                        "activeQueue",
+                        MultiQueueList(listOf(plr.getActiveQueue()))
+                    )
+                    customExtras.putBinder(
+                        "inactiveQueues",
+                        MultiQueueList(qb.getInactiveQueues())
+                    )
+                }
+                mediaSession!!.sendCustomCommand(
+                    controller,
+                    customCommand,
+                    Bundle.EMPTY
+                )
+            }
         }
 
         lastPlayedManager.save()
