@@ -356,7 +356,9 @@ protected:
     RealtimeTimestamp writeCounter;
 public:
     AudioSource(int frameSize) : frameSize(frameSize) {}
-    virtual uint32_t readAudio(unsigned char* outBuf, size_t length) = 0;
+    virtual void registerTransfer(void** sourcePrivateOut) {}
+    virtual void unregisterTransfer(void* sourcePrivate) {}
+    virtual uint32_t readAudio(unsigned char* outBuf, size_t length, void* sourcePrivate) = 0;
     virtual bool allowDmaMemory() = 0;
     virtual ~AudioSource() = default;
     virtual timestamp getWriteCounter() {
@@ -375,7 +377,7 @@ public:
         }
     }
 
-    virtual void completedWrite(timespec tp, size_t bytes) {
+    virtual void completedWrite(timespec tp, size_t bytes, void* sourcePrivate) {
         {
             RealtimeTimestamp::ScopedAccess<farbot::ThreadType::realtime> t(writeCounter);
 
@@ -403,7 +405,7 @@ public:
         data = static_cast<unsigned char *>(malloc(size));
     }
 
-    uint32_t readAudio(unsigned char* outBuf, size_t length) override {
+    uint32_t readAudio(unsigned char* outBuf, size_t length, void* sourcePrivate) override {
         if (length == 0) {
             return 0;
         }
@@ -469,6 +471,8 @@ public:
     MixerBuffer(int bufferSizeFrames, int frameSize) : Buffer(bufferSizeFrames, frameSize) {}
     std::atomic<pause_progress> pauseProgress;
     static_assert(std::atomic<pause_progress>::is_always_lock_free);
+    std::atomic<float> gain;
+    static_assert(std::atomic<float>::is_always_lock_free);
 };
 
 class __attribute__((packed)) int24_t {
@@ -484,6 +488,10 @@ public:
 };
 static_assert(sizeof(int24_t) == 3);
 
+struct soft_mixer_private {
+
+};
+
 class SoftMixer : public AudioSource {
 protected:
     using BufferList = farbot::RealtimeObject<std::vector<MixerBuffer*>, farbot::RealtimeObjectOptions::nonRealtimeMutatable>;
@@ -493,7 +501,14 @@ protected:
     bool allowDmaMemory() override {
         return false;
     }
-    uint32_t readAudio(unsigned char *outBuf, size_t length) override {
+    void registerTransfer(void **sourcePrivateOut) override {
+        *sourcePrivateOut = new soft_mixer_private();
+    }
+    void unregisterTransfer(void *sourcePrivate) override {
+        delete (soft_mixer_private*)sourcePrivate;
+    }
+    uint32_t readAudio(unsigned char *outBuf, size_t length, void* sourcePrivate) override {
+        auto* softMixerPrivate = static_cast<soft_mixer_private *>(sourcePrivate);
         if (length > 0) {
             BufferList::ScopedAccess <farbot::ThreadType::realtime> buffers(list);
             clear(outBuf, length);
@@ -502,9 +517,10 @@ protected:
                 uint32_t readMod;
                 uint32_t available;
                 uint32_t readLength;
-                // gain = (gainA / gainB)
+                // gain = (gainA / gainB) * gainC
                 uint32_t gainA = 1;
                 uint32_t gainB = 1;
+                float gainC = 1.0f;
                 uint32_t frameSize = frameSizeBytes();
                 while (true) {
                     pause_progress p = b->pauseProgress.load();
@@ -532,6 +548,7 @@ protected:
                     }
                     break;
                 }
+                gainC = b->gain.load();
                 readCount = b->read.load();
                 readMod = readCount % b->size;
                 available = b->write.load() - readCount;
@@ -544,11 +561,11 @@ protected:
                     readLength = available;
                 }
                 if (readMod + length <= b->size) { // normal case, single mix
-                    mix(outBuf, b->data + readMod, readLength, gainA, gainB);
+                    mix(outBuf, b->data + readMod, readLength, gainA, gainB, gainC);
                 } else { // wrap is in the middle of our transfer
-                    mix(outBuf, b->data + readMod, b->size - readMod, gainA, gainB);
+                    mix(outBuf, b->data + readMod, b->size - readMod, gainA, gainB, gainC);
                     mix(outBuf + (b->size - readMod), b->data, readLength - (b->size - readMod),
-                        gainA, gainB);
+                        gainA, gainB, gainC);
                 }
                 b->read.store(readCount + readLength);
                 skip_this_buffer:;
@@ -559,9 +576,9 @@ protected:
 
     virtual size_t frameSizeBytes() = 0;
     virtual void clear(unsigned char* out, size_t length) = 0;
-    // gain = (gainA / gainB)
+    // gain = (gainA / gainB) * gainC
     virtual void mix(unsigned char* out, unsigned char* src, size_t length, uint32_t gainA,
-                     uint32_t gainB) = 0;
+                     uint32_t gainB, float gainC) = 0;
 
 public:
     // 1 if successfully added, 0 if already in list, -1 if invalid size
@@ -577,14 +594,15 @@ public:
             return true;
         }
     }
-    void completedWrite(timespec tp, size_t bytes) override {
-        AudioSource::completedWrite(tp, bytes);
+    void completedWrite(timespec tp, size_t bytes, void* sourcePrivate) override {
+        AudioSource::completedWrite(tp, bytes, nullptr);
+        auto* softMixerPrivate = static_cast<soft_mixer_private *>(sourcePrivate);
         // TODO: this doesn't consider late-joining buffers that would need to skip this call a few
         //  times in order to be correct. should be fixed
         {
             BufferList::ScopedAccess<farbot::ThreadType::realtime> buffers(list);
             for (MixerBuffer* b : *buffers) {
-                b->completedWrite(tp, bytes);
+                b->completedWrite(tp, bytes, nullptr);
             }
         }
     }
@@ -613,14 +631,14 @@ public:
 template<class output_format, class mixing_format>
 class PcmSoftMixer : public SoftMixer {
     size_t channelCount;
-    uint32_t readAudio(unsigned char *outBuf, size_t length) override {
+    uint32_t readAudio(unsigned char *outBuf, size_t length, void* sourcePrivate) override {
         // TODO: implement dither for both int32->int16 (or uint8_t, that needs it even more) and
         //  int32->int32 with bBitResolution=24 (or any other number actually)
         if constexpr (!std::is_same_v<output_format, mixing_format>) {
             size_t mixBufLength = length * sizeof(mixing_format) / sizeof(output_format);
             unsigned char mixBuf[mixBufLength];
             // we can ignore returned value, we know it's same as mixBufLength
-            SoftMixer::readAudio(mixBuf, mixBufLength);
+            SoftMixer::readAudio(mixBuf, mixBufLength, sourcePrivate);
             for (int i = 0; i < length / sizeof(output_format); i++) {
                 mixing_format* in = (mixing_format*)(mixBuf) + i;
                 output_format* out = (output_format*)(outBuf) + i;
@@ -628,7 +646,7 @@ class PcmSoftMixer : public SoftMixer {
             }
             return STREAMING_NO_ERROR;
         } else {
-            return SoftMixer::readAudio(outBuf, length);
+            return SoftMixer::readAudio(outBuf, length, sourcePrivate);
         }
     }
     size_t frameSizeBytes() override {
@@ -644,7 +662,7 @@ class PcmSoftMixer : public SoftMixer {
             }
         }
     }
-    void mix(unsigned char* out, unsigned char* src, size_t length, uint32_t gainA, uint32_t gainB) override {
+    void mix(unsigned char* out, unsigned char* src, size_t length, uint32_t gainA, uint32_t gainB, float gainC) override {
         for (size_t i = 0; i < length / sizeof(mixing_format); i++) {
             mixing_format* entryOut = (mixing_format*)(out) + i;
             mixing_format* entryIn = (mixing_format*)(src) + i;
@@ -703,6 +721,7 @@ private:
     int sampleRateIn;
     uint32_t* u16Accumulator;
     AudioSource* b;
+    void* sourcePrivate = nullptr;
 
     ImplicitFeedbackTransfer(libusb_device_handle *device, char endpoint, char endpointData,
                              int isoSlots, int sampleRateIn, int sampleRateOut, int dataSizeFrames,
@@ -730,6 +749,7 @@ private:
         transferData->user_data = this;
         transferData->callback = transfer_callback_wrapper;
         libusb_set_iso_packet_lengths(transferData, dataSize);
+        b->registerTransfer(&sourcePrivate);
     }
 
     int doSubmit() override {
@@ -769,7 +789,7 @@ private:
             timespec tp{};
             //TODO: can we get time from libusb or kernel, or something...
             clock_gettime(CLOCK_MONOTONIC, &tp);
-            b->completedWrite(tp, theTransfer->length);
+            b->completedWrite(tp, theTransfer->length, sourcePrivate);
         }
         if (--waitingCount > 0)
             return;
@@ -796,6 +816,7 @@ public:
                                 transferData->length);
         else
             free(transferData->buffer);
+        b->unregisterTransfer(sourcePrivate);
         libusb_free_transfer(transferData);
         Transfer::~Transfer();
     }
@@ -824,7 +845,7 @@ public:
             }
             transferData->num_iso_packets = j;
             transferData->length = (int)totalLengthToSend;
-            uint32_t actualLength = b->readAudio(transferData->buffer, totalLengthToSend);
+            uint32_t actualLength = b->readAudio(transferData->buffer, totalLengthToSend, sourcePrivate);
             // sanity check, but this never happens
             if (actualLength > totalLengthToSend || (actualLength % frameSizeOut) != 0) {
                 return STREAMING_ERROR_INVALID_ARGUMENT;
@@ -854,6 +875,7 @@ class AudioTransfer : public Transfer {
     int frameSize;
     int sampleRate;
     AudioSource* b;
+    void* sourcePrivate = nullptr;
 protected:
     virtual uint32_t getFeedbackOrDefault() {
         uint32_t usbFrameDuration = libusb_get_device_speed(libusb_get_device(
@@ -866,13 +888,15 @@ public:
                   uint32_t* u16Accumulator, AudioSource* b)
             : Transfer(isoSlots, device, endpoint, maxIsoPacketSizeBytes * isoSlots,
                        b->allowDmaMemory()),
-              frameSize(frameSize), sampleRate(sampleRate), u16Accumulator(u16Accumulator), b(b) {}
+              frameSize(frameSize), sampleRate(sampleRate), u16Accumulator(u16Accumulator), b(b) {
+        b->registerTransfer(&sourcePrivate);
+    }
 
     void callback(libusb_transfer *theTransfer) override {
         timespec tp{};
         //TODO: can we get time from libusb or kernel, or something...
         clock_gettime(CLOCK_MONOTONIC, &tp);
-        b->completedWrite(tp, theTransfer->length);
+        b->completedWrite(tp, theTransfer->length, sourcePrivate);
         Transfer::callback(theTransfer);
     }
 
@@ -887,7 +911,7 @@ public:
             transfer->iso_packet_desc[i].length = outBytes;
             totalLengthToSend += outBytes;
         }
-        uint32_t actualLength = b->readAudio(transfer->buffer, totalLengthToSend);
+        uint32_t actualLength = b->readAudio(transfer->buffer, totalLengthToSend, sourcePrivate);
         if (totalLengthToSend > 0 && actualLength == 0) {
             return STREAMING_ERROR_UNDERFLOW;
         }
@@ -910,6 +934,10 @@ public:
             transfer->length = (int) totalLengthToSend;
         }
         return STREAMING_NO_ERROR;
+    }
+
+    ~AudioTransfer() override {
+        b->unregisterTransfer(sourcePrivate);
     }
 };
 
@@ -1367,6 +1395,14 @@ Java_org_nift4_gramophone_hificore_Buffer_nativeResetWriteCounter(JNIEnv *env, j
     // resetWriteCounter is actually called on nonRealtime thread, but while the realtime
     // thread isn't running, so we can impersonate it. (I know, it's evil)
     b->resetWriteCounter();
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_nift4_gramophone_hificore_MixedAudioOutput_nativeSetGain(JNIEnv *env, jobject thiz,
+                                                                  jlong ptr, jfloat volume) {
+    auto* b = (MixerBuffer*) ptr;
+    b->gain.store(volume);
 }
 
 extern "C"

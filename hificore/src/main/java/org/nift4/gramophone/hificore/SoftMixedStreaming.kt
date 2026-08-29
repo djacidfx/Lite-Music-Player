@@ -63,6 +63,10 @@ class SoftMixedStreaming private constructor(
         }
     }
 
+    fun getSampleRate(): Int {
+        return 44100 // TODO
+    }
+
     // TODO: impl creation code
     private external fun nativeCreateSoftMixer(): Long
     private external fun nativeAddBuffer(ptr: Long, buf: Long): Int

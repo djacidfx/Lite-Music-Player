@@ -2,7 +2,6 @@ package org.nift4.gramophone.hificore
 
 import android.media.AudioDeviceInfo
 import androidx.annotation.GuardedBy
-import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.audio.AudioOutput
@@ -11,7 +10,8 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
 class MixedAudioOutput(
-    private val mixer: SoftMixedStreaming, javaBufferSizeFrames: Int, audioFrameSize: Int,
+    private val mixer: SoftMixedStreaming, private val audioSessionId: Int,
+    private val javaBufferSizeFrames: Int, audioFrameSize: Int,
 ) : Buffer(true, javaBufferSizeFrames, audioFrameSize), AudioOutput {
 
     companion object {
@@ -23,6 +23,13 @@ class MixedAudioOutput(
 
         @GuardedBy("releaseExecutorLock")
         private var pendingReleaseCount: Int = 0
+
+        /** Returns whether there are any pending asynchronous releases.  */
+        internal fun hasPendingReleases(): Boolean {
+            synchronized(releaseExecutorLock) {
+                return pendingReleaseCount > 0
+            }
+        }
 
         private const val AUDIO_TRACK_VOLUME_RAMP_TIME_MS = 20
     }
@@ -136,7 +143,7 @@ class MixedAudioOutput(
     }
 
     override fun setVolume(volume: Float) {
-        //TODO("Not yet implemented")
+        nativeSetGain(getPtr(), volume)
     }
 
     override fun isOffloadedPlayback(): Boolean {
@@ -144,17 +151,15 @@ class MixedAudioOutput(
     }
 
     override fun getAudioSessionId(): Int {
-        //TODO("Not yet implemented")
-        return C.AUDIO_SESSION_ID_UNSET
+        return audioSessionId
     }
 
     override fun getSampleRate(): Int {
-        //TODO("Not yet implemented")
-        return 44100
+        return mixer.getSampleRate()
     }
 
     override fun getBufferSizeInFrames(): Long {
-        return 441 * 4
+        return javaBufferSizeFrames.toLong()
     }
 
     override fun getPositionUs(): Long {
@@ -185,7 +190,6 @@ class MixedAudioOutput(
     }
 
     override fun getPlaybackParameters(): PlaybackParameters {
-        //TODO("Not yet implemented")
         return PlaybackParameters.DEFAULT
     }
 
@@ -203,7 +207,7 @@ class MixedAudioOutput(
     }
 
     override fun setPlaybackParameters(playbackParams: PlaybackParameters) {
-        //TODO("Not yet implemented")
+        // no-op. ExoPlayer will call getPlaybackParameters() and notice this isn't working
     }
 
     override fun setOffloadDelayPadding(delayInFrames: Int, paddingInFrames: Int) {
@@ -226,6 +230,7 @@ class MixedAudioOutput(
         //TODO("Not yet implemented")
     }
 
+    private external fun nativeSetGain(ptr: Long, gain: Float)
     private external fun nativeSetFramesUntilPaused(ptr: Long, frames: Int)
     private external fun nativeAwaitPause(ptr: Long)
 }
