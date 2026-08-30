@@ -249,22 +249,18 @@ class EndedWorkaroundPlayer(
                     0, index,
                     mediaItems.subList(0, startIndex)
                 )
-            if (isLast && mediaItems.size <= startIndex + 1) {
-                nextShuffleOrder = newShuffleOrder
-            }
             super.handleReplaceMediaItems(
                 startIndex, startIndex + 1,
                 listOf(mediaItems[startIndex])
             )
-            if (!isLast || mediaItems.size > startIndex + 1) {
-                nextShuffleOrder = newShuffleOrder
-            }
             if (isLast) {
-                if (mediaItems.size > startIndex + 1)
+                if (mediaItems.size > startIndex + 1) {
+                    nextShuffleOrder = newShuffleOrder
                     super.handleAddMediaItems(
                         Int.MAX_VALUE, mediaItems
                             .subList(startIndex + 1, mediaItems.size)
                     )
+                }
             } else
                 super.handleReplaceMediaItems(
                     startIndex + 1, Int.MAX_VALUE,
@@ -272,6 +268,10 @@ class EndedWorkaroundPlayer(
                         startIndex + 1, mediaItems.size
                     ) else emptyList()
                 )
+            if (!isLast || mediaItems.size <= startIndex + 1) {
+                exoPlayer.shuffleOrder = newShuffleOrder.invoke(startIndex,
+                    exoPlayer.mediaItemCount, this)
+            }
         } else {
             setMediaItems(
                 mediaItems, startIndex, startPositionMs?: C.TIME_UNSET, title, pinned,
