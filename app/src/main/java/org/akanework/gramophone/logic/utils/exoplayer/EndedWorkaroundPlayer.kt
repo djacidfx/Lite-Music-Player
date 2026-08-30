@@ -70,9 +70,7 @@ class EndedWorkaroundPlayer(
     val exoPlayer
         get() = player as ExoPlayer
 
-    var nextShuffleOrder:
-            ((firstIndex: Int, mediaItemCount: Int, EndedWorkaroundPlayer) -> CircularShuffleOrder)? =
-        null
+    var nextShuffleOrder: CircularShuffleOrder.Persistent? = null
     var currentQueueId: Long? = null
     var currentTitle: String? = null
     var currentIsPinned = false
@@ -204,7 +202,7 @@ class EndedWorkaroundPlayer(
         if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
         if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
         if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
-        nextShuffleOrder = newShuffleOrder?.toFactory()
+        nextShuffleOrder = newShuffleOrder
         super.handleSetMediaItems(mediaItems, startIndex, startPositionMs)
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was not consumed during set")
@@ -237,7 +235,8 @@ class EndedWorkaroundPlayer(
             val index = currentMediaItemIndex
             val isLast = mediaItemCount - index == 1
             cloneQueue(generateQueueId(), title, pinned, original)
-            val newShuffleOrder = newShuffleOrder?.toFactory()
+            val newShuffleOrder = newShuffleOrder ?: (exoPlayer.shuffleOrder as CircularShuffleOrder
+                    ).lastSeed?.let { CircularShuffleOrder.Persistent(it) }
             if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
             if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
             if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
@@ -269,7 +268,7 @@ class EndedWorkaroundPlayer(
                 )
             if (!isLast || mediaItems.size <= startIndex + 1) {
                 newShuffleOrder?.let {
-                    exoPlayer.shuffleOrder = it.invoke(startIndex,
+                    exoPlayer.shuffleOrder = it.create(startIndex,
                         exoPlayer.mediaItemCount, this)
                 }
             }
