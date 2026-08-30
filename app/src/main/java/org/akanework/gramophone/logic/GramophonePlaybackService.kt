@@ -617,10 +617,10 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                     items.title,
                                     false, /* TODO(MQ) */
                                     true, /* TODO(MQ) */
-                                    items.seed,
                                     items.isEnded,
                                     items.repeatMode,
                                     items.shuffle,
+                                    items.seed,
                                     items.playbackParameters,
                                 )
                             } else {
@@ -631,10 +631,10 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                                     items.title,
                                     false, /* TODO(MQ) */
                                     true, /* TODO(MQ) */
-                                    items.seed,
                                     items.isEnded,
                                     items.repeatMode,
                                     items.shuffle,
+                                    items.seed,
                                     items.playbackParameters,
                                 )
                                 Log.w(TAG, "failed to restore index")
@@ -1005,8 +1005,10 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 { songList ->
                     if (seamless) {
                         endedWorkaroundPlayer!!.setMediaItemsSeamlessly(songList,
-                            position, title, pinned = false, original = true,
-                            repeatMode = null, shuffleModeEnabled = null, playbackParameters = null)
+                            position, null, title, pinned = false, original = true,
+                            repeatMode = null, shuffleModeEnabled = null, newShuffleOrder = null,
+                            playbackParameters = null, ended = false,
+                             )
                     } else {
                         val shuffleModeEnabled = if (customCommand.customExtras.containsKey("shuffleEnabled"))
                             customCommand.customExtras.getBoolean("shuffleEnabled") else null

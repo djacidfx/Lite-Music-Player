@@ -192,10 +192,10 @@ class EndedWorkaroundPlayer(
         title: String,
         pinned: Boolean,
         original: Boolean,
-        newShuffleOrder: CircularShuffleOrder.Persistent?,
         ended: Boolean,
         repeatMode: Int?,
         shuffleModeEnabled: Boolean?,
+        newShuffleOrder: CircularShuffleOrder.Persistent?,
         playbackParameters: PlaybackParameters?,
     ) {
         cloneQueue(generateQueueId(), title, pinned, original)
@@ -219,27 +219,19 @@ class EndedWorkaroundPlayer(
     fun setMediaItemsSeamlessly(
         mediaItems: List<MediaItem>,
         startIndex: Int,
+        startPositionMs: Long?,
         title: String,
         pinned: Boolean,
         original: Boolean,
+        ended: Boolean,
         repeatMode: Int?,
         shuffleModeEnabled: Boolean?,
+        newShuffleOrder: CircularShuffleOrder.Persistent?,
         playbackParameters: PlaybackParameters?,
     ) {
-        if (startIndex == C.INDEX_UNSET)
-            throw IllegalArgumentException("Can't seamlessly set playlist with default position")
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was found orphaned")
         if (currentMediaItem?.mediaId == mediaItems[startIndex].mediaId) {
-            // no action is needed when playing the same start index in the same playlist
-            if (mediaItemCount == mediaItems.size) {
-                for (i in mediaItems.indices) {
-                    if (getMediaItemAt(i).mediaId != mediaItems[i].mediaId) {
-                        break
-                    }
-                }
-                return
-            }
 
             val index = currentMediaItemIndex
             val isLast = mediaItemCount - index == 1
@@ -254,10 +246,6 @@ class EndedWorkaroundPlayer(
                     0, index,
                     mediaItems.subList(0, startIndex)
                 )
-            super.handleReplaceMediaItems(
-                startIndex, startIndex,
-                listOf(mediaItems[startIndex])
-            )
             if (isLast) {
                 if (mediaItems.size > startIndex + 1)
                     super.handleAddMediaItems(
@@ -273,8 +261,8 @@ class EndedWorkaroundPlayer(
                 )
         } else {
             setMediaItems(
-                mediaItems, startIndex, C.TIME_UNSET, title, pinned,
-                original, null, false, repeatMode, shuffleModeEnabled,
+                mediaItems, startIndex, startPositionMs?: C.TIME_UNSET, title, pinned,
+                original, ended, repeatMode, shuffleModeEnabled, newShuffleOrder,
                 playbackParameters
             )
         }
@@ -366,7 +354,7 @@ class EndedWorkaroundPlayer(
         val qt = title ?: context.getString(R.string.unknown_playlist)
         setMediaItems(
             list, startIndex, startPositionMs, qt, false,
-            true, null, false, null,
+            true, false, null, null,
             null, null
         )
         return Futures.immediateVoidFuture()

@@ -102,11 +102,11 @@ class QueueBoard(
                 TAG,
                 "Setting current queue; $new; ids: ${plr.currentMediaItem?.mediaId}, ${new.queue[new.startIndex].mediaId}"
             )
-        plr.setMediaItems(
+        plr.setMediaItemsSeamlessly(
             new.queue, new.startIndex,
             new.startPositionMs,
-            new.title, new.expiry == null, new.isOriginal, new.shuffleOrder, new.ended,
-            new.repeatMode, new.shuffleModeEnabled, null
+            new.title, new.expiry == null, new.isOriginal, new.ended, new.repeatMode,
+            new.shuffleModeEnabled, new.shuffleOrder, null,
         )
     }
 
