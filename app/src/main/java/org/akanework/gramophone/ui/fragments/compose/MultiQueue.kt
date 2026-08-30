@@ -1367,7 +1367,7 @@ class MqState(
         val i = (mq?.second?.startIndex ?: instance.currentMediaItemIndex).let {
             if (it == -1) 0 else it
         }
-        playlistQueueSheet?.playlistAdapter?.currentMediaItemIndex = playlist.first.indexOf(i)
+        playlistQueueSheet?.setCurrentMediaItemIndex(playlist.first.indexOf(i))
         playlistQueueSheet?.smoothScrollToCurrentPosition(playlist.first.indexOf(i))
 
         updateTimer(mq?.second?.startIndex, mq?.second?.startPositionMs)

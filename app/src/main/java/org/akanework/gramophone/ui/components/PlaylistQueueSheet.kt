@@ -236,6 +236,12 @@ class PlaylistQueueSheet(
         position.takeIf { it != -1 }?.let { recyclerView.smoothScrollToPosition(it) }
     }
 
+    fun setCurrentMediaItemIndex(currentMediaItemIndex: Int) {
+        recyclerView.post {
+            playlistAdapter.currentMediaItemIndex = currentMediaItemIndex
+        }
+    }
+
     inner class PlaylistCardAdapter : EditSongAdapter(activity, true, lockEdit) {
         var currentMediaItemIndex: Int? = null
             set(value) {
