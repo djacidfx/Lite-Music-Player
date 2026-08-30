@@ -237,8 +237,7 @@ class EndedWorkaroundPlayer(
             val index = currentMediaItemIndex
             val isLast = mediaItemCount - index == 1
             cloneQueue(generateQueueId(), title, pinned, original)
-            val newShuffleOrder = newShuffleOrder?.toFactory() ?: (exoPlayer.shuffleOrder as
-                    CircularShuffleOrder).let { { _: Int, _: Int, _: EndedWorkaroundPlayer -> it } }
+            val newShuffleOrder = newShuffleOrder?.toFactory()
             if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
             if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
             if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
@@ -269,8 +268,10 @@ class EndedWorkaroundPlayer(
                     ) else emptyList()
                 )
             if (!isLast || mediaItems.size <= startIndex + 1) {
-                exoPlayer.shuffleOrder = newShuffleOrder.invoke(startIndex,
-                    exoPlayer.mediaItemCount, this)
+                newShuffleOrder?.let {
+                    exoPlayer.shuffleOrder = it.invoke(startIndex,
+                        exoPlayer.mediaItemCount, this)
+                }
             }
         } else {
             setMediaItems(
@@ -403,8 +404,8 @@ class EndedWorkaroundPlayer(
             },
             startIndex = exoPlayer.currentMediaItemIndex,
             startPositionMs = exoPlayer.currentPosition,
-            repeatMode = repeatMode,
-            shuffleOrder = if (shuffleModeEnabled) {
+            repeatMode = exoPlayer.repeatMode,
+            shuffleOrder = if (exoPlayer.shuffleModeEnabled) {
                 CircularShuffleOrder.Persistent(
                     exoPlayer.shuffleOrder as CircularShuffleOrder
                 )
