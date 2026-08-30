@@ -229,13 +229,16 @@ class EndedWorkaroundPlayer(
         newShuffleOrder: CircularShuffleOrder.Persistent?,
         playbackParameters: PlaybackParameters?,
     ) {
+        if (startIndex == C.INDEX_UNSET)
+            throw IllegalArgumentException("Can't seamlessly set playlist with default position")
         if (nextShuffleOrder != null)
             throw IllegalStateException("shuffleFactory was found orphaned")
         if (currentMediaItem?.mediaId == mediaItems[startIndex].mediaId) {
-
             val index = currentMediaItemIndex
             val isLast = mediaItemCount - index == 1
             cloneQueue(generateQueueId(), title, pinned, original)
+            val newShuffleOrder = newShuffleOrder?.toFactory() ?: (exoPlayer.shuffleOrder as
+                    CircularShuffleOrder).let { { _: Int, _: Int, _: EndedWorkaroundPlayer -> it } }
             if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
             if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
             if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
@@ -246,6 +249,16 @@ class EndedWorkaroundPlayer(
                     0, index,
                     mediaItems.subList(0, startIndex)
                 )
+            if (isLast && mediaItems.size <= startIndex + 1) {
+                nextShuffleOrder = newShuffleOrder
+            }
+            super.handleReplaceMediaItems(
+                startIndex, startIndex + 1,
+                listOf(mediaItems[startIndex])
+            )
+            if (!isLast || mediaItems.size > startIndex + 1) {
+                nextShuffleOrder = newShuffleOrder
+            }
             if (isLast) {
                 if (mediaItems.size > startIndex + 1)
                     super.handleAddMediaItems(
