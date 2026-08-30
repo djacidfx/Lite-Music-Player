@@ -1004,6 +1004,9 @@ class MqState(
 
         runBlocking {
             init() {
+                activeQueue?.let {
+                    updateTimer(it.second.startIndex, it.second.startPositionMs)
+                }
                 playlist.first.indexOfFirst { i ->
                     i == (instance.currentMediaItemIndex)
                 }.let { scrollPos ->
