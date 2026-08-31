@@ -27,6 +27,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.Log
 import androidx.media3.exoplayer.ExoPlayer
+import android.content.SharedPreferences
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import org.akanework.gramophone.BuildConfig
@@ -38,6 +39,7 @@ import org.akanework.gramophone.logic.utils.CircularShuffleOrder
 import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.logic.utils.SemanticLyrics
 import org.json.JSONObject
+import org.akanework.gramophone.logic.getBooleanStrict
 import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
 import uk.akane.libphonograph.items.hdArtworkUri
 import java.util.Objects
@@ -50,9 +52,11 @@ import java.util.Objects
  */
 class EndedWorkaroundPlayer(
     val context: Context,
+    private val prefs: SharedPreferences,
     exoPlayer: ExoPlayer,
     private val getLyric: () -> SemanticLyrics?,
-    val queueBoard: QueueBoard
+    val queueBoard: QueueBoard,
+    private val getNotificationLyric: () -> CharSequence? = { null }
 ) : ForwardingSimpleBasePlayer(exoPlayer),
     Player.Listener {
 
@@ -95,7 +99,8 @@ class EndedWorkaroundPlayer(
     }
 
     fun updateLyricNow() {
-        if (context.packageName == "com.tencent.qqmusic") {
+        val isNotificationLyricsEnabled = prefs.getBooleanStrict("notification_lyrics", false)
+        if (context.packageName == "com.tencent.qqmusic" || isNotificationLyricsEnabled) {
             invalidateState()
         }
     }
@@ -116,6 +121,31 @@ class EndedWorkaroundPlayer(
                         .build()
                 )
                 .build()
+        }
+        if (superState.playWhenReady && superState.playbackState != STATE_ENDED && superState.playbackState != STATE_IDLE) {
+            val notifLyric = getNotificationLyric()
+            if (!notifLyric.isNullOrBlank()) {
+                val origTitle = superState.currentMetadata.title?.toString() ?: ""
+                val origArtist = superState.currentMetadata.artist?.toString() ?: ""
+                val subtitle = if (origArtist.isNotBlank() && origTitle.isNotBlank()) {
+                    "$origArtist - $origTitle"
+                } else {
+                    origArtist.ifBlank { origTitle }
+                }
+                val metadataWithLyric = superState.currentMetadata.buildUpon()
+                    .setTitle(notifLyric)
+                    .setArtist(subtitle)
+                    .setDisplayTitle(notifLyric)
+                    .setSubtitle(subtitle)
+                    .build()
+                superState = superState.buildUpon()
+                    .setPlaylist(
+                        superState.timeline,
+                        superState.currentTracks,
+                        metadataWithLyric
+                    )
+                    .build()
+            }
         }
         if (context.packageName == "com.tencent.qqmusic") {
             // Oplus uses package name whitelist for their lockscreen lyric feature

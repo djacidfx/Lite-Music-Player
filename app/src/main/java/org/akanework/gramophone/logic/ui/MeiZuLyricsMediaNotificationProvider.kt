@@ -44,8 +44,8 @@ private class InnerMeiZuLyricsMediaNotificationProvider(
         actionFactory: MediaNotification.ActionFactory
     ): IntArray {
         val ticker = tickerProvider()
-        val title = mediaSession.player.mediaMetadata.title.toString()
-        val artist = mediaSession.player.mediaMetadata.artist.toString()
+        val title = mediaSession.player.mediaMetadata.title?.toString() ?: ""
+        val artist = mediaSession.player.mediaMetadata.artist?.toString() ?: ""
 
         val bundle = IsLandHelp.isLandMusicShare(
             addpic = Bundle(),
@@ -68,7 +68,7 @@ private class InnerMeiZuLyricsMediaNotificationProvider(
 
 class MeiZuLyricsMediaNotificationProvider(
     context: MediaSessionService,
-    private val tickerProvider: () -> CharSequence?,
+    private val tickerProvider: () -> CharSequence?
 ) : MediaNotification.Provider {
     private val inner = InnerMeiZuLyricsMediaNotificationProvider(context, tickerProvider).apply {
         setSmallIcon(R.drawable.ic_gramophone_monochrome)
