@@ -263,10 +263,11 @@ class EndedWorkaroundPlayer(
             throw IllegalStateException("shuffleFactory was found orphaned")
         if (currentMediaItem?.mediaId == mediaItems[startIndex].mediaId) {
             val index = currentMediaItemIndex
-            val isLast = mediaItemCount - index == 1
+            val count = mediaItemCount
+            val isLast = count - index == 1
             cloneQueue(generateQueueId(), title, pinned, original)
-            val newShuffleOrder = newShuffleOrder ?: (exoPlayer.shuffleOrder as CircularShuffleOrder
-                    ).lastSeed?.let { CircularShuffleOrder.Persistent(it) }
+            val savedShuffleOrder = if (count == mediaItems.size) (exoPlayer.shuffleOrder as
+                    CircularShuffleOrder).lastSeed?.let { CircularShuffleOrder.Persistent(it) } else null
             if (repeatMode != null) super.handleSetRepeatMode(repeatMode)
             if (shuffleModeEnabled != null) super.handleSetShuffleModeEnabled(shuffleModeEnabled)
             if (playbackParameters != null) super.handleSetPlaybackParameters(playbackParameters)
@@ -283,7 +284,7 @@ class EndedWorkaroundPlayer(
             )
             if (isLast) {
                 if (mediaItems.size > startIndex + 1) {
-                    nextShuffleOrder = newShuffleOrder
+                    nextShuffleOrder = newShuffleOrder // savedShuffleOrder is null due to grow
                     super.handleAddMediaItems(
                         Int.MAX_VALUE, mediaItems
                             .subList(startIndex + 1, mediaItems.size)
@@ -297,7 +298,7 @@ class EndedWorkaroundPlayer(
                     ) else emptyList()
                 )
             if (!isLast || mediaItems.size <= startIndex + 1) {
-                newShuffleOrder?.let {
+                (newShuffleOrder ?: savedShuffleOrder)?.let {
                     exoPlayer.shuffleOrder = it.create(startIndex,
                         exoPlayer.mediaItemCount, this)
                 }
