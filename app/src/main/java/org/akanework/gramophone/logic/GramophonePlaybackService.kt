@@ -1187,9 +1187,10 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 }
 
                 SERVICE_QB_PIN_QUEUE -> {
+                    val plr = endedWorkaroundPlayer!!
                     val queueId = customCommand.customExtras.getLong("queueId")
-                    val status = if (queueId == -1L) {
-                        endedWorkaroundPlayer?.currentIsPinned = true
+                    val status = if (queueId == plr.currentQueueId) {
+                        plr.currentIsPinned = true
                         true
                     } else {
                         val index = qb.masterQueues.indexOfFirst { it.id == queueId }
@@ -1209,8 +1210,9 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 }
 
                 SERVICE_QB_UNPIN_QUEUE -> {
+                    val plr = endedWorkaroundPlayer!!
                     val queueId = customCommand.customExtras.getLong("queueId")
-                    val status = if (queueId == -1L) {
+                    val status = if (queueId == plr.currentQueueId) {
                         endedWorkaroundPlayer!!.currentIsPinned = false
                         true
                     } else {
@@ -1231,19 +1233,20 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 }
 
                 SERVICE_QB_DEL -> {
+                    val plr = endedWorkaroundPlayer!!
                     val queueId = customCommand.customExtras.getLong("queueId")
                     var refreshLevel = CLIENT_QB_REFRESH_ALL
 
-                    val status: Boolean = if (queueId == -1L) {
+                    val status: Boolean = if (queueId == plr.currentQueueId) {
                         // active queue
                         try {
                             val nextQueueIndex = qb.getInactiveQueues().size - 1
                             if (nextQueueIndex < 0) {
-                                endedWorkaroundPlayer!!.clearMediaItems()
+                                plr.clearMediaItems()
                                 refreshLevel = CLIENT_QB_REFRESH_CLEAR
                                 true
                             } else {
-                                val currentQueueId = endedWorkaroundPlayer!!.currentQueueId
+                                val currentQueueId = plr.currentQueueId
                                 val nextQueue = qb.getInactiveQueue(nextQueueIndex)!!
                                 qb.commitQueue(nextQueueIndex, nextQueue.startIndex)
                                 currentQueueId?.let {
@@ -1275,18 +1278,19 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                 }
 
                 SERVICE_QB_RENAME_QUEUE -> {
+                    val plr = endedWorkaroundPlayer!!
                     val queueId = customCommand.customExtras.getLong("queueId")
                     val title = customCommand.customExtras.getString("title")
                     val dryRun = customCommand.customExtras.getBoolean("dryRun")
 
                     val status = if (title.isNullOrBlank()) {
                         false
-                    } else if (queueId == -1L) {
+                    } else if (queueId == plr.currentQueueId) {
                         if (qb.masterQueues.any { it.title == title }) {
                             false
                         } else {
                             if (!dryRun) {
-                                endedWorkaroundPlayer!!.currentTitle = title
+                                plr.currentTitle = title
                             }
                             true
                         }

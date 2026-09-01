@@ -124,11 +124,7 @@ fun MqListItem(
     val expiry = mq.expiry
     val isPinned = mq.expiry == null
     val isOriginal = mq.isOriginal
-    val pinId = if (isActiveQueue) {
-        -1L
-    } else {
-        mq.id
-    }
+    val pinId = mq.id
 
     Row( // wrapper
         verticalAlignment = Alignment.CenterVertically,
@@ -588,7 +584,6 @@ fun ActionBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
         ) {
-            val index = -1
             val mq = mqState.activeQueue?.second
             if (mq != null) {
                 QueueDropdownMenu(
@@ -1114,7 +1109,8 @@ class MqState(
         }
     }
 
-    fun removeQueue(queueId: Long = -1) {
+    fun removeQueue(queueId: Long? = activeQueue?.second?.id) {
+        if (queueId == null) return
         if (!Flags.MQ_PREVIEW) {
             instance.clearMediaItems()
             return
@@ -1194,18 +1190,12 @@ class MqState(
 
     fun renameQueue(queueId: Long, title: String, dryRun: Boolean): Boolean {
         val ret = instance.renameQueue(queueId, title, dryRun)
-        if (!dryRun && ret) {
-            coroutineScope.launch {
-                init() // can be more efficient
-            }
-        }
         return ret
     }
 
-    fun togglePin(queueId: Long? = -1) {
+    fun togglePin(queueId: Long? = activeQueue?.second?.id) {
         if (queueId == null) return
-        val queue =
-            (if (queueId == -1L) activeQueue?.second else inactiveQueues.find { it.id == queueId })!!
+        val queue = (if (queueId == activeQueue?.second?.id) activeQueue?.second else inactiveQueues.find { it.id == queueId })!!
 
         if (queue.expiry != null) {
             instance.pinQueue(queueId)
