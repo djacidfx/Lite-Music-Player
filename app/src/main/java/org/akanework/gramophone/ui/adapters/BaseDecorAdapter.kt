@@ -107,18 +107,16 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 popupMenu.menu.findItem(it.key).isVisible = adapter.canChangeLayout
             }
             popupMenu.menu.findItem(R.id.display).isVisible = adapter.canChangeLayout
-            if (adapter.sortType.value != Sorter.Type.None) {
-                when (adapter.sortType.value) {
-                    in buttonMap.values -> {
-                        popupMenu.menu.findItem(
-                            buttonMap.entries
-                                .first { it.value == adapter.sortType.value }.key
-                        ).isChecked = true
-                    }
 
-                    else -> throw IllegalStateException("Invalid sortType ${adapter.sortType.value.name}")
-                }
+            val currentSort = adapter.sortType.value
+            val activeEntry = buttonMap.entries.find { it.value == currentSort || Sorter.Type.inverse(it.value) == currentSort }
+
+            if (activeEntry == null) {
+                throw IllegalStateException("Invalid sortType ${adapter.sortType.value.name}")
             }
+
+            popupMenu.menu.findItem(activeEntry.key).isChecked = true
+
             if (adapter.canChangeLayout) {
                 when (adapter.layoutType) {
                     in layoutMap.values -> {
@@ -131,16 +129,29 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                     else -> throw IllegalStateException("Invalid layoutType ${adapter.layoutType?.name}")
                 }
             }
+
+            val reverseItem = popupMenu.menu.findItem(R.id.reverse_order)
+            val inverse = Sorter.Type.inverse(adapter.sortType.value)
+            if (inverse == null) {
+                reverseItem.isVisible = false
+            } else {
+                reverseItem.isChecked = currentSort != activeEntry.value && currentSort != Sorter.Type.None
+            }
+
             popupMenu.setOnMenuItemClickListener { menuItem ->
                 when (menuItem.itemId) {
                     in buttonMap.keys -> {
                         if (!menuItem.isChecked) {
-                            adapter.sort(buttonMap[menuItem.itemId]!!)
+                            // always use default direction for this sort mode if sort mode is changed,
+                            // and reset the reverseOrder checkbox
+                            val targetType = buttonMap[menuItem.itemId]!!
+                            reverseItem.isChecked = false
+                            adapter.sort(targetType)
                             menuItem.isChecked = true
                             prefs.edit {
                                 putString(
                                     "S" + getAdapterType(adapter).toString(),
-                                    buttonMap[menuItem.itemId].toString()
+                                    targetType.toString()
                                 )
                             }
                         }
@@ -155,6 +166,25 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                                 putString(
                                     "L" + getAdapterType(adapter).toString(),
                                     layoutMap[menuItem.itemId].toString()
+                                )
+                            }
+                        }
+                        true
+                    }
+
+                    R.id.reverse_order -> {
+                        menuItem.isChecked = !menuItem.isChecked
+                        val activeId = buttonMap.entries.find { 
+                            it.value == adapter.sortType.value || Sorter.Type.inverse(it.value) == adapter.sortType.value 
+                        }?.key ?: -1
+                        val baseType = buttonMap[activeId]
+                        if (baseType != null) {
+                            val targetType = if (menuItem.isChecked) Sorter.Type.inverse(baseType) ?: baseType else baseType
+                            adapter.sort(targetType)
+                            prefs.edit {
+                                putString(
+                                    "S" + getAdapterType(adapter).toString(),
+                                    targetType.toString()
                                 )
                             }
                         }
