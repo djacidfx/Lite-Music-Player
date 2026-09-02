@@ -404,6 +404,20 @@ class EndedWorkaroundPlayer(
         return Futures.immediateVoidFuture()
     }
 
+    override fun handleSeek(
+        mediaItemIndex: Int,
+        positionMs: Long,
+        seekCommand: Int
+    ): ListenableFuture<*> {
+        val alwaysSkipPrevious = prefs.getBooleanStrict("always_skip_previous", false)
+        if (seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS && alwaysSkipPrevious) {
+            player.seekToPreviousMediaItem()
+            return Futures.immediateVoidFuture()
+        }
+        return super.handleSeek(mediaItemIndex, positionMs, seekCommand)
+    }
+
+
 
     /**
      * =================
