@@ -322,7 +322,8 @@ public final class NativeTrackAudioOutputProvider implements AudioOutputProvider
       nativeTrackBuilder.setBufferSizeInBytes(config.bufferSize);
       nativeTrackBuilder.setSessionId(audioSessionId);
       nativeTrackBuilder.setMaxRequiredSpeed(maxPlaybackSpeed);
-      nativeTrackBuilder.setTrackFlags(NativeTrack.AUDIO_OUTPUT_FLAG_DIRECT);
+      // TODO: direct_pcm?
+      nativeTrackBuilder.setTrackFlags(NativeTrack.AUDIO_OUTPUT_FLAG_DIRECT|NativeTrack.AUDIO_OUTPUT_FLAG_DIRECT_PCM);
       //TODO:if (SDK_INT >= 29) {
       //  nativeTrackBuilder.setOffloadedPlayback(config.isOffload);
       //}

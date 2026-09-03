@@ -1026,27 +1026,6 @@ Java_org_nift4_gramophone_hificore_NativeTrack_getProxy(JNIEnv* env, jobject, jl
         ALOGE("getProxy: didn't find android/media/AudioTrack.deferred_connect(J)V");
         return nullptr;
     }
-    jmethodID regPb = env->GetMethodID(at, "baseRegisterPlayer", "(I)V");
-    if (regPb == nullptr) {
-        ALOGE("getProxy: didn't find android/media/AudioTrack.baseRegisterPlayer(J)V");
-        return nullptr;
-    }
-    jmethodID setId = env->GetMethodID(at, "native_setPlayerIId", "(I)V");
-    if (setId == nullptr) {
-        ALOGW("getProxy: didn't find android/media/AudioTrack.native_setPlayerIId(I)V");
-		if (android_get_device_api_level() >= 31) {
-			return nullptr; // throw
-		}
-        env->ExceptionClear();
-    }
-    jfieldID id = env->GetFieldID(at, "mPlayerIId", "I");
-    if (id == nullptr) {
-        ALOGW("getProxy: didn't find android/media/AudioTrack.mPlayerIId int");
-	    if (android_get_device_api_level() >= 31) {
-		    return nullptr; // throw
-	    }
-        env->ExceptionClear();
-    }
     // creating with 0 and then using deferred_connect() skips PlayerBase registration, which
     // allows us to do it ourselves, but with our real session ID (almost like a real AudioTrack).
     // before N, PlayerBase didn't exist, so we don't have to do that anywhere else.
@@ -1058,11 +1037,34 @@ Java_org_nift4_gramophone_hificore_NativeTrack_getProxy(JNIEnv* env, jobject, jl
     if (env->ExceptionCheck()) {
         return nullptr;
     }
-    env->CallVoidMethod(proxy, regPb, sessionId);
+    if (android_get_device_api_level() >= 26) {
+        jmethodID regPb = android_get_device_api_level() >= 31 ?
+                          env->GetMethodID(at, "baseRegisterPlayer", "(I)V") :
+                          env->GetMethodID(at, "baseRegisterPlayer", "()V");
+        if (regPb == nullptr) {
+            ALOGE("getProxy: didn't find android/media/AudioTrack.baseRegisterPlayer()V");
+            return nullptr; // throw
+        }
+        if (android_get_device_api_level() >= 31) {
+            env->CallVoidMethod(proxy, regPb, sessionId);
+        } else {
+            env->CallVoidMethod(proxy, regPb);
+        }
+    }
     if (env->ExceptionCheck()) {
         return nullptr;
     }
-    if (setId != nullptr && id != nullptr) {
+    if (android_get_device_api_level() >= 31) {
+        jmethodID setId = env->GetMethodID(at, "native_setPlayerIId", "(I)V");
+        if (setId == nullptr) {
+            ALOGW("getProxy: didn't find android/media/AudioTrack.native_setPlayerIId(I)V");
+            return nullptr; // throw
+        }
+        jfieldID id = env->GetFieldID(at, "mPlayerIId", "I");
+        if (id == nullptr) {
+            ALOGW("getProxy: didn't find android/media/AudioTrack.mPlayerIId int");
+            return nullptr; // throw
+        }
         // Let's be a nice citizen and contribute to MediaMetrics.
         jint playerId = env->GetIntField(proxy, id);
         if (env->ExceptionCheck()) {
