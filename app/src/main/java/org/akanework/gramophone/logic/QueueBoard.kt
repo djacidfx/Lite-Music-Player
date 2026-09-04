@@ -31,6 +31,9 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Player.REPEAT_MODE_OFF
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.akanework.gramophone.logic.utils.CircularShuffleOrder
 import org.akanework.gramophone.logic.utils.MediaItemList
 
@@ -136,13 +139,19 @@ class QueueBoard(
     /**
      * Remove expired queues from the QueueBoard
      */
-    fun trimQB() {
+    fun trimAndSaveQB() {
         val currentTimeMillis = System.currentTimeMillis()
         val newQueueList = masterQueues.filter {
             it.expiry == null || it.expiry!! > currentTimeMillis
         }
         masterQueues.clear()
         masterQueues.addAll(newQueueList)
+        /*
+        val queues = (masterQueues + player.endedWorkaroundPlayer!!.getActiveQueue()).map { it.id }
+        CoroutineScope(Dispatchers.IO).launch {
+            player.database.syncQueues(queues)
+        }
+         */
     }
 
 
@@ -220,6 +229,7 @@ class QueueBoard(
 
         masterQueues.removeAll { it.isOriginal && it.title.trimEnd() == mq.title }
         masterQueues.bubbleUp(mq)
+        trimAndSaveQB()
     }
 
     /**
@@ -240,6 +250,7 @@ class QueueBoard(
 
         try {
             masterQueues.removeAt(index)
+            trimAndSaveQB()
         } catch (e: IndexOutOfBoundsException) {
             Log.w(TAG, e.message, e)
             return false
@@ -273,7 +284,6 @@ class QueueBoard(
      */
     fun getInactiveQueues() = masterQueues.map {
         it.copy(
-            queue = ArrayList(),
             fakeQueueSize = it.getSize(),
             fakeQueueLength = it.getDuration(),
         )
@@ -393,7 +403,7 @@ data class MultiQueueObject(
     var title: String,
     /**
      * Expiry denotes when this queue is eligible for auto removal; these events happen when
-     * triggered by the user, or automatically on QueueBoard initialization, or when the user switches any queue. //TODO: not implemented
+     * triggered by the user, or automatically on QueueBoard initialization, or when the user switches any queue.
      *
      * Active queues will never be automatically removed, however, the pin state does not
      * automatically change. When a pinned queue becomes an active queue, it will remain pinned when

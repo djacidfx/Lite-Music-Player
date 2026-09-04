@@ -152,6 +152,8 @@ import uk.akane.libphonograph.manipulator.PlaylistSerializer
 import uk.akane.libphonograph.manipulator.PlaylistSerializer.Entry
 import java.util.concurrent.Executor
 import kotlin.collections.emptyList
+import kotlin.collections.map
+import kotlin.collections.plus
 import kotlin.random.Random
 
 
@@ -884,6 +886,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         availableSessionCommands.add(SessionCommand(SERVICE_QB_PIN_QUEUE, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_UNPIN_QUEUE, Bundle.EMPTY))
         availableSessionCommands.add(SessionCommand(SERVICE_QB_RENAME_QUEUE, Bundle.EMPTY))
+        availableSessionCommands.add(SessionCommand(SERVICE_QB_AGE, Bundle.EMPTY))
         return builder.setAvailableSessionCommands(availableSessionCommands.build()).build()
     }
 
@@ -1050,7 +1053,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     )
                     customExtras.putBinder(
                         "inactiveQueues",
-                        MultiQueueList(qb.getInactiveQueues())
+                        MultiQueueList(qb.getInactiveQueues().map { it.copy(queue = ArrayList()) })
                     )
                 }
             }
@@ -1140,7 +1143,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
 
                 SERVICE_QB_GET_INACTIVE_LIST -> {
                     SessionResult(SessionResult.RESULT_SUCCESS).also { res ->
-                        val queueList: List<MultiQueueObject> = qb.getInactiveQueues()
+                        val queueList: List<MultiQueueObject> = qb.getInactiveQueues().map { it.copy(queue = ArrayList()) }
                         val binder = MultiQueueList(queueList)
                         res.extras.putBinder("allQueues", binder)
                     }
@@ -1610,7 +1613,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     )
                     customExtras.putBinder(
                         "inactiveQueues",
-                        MultiQueueList(qb.getInactiveQueues())
+                        MultiQueueList(qb.getInactiveQueues().map { it.copy(queue = ArrayList()) })
                     )
                 }
                 mediaSession!!.sendCustomCommand(
