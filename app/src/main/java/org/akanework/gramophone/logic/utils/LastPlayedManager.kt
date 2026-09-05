@@ -43,18 +43,14 @@ import org.akanework.gramophone.logic.getFile
 import org.akanework.gramophone.logic.utils.exoplayer.EndedWorkaroundPlayer
 import uk.akane.libphonograph.items.EXTRA_ADD_DATE
 import uk.akane.libphonograph.items.EXTRA_ALBUM_ID
-import uk.akane.libphonograph.items.EXTRA_ALBUM_YEAR
 import uk.akane.libphonograph.items.EXTRA_ARTIST_ID
-import uk.akane.libphonograph.items.EXTRA_AUTHOR
 import uk.akane.libphonograph.items.EXTRA_CD_TRACK_NUMBER
 import uk.akane.libphonograph.items.EXTRA_FILE
 import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
 import uk.akane.libphonograph.items.EXTRA_MODIFIED_DATE
 import uk.akane.libphonograph.items.addDate
 import uk.akane.libphonograph.items.albumId
-import uk.akane.libphonograph.items.albumYear
 import uk.akane.libphonograph.items.artistId
-import uk.akane.libphonograph.items.author
 import uk.akane.libphonograph.items.cdTrackNumber
 import uk.akane.libphonograph.items.hdArtworkUri
 import uk.akane.libphonograph.items.modifiedDate
@@ -117,7 +113,7 @@ class LastPlayedManager(
                 data.mediaItems.map {
                     val b = SafeDelimitedStringConcat(":")
                     // add new entries at the bottom and remember they are null for upgrade path
-                    b.writeStringUnsafe("ver_" + 2)
+                    b.writeStringUnsafe("ver_" + 3)
                     b.writeStringSafe(it.mediaId)
                     b.writeUri(it.localConfiguration?.uri)
                     b.writeStringSafe(it.localConfiguration?.mimeType)
@@ -145,7 +141,6 @@ class LastPlayedManager(
                     b.writeLong(it.mediaMetadata.durationMs)
                     b.writeLong(it.mediaMetadata.modifiedDate)
                     b.writeStringSafe(it.mediaMetadata.cdTrackNumber)
-                    b.writeLong(it.mediaMetadata.albumYear)
                     b.writeUri(it.mediaMetadata.hdArtworkUri)
                     b.writeStringSafe(it.getFile()?.path)
                     b.toString()
@@ -256,7 +251,8 @@ class LastPlayedManager(
                                 b.skip() // used to be Path
                             val modifiedDate = b.readLong()
                             val cdTrackNumber = b.readStringSafe()
-                            val albumYear = b.readLong()
+                            if (version < 3)
+                                b.skip() // used to be AlbumYear
                             val hdArtworkUri = b.readUri()
                             val file = if (version >= 2) b.readStringSafe() else uri.let {
                                 uri = ContentUris.withAppendedId(
@@ -274,6 +270,7 @@ class LastPlayedManager(
                                         .setTitle(title)
                                         .setArtist(artist)
                                         .setWriter(writer)
+                                        .setAuthor(author)
                                         .setComposer(composer)
                                         .setGenre(genre)
                                         .setCompilation(compilation)
@@ -299,11 +296,7 @@ class LastPlayedManager(
                                             if (albumId != null) {
                                                 putLong(EXTRA_ALBUM_ID, albumId)
                                             }
-                                            if (albumYear != null) {
-                                                putLong(EXTRA_ALBUM_YEAR, albumYear)
-                                            }
                                             putString(EXTRA_CD_TRACK_NUMBER, cdTrackNumber)
-                                            putString(EXTRA_AUTHOR, author)
                                             if (modifiedDate != null) {
                                                 putLong(EXTRA_MODIFIED_DATE, modifiedDate)
                                             }

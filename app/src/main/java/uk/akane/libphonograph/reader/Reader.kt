@@ -55,9 +55,7 @@ import uk.akane.libphonograph.items.Artist
 import uk.akane.libphonograph.items.Date
 import uk.akane.libphonograph.items.EXTRA_ADD_DATE
 import uk.akane.libphonograph.items.EXTRA_ALBUM_ID
-import uk.akane.libphonograph.items.EXTRA_ALBUM_YEAR
 import uk.akane.libphonograph.items.EXTRA_ARTIST_ID
-import uk.akane.libphonograph.items.EXTRA_AUTHOR
 import uk.akane.libphonograph.items.EXTRA_CD_TRACK_NUMBER
 import uk.akane.libphonograph.items.EXTRA_FILE
 import uk.akane.libphonograph.items.EXTRA_HD_ARTWORK_URI
@@ -415,6 +413,7 @@ internal object Reader {
                             .setDurationMs(duration)
                             .setTitle(title)
                             .setWriter(writer)
+                            .setAuthor(author)
                             .setCompilation(compilation)
                             .setComposer(composer)
                             .setArtist(artist)
@@ -436,12 +435,6 @@ internal object Reader {
                                 if (albumId != null) {
                                     putLong(EXTRA_ALBUM_ID, albumId)
                                 }
-                                // EXTRA_ALBUM_YEAR assigned below
-                                // TODO: is albumYear truly a good property of a song? it creates
-                                //  a cyclic dependency between albums derived from songs, and song
-                                //  metadata derived from album. maybe users of this should just
-                                //  query the album list instead and fetch album year from there.
-                                putString(EXTRA_AUTHOR, author)
                                 if (addDate != null) {
                                     putLong(EXTRA_ADD_DATE, addDate)
                                 }
@@ -525,13 +518,6 @@ internal object Reader {
             it.albumArtistId = artistFound?.second ?: artistCacheMap?.get(it.albumArtist)
                     ?: "nonMediaStoreArtist:${it.albumArtist}".hashCode().toLong()
             it.albumYear = it.songList.mapNotNull { it.mediaMetadata.releaseYear }.maxOrNull()
-            if (it.albumYear != null)
-                it.songList.forEach { item ->
-                    item.mediaMetadata.extras!!.putLong(
-                        EXTRA_ALBUM_YEAR,
-                        it.albumYear!!.toLong()
-                    )
-                }
             it.albumAddDate = it.songList.mapNotNull { it.mediaMetadata.addDate }.minOrNull()
             it.albumModifiedDate =
                 it.songList.mapNotNull { it.mediaMetadata.modifiedDate }.maxOrNull()

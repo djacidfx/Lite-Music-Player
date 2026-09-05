@@ -53,7 +53,6 @@ import org.akanework.gramophone.ui.fragments.GeneralSubFragment
 import org.akanework.gramophone.ui.fragments.SearchFragment
 import uk.akane.libphonograph.items.addDate
 import uk.akane.libphonograph.items.albumId
-import uk.akane.libphonograph.items.albumYear
 import uk.akane.libphonograph.items.artistId
 import uk.akane.libphonograph.items.modifiedDate
 import uk.akane.libphonograph.manipulator.ItemManipulator
@@ -406,8 +405,8 @@ class SongAdapter(
             return item.mediaMetadata.albumArtist?.toString() ?: ""
         }
 
-        override fun getAlbumYear(item: MediaItem): Long? {
-            return item.mediaMetadata.albumYear
+        override fun getAlbumYear(item: MediaItem): Int? {
+            return item.mediaMetadata.releaseYear
         }
 
         override fun getCover(item: MediaItem): Uri? {

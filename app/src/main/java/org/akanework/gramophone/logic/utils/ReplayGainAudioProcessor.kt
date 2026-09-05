@@ -76,6 +76,8 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
                 if (gain == 1f) {
                     outputBuffer.put(inputBuffer)
                 } else {
+                    // TODO: this should probably use saturated multiplication in case peak metadata
+                    //  is wrong to only clip and not generate total nonsense
                     while (inputBuffer.hasRemaining()) {
                         when (inputAudioFormat.encoding) {
                             C.ENCODING_PCM_8BIT -> outputBuffer.put(

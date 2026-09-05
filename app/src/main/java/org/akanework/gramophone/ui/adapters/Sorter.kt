@@ -43,7 +43,7 @@ class Sorter<T>(
         open fun getFile(item: T): File = throw UnsupportedOperationException()
         open fun getAlbumTitle(item: T): String? = throw UnsupportedOperationException()
         open fun getAlbumArtist(item: T): String? = throw UnsupportedOperationException()
-        open fun getAlbumYear(item: T): Long? = throw UnsupportedOperationException()
+        open fun getAlbumYear(item: T): Int? = throw UnsupportedOperationException()
         open fun getSize(item: T): Int = throw UnsupportedOperationException()
         open fun getAlbumSize(item: T): Int = throw UnsupportedOperationException()
         open fun getAddDate(item: T): Long = throw UnsupportedOperationException()
@@ -265,13 +265,13 @@ class Sorter<T>(
 
             Type.ByAlbumYearDescending -> {
                 SupportComparator.createInversionComparator(compareBy {
-                    sortingHelper.getAlbumYear(it) ?: Long.MIN_VALUE
+                    sortingHelper.getAlbumYear(it) ?: Int.MIN_VALUE
                 }, true, getComparatorNoReverse(Type.ByAlbumTitleAscending))
             }
 
             Type.ByAlbumYearAscending -> {
                 SupportComparator.createInversionComparator(compareBy {
-                    sortingHelper.getAlbumYear(it) ?: Long.MIN_VALUE
+                    sortingHelper.getAlbumYear(it) ?: Int.MIN_VALUE
                 }, false, getComparatorNoReverse(Type.ByAlbumTitleDescending))
             }
 

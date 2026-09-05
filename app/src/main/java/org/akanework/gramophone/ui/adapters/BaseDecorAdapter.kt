@@ -142,10 +142,12 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 when (menuItem.itemId) {
                     in buttonMap.keys -> {
                         if (!menuItem.isChecked) {
-                            // always use default direction for this sort mode if sort mode is changed,
-                            // and reset the reverseOrder checkbox
-                            val targetType = buttonMap[menuItem.itemId]!!
-                            reverseItem.isChecked = false
+                            val baseType = buttonMap[menuItem.itemId]!!
+                            val reverse = prefs.getBoolean("S" + getAdapterType(adapter) +
+                                    "_reverse_" + baseType, false)
+                            val targetType = if (!reverse) baseType else
+                                Sorter.Type.inverse(baseType) ?: baseType
+                            reverseItem.isChecked = reverse
                             adapter.sort(targetType)
                             menuItem.isChecked = true
                             prefs.edit {
@@ -174,19 +176,19 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
 
                     R.id.reverse_order -> {
                         menuItem.isChecked = !menuItem.isChecked
-                        val activeId = buttonMap.entries.find { 
+                        val activeId = buttonMap.entries.first {
                             it.value == adapter.sortType.value || Sorter.Type.inverse(it.value) == adapter.sortType.value 
-                        }?.key ?: -1
-                        val baseType = buttonMap[activeId]
-                        if (baseType != null) {
-                            val targetType = if (menuItem.isChecked) Sorter.Type.inverse(baseType) ?: baseType else baseType
-                            adapter.sort(targetType)
-                            prefs.edit {
-                                putString(
-                                    "S" + getAdapterType(adapter).toString(),
-                                    targetType.toString()
-                                )
-                            }
+                        }.key
+                        val baseType = buttonMap[activeId]!!
+                        val targetType = if (menuItem.isChecked) Sorter.Type.inverse(baseType) ?: baseType else baseType
+                        adapter.sort(targetType)
+                        prefs.edit {
+                            putBoolean("S" + getAdapterType(adapter) + "_reverse_" + baseType,
+                                menuItem.isChecked)
+                            putString(
+                                "S" + getAdapterType(adapter).toString(),
+                                targetType.toString()
+                            )
                         }
                         true
                     }

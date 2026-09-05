@@ -2,11 +2,6 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
-    <item
-        android:id="@+id/reverse_order"
-        android:checkable="true"
-        android:title="@string/reverse_order"
-        app:showAsAction="never" />
     <group android:checkableBehavior="single">
         <item
             android:id="@+id/album_artist_checkbox"
@@ -82,6 +77,12 @@
             android:title="@string/sort_by_file_path"
             app:showAsAction="never" />
     </group>
+    <item
+        android:id="@+id/reverse_order"
+        android:checkable="true"
+        android:title="@string/reverse_order"
+        app:showAsAction="never"
+        android:orderInCategory="990" />
 
     <item
         android:id="@+id/display"
