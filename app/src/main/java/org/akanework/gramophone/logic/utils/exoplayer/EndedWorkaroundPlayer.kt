@@ -437,7 +437,7 @@ class EndedWorkaroundPlayer(
      */
     fun getActiveQueue(): MultiQueueObject {
         return MultiQueueObject(
-            id = currentQueueId!!,
+            id = currentQueueId?: -1, // TODO: fix crash but should return nullable MultiQueueObject
             index = 0,
             title = currentTitle ?: context.getString(R.string.unknown_playlist),
             expiry = if (currentIsPinned) null else 0L,
